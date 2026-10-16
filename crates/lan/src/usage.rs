@@ -28,6 +28,24 @@ fn restore(entry: &keyring::Entry, old: Option<&str>) {
     }
 }
 impl Agent {
+    fn usage_source_snapshot(
+        &self,
+        generation: u64,
+        expected: &UsageConfig,
+        read: impl FnOnce(&str) -> Result<Option<String>>,
+    ) -> Result<Option<Source>> {
+        // Account updates hold the same lock while replacing the keychain secret.
+        // Read the config and password together so a new password can never be
+        // combined with a previously captured account or endpoint.
+        let host = self.host.lock().unwrap();
+        if self.usage_generation.load(Ordering::SeqCst) != generation
+            || host.usage_config.as_ref() != Some(expected)
+        {
+            return Ok(None);
+        }
+        let password = read(&host.id)?.context("请在连接助手中重新填写用量账号密码")?;
+        Source::new(expected.clone(), password).map(Some)
+    }
     pub fn save_usage_source(&self, config: UsageConfig, password: String) -> Result<()> {
         config.validate()?;
         ensure!(password.len() <= 4096, "密码过长");
@@ -82,11 +100,10 @@ impl Agent {
             let mut source: Option<Source> = None;
             let mut loaded_generation = u64::MAX;
             loop {
-                let (config, id, generation) = {
+                let (config, generation) = {
                     let host = agent.host.lock().unwrap();
                     (
                         host.usage_config.clone(),
-                        host.id.clone(),
                         agent.usage_generation.load(Ordering::SeqCst),
                     )
                 };
@@ -97,18 +114,20 @@ impl Agent {
                     continue;
                 };
                 let result = if source.is_none() || loaded_generation != generation {
-                    let loaded = tokio::task::spawn_blocking(move || -> Result<Source> {
-                        let password = read_password(&credentials(&id)?)?
-                            .context("请在连接助手中重新填写用量账号密码")?;
-                        Source::new(config, password)
+                    let loading = agent.clone();
+                    let loaded = tokio::task::spawn_blocking(move || {
+                        loading.usage_source_snapshot(generation, &config, |id| {
+                            read_password(&credentials(id)?)
+                        })
                     })
                     .await;
                     loaded_generation = generation;
                     match loaded {
-                        Ok(Ok(value)) => {
+                        Ok(Ok(Some(value))) => {
                             source = Some(value);
                             Ok(())
                         }
+                        Ok(Ok(None)) => continue,
                         _ => {
                             source = None;
                             Err(anyhow::anyhow!(
@@ -121,6 +140,11 @@ impl Agent {
                 };
                 let mut delay = Duration::from_secs(60);
                 let mut rate_limited = false;
+                // Reconfiguration may have completed while the blocking keychain
+                // task returned. Discard it before making any network request.
+                if agent.usage_generation.load(Ordering::SeqCst) != generation {
+                    continue;
+                }
                 let result = if result.is_ok() {
                     match source.as_mut().unwrap().fetch(now()).await {
                         Ok(value) => Ok(value),
@@ -161,5 +185,53 @@ impl Agent {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn account_and_secret_are_read_as_one_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = desklet_host::Host::load(dir.path().into(), "fixture".into()).unwrap();
+        let old = UsageConfig {
+            base_url: "https://old.example.com".into(),
+            email: "old@example.com".into(),
+            timezone: "Asia/Shanghai".into(),
+        };
+        host.set_usage_config(Some(old.clone())).unwrap();
+        let identity =
+            super::super::Identity::from_key(rcgen::KeyPair::generate().unwrap().serialize_pem())
+                .unwrap();
+        let agent = Agent::with_identity(host, identity, 0).await.unwrap();
+        let source = agent
+            .usage_source_snapshot(0, &old, |_| {
+                // A concurrent account update cannot replace the password/config
+                // while this reader is retrieving the matching secret.
+                assert!(agent.host.try_lock().is_err());
+                Ok(Some("fixture-old-password".into()))
+            })
+            .unwrap();
+        assert!(source.is_some());
+        {
+            let mut host = agent.host.lock().unwrap();
+            let mut next = old.clone();
+            next.base_url = "https://new.example.com".into();
+            host.set_usage_config(Some(next)).unwrap();
+            agent.usage_generation.fetch_add(1, Ordering::SeqCst);
+        }
+        let stale = agent
+            .usage_source_snapshot(0, &old, |_| {
+                panic!("a stale config must never retrieve the replacement secret")
+            })
+            .unwrap();
+        assert!(stale.is_none());
+        // Even a config mismatch without a version change refuses the secret.
+        assert!(agent
+            .usage_source_snapshot(1, &old, |_| panic!("wrong account"))
+            .unwrap()
+            .is_none());
     }
 }
