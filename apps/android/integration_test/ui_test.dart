@@ -1,12 +1,12 @@
-import 'package:desklet/connection.dart';
-import 'package:desklet/display_preferences.dart';
-import 'package:desklet/layout_workspace.dart';
-import 'package:desklet/rawblock.dart';
-import 'package:desklet/top_notice.dart';
-import 'package:desklet/workbench_canvas.dart';
-import 'package:desklet/workbench_data.dart';
+import 'package:deskbar/connection.dart';
+import 'package:deskbar/display_preferences.dart';
+import 'package:deskbar/layout_workspace.dart';
+import 'package:deskbar/rawblock.dart';
+import 'package:deskbar/top_notice.dart';
+import 'package:deskbar/workbench_canvas.dart';
+import 'package:deskbar/workbench_data.dart';
 import '../test/workbench_fixture.dart';
-import 'package:desklet/main.dart';
+import 'package:deskbar/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,15 +17,15 @@ void main() {
   testWidgets('silver and graphite, pairing and multi-page workbench editor', (
     tester,
   ) async {
-    const native = MethodChannel('app.desklet/connection');
-    const local = MethodChannel('app.desklet/layout');
+    const native = MethodChannel('app.deskbar/connection');
+    const local = MethodChannel('app.deskbar/layout');
     await native.invokeMethod<void>('forget');
     await local.invokeMethod<void>('saveTheme', {'theme': 'light'});
-    await tester.pumpWidget(const DeskletApp());
+    await tester.pumpWidget(const DeskBarApp());
     await tester.pumpAndSettle();
     expect(find.text('扫码连接电脑'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    const capture = bool.fromEnvironment('DESKLET_SCREENSHOTS');
+    const capture = bool.fromEnvironment('DESKBAR_SCREENSHOTS');
     if (capture) {
       await binding.convertFlutterSurfaceToImage();
       await tester.pumpAndSettle();

@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use desklet_lan::{Agent, AgentStatus, PairingInvitation};
+use deskbar_lan::{Agent, AgentStatus, PairingInvitation};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -39,7 +39,7 @@ fn revoke_device(state: State<AgentState>, id: String) -> Result<(), String> {
 fn set_permissions(
     state: State<AgentState>,
     id: String,
-    permissions: desklet_host::workbench::Permissions,
+    permissions: deskbar_host::workbench::Permissions,
 ) -> Result<(), String> {
     state
         .agent()?
@@ -49,7 +49,7 @@ fn set_permissions(
 #[tauri::command]
 async fn save_shortcut(
     state: State<'_, AgentState>,
-    item: desklet_host::workbench::ShortcutConfig,
+    item: deskbar_host::workbench::ShortcutConfig,
 ) -> Result<(), String> {
     let agent = state.agent()?.clone();
     tauri::async_runtime::spawn_blocking(move || agent.save_shortcut(item))
@@ -80,7 +80,7 @@ fn refresh_sources(state: State<AgentState>) -> Result<(), String> {
 #[tauri::command]
 async fn save_usage_source(
     state: State<'_, AgentState>,
-    config: desklet_host::usage::UsageConfig,
+    config: deskbar_host::usage::UsageConfig,
     password: String,
 ) -> Result<(), String> {
     let agent = state.agent()?.clone();
@@ -101,7 +101,7 @@ async fn remove_usage_source(state: State<'_, AgentState>) -> Result<(), String>
 #[tauri::command]
 async fn choose_application(
     app: tauri::AppHandle,
-) -> Result<Option<desklet_lan::icons::ApplicationMetadata>, String> {
+) -> Result<Option<deskbar_lan::icons::ApplicationMetadata>, String> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
         let mut picker = app.dialog().file().set_title("选择要共享的应用");
@@ -119,7 +119,7 @@ async fn choose_application(
             .blocking_pick_file()
             .map(|p| {
                 let path = p.into_path().map_err(|_| "无法读取应用路径".to_string())?;
-                desklet_lan::icons::application_metadata(&path).map_err(|e| e.to_string())
+                deskbar_lan::icons::application_metadata(&path).map_err(|e| e.to_string())
             })
             .transpose()
     })
@@ -143,7 +143,7 @@ async fn choose_shortcut_icon(app: tauri::AppHandle) -> Result<Option<String>, S
             .blocking_pick_file()
             .map(|file| {
                 let path = file.into_path().map_err(|_| "无法读取图片".to_string())?;
-                desklet_lan::icons::import_icon(&path).map_err(|e| e.to_string())
+                deskbar_lan::icons::import_icon(&path).map_err(|e| e.to_string())
             })
             .transpose()
     })
@@ -161,10 +161,10 @@ fn main() {
                 .trim_end_matches(".local")
                 .to_string();
             let agent = tauri::async_runtime::block_on(Agent::start(directory, name))
-                .map_err(|e| format!("{e}。请退出 Desklet 连接助手后重试"));
+                .map_err(|e| format!("{e}。请退出 DeskBar 连接助手后重试"));
             app.manage(AgentState(agent));
-            let show = MenuItem::with_id(app, "show", "打开 Desklet 连接助手", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "退出 Desklet 连接助手", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "打开 DeskBar 连接助手", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出 DeskBar 连接助手", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
             // Small monochrome screen, generated in memory; no icon asset pipeline.
             let mut rgba = vec![0u8; 22 * 22 * 4];
@@ -183,7 +183,7 @@ fn main() {
             TrayIconBuilder::new()
                 .icon(tauri::image::Image::new_owned(rgba, 22, 22))
                 .icon_as_template(true)
-                .tooltip("Desklet 连接助手")
+                .tooltip("DeskBar 连接助手")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
@@ -221,5 +221,5 @@ fn main() {
             choose_shortcut_icon
         ])
         .run(tauri::generate_context!())
-        .expect("Desklet 连接助手无法启动");
+        .expect("DeskBar 连接助手无法启动");
 }

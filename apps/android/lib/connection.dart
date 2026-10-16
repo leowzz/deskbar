@@ -14,8 +14,8 @@ enum ConnectionPhase {
 }
 
 class Connection extends ChangeNotifier {
-  static const _channel = MethodChannel('app.desklet/connection');
-  static const _events = EventChannel('app.desklet/events');
+  static const _channel = MethodChannel('app.deskbar/connection');
+  static const _events = EventChannel('app.deskbar/events');
   ConnectionPhase phase = ConnectionPhase.loading;
   String? hostName;
   String? error;

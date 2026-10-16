@@ -7,8 +7,8 @@ const rawError = Color(0xffa84545);
 const rawMono = TextStyle(fontSize: 15, height: 1.5);
 
 @immutable
-class DeskletColors extends ThemeExtension<DeskletColors> {
-  const DeskletColors({
+class DeskBarColors extends ThemeExtension<DeskBarColors> {
+  const DeskBarColors({
     required this.canvas,
     required this.surface,
     required this.sidebar,
@@ -52,7 +52,7 @@ class DeskletColors extends ThemeExtension<DeskletColors> {
       control,
       chart,
       focus;
-  static const silver = DeskletColors(
+  static const silver = DeskBarColors(
     canvas: Color(0xfff6f7f9),
     surface: Color(0xffffffff),
     sidebar: Color(0xffeef0f3),
@@ -75,7 +75,7 @@ class DeskletColors extends ThemeExtension<DeskletColors> {
     chart: Color(0xff607fa7),
     focus: Color(0xff527bc2),
   );
-  static const graphite = DeskletColors(
+  static const graphite = DeskBarColors(
     canvas: Color(0xff191a1c),
     surface: Color(0xff222426),
     sidebar: Color(0xff151618),
@@ -99,14 +99,14 @@ class DeskletColors extends ThemeExtension<DeskletColors> {
     focus: Color(0xffadc6eb),
   );
   @override
-  DeskletColors copyWith() => this;
+  DeskBarColors copyWith() => this;
   @override
-  DeskletColors lerp(covariant DeskletColors? other, double t) =>
+  DeskBarColors lerp(covariant DeskBarColors? other, double t) =>
       t < .5 ? this : other ?? this;
 }
 
-DeskletColors deskletColors(BuildContext context) =>
-    Theme.of(context).extension<DeskletColors>() ?? DeskletColors.silver;
+DeskBarColors deskbarColors(BuildContext context) =>
+    Theme.of(context).extension<DeskBarColors>() ?? DeskBarColors.silver;
 ButtonStyle rawButton({bool primary = false, bool destructive = false}) =>
     FilledButton.styleFrom(
       minimumSize: const Size(48, 48),
@@ -116,8 +116,8 @@ ButtonStyle rawButton({bool primary = false, bool destructive = false}) =>
 
 ThemeData rawBlockTheme([Brightness brightness = Brightness.light]) {
   final c = brightness == Brightness.dark
-      ? DeskletColors.graphite
-      : DeskletColors.silver;
+      ? DeskBarColors.graphite
+      : DeskBarColors.silver;
   final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
   final text = TextStyle(
     color: c.text,
@@ -318,7 +318,7 @@ class StatusTag extends StatelessWidget {
   final Color? color;
   @override
   Widget build(BuildContext context) {
-    final c = deskletColors(context);
+    final c = deskbarColors(context);
     final foreground = color ?? c.muted;
     return Align(
       alignment: Alignment.centerLeft,

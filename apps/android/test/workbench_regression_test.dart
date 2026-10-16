@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:desklet/connection.dart';
-import 'package:desklet/layout_repository.dart';
-import 'package:desklet/layout_workspace.dart';
-import 'package:desklet/rawblock.dart';
-import 'package:desklet/workbench_canvas.dart';
-import 'package:desklet/workbench_data.dart';
+import 'package:deskbar/connection.dart';
+import 'package:deskbar/layout_repository.dart';
+import 'package:deskbar/layout_workspace.dart';
+import 'package:deskbar/rawblock.dart';
+import 'package:deskbar/workbench_canvas.dart';
+import 'package:deskbar/workbench_data.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -83,7 +83,7 @@ void main() {
     commands = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('app.desklet/connection'),
+          const MethodChannel('app.deskbar/connection'),
           (call) async {
             if (call.method == 'command') {
               commands.add(Map<String, dynamic>.from(call.arguments as Map));

@@ -1,4 +1,4 @@
-package app.desklet.workbench
+package app.deskbar.workbench
 
 import android.content.Context
 import android.net.Uri
@@ -103,7 +103,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
     private fun friendly(error: Exception): String = when (error) {
         is UserError -> error.message ?: "连接未完成，请重试"
         is javax.net.ssl.SSLException -> "无法核验这台电脑，请重新生成邀请；已配对电脑换了身份时需要重新配对"
-        else -> "未能连接电脑，请确认两端在同一局域网，电脑上的 Desklet 连接助手正在运行"
+        else -> "未能连接电脑，请确认两端在同一局域网，电脑上的 DeskBar 连接助手正在运行"
     }
     private fun randomSecret(): String = ByteArray(32).also { SecureRandom().nextBytes(it) }.let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
 
@@ -142,7 +142,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
     private fun pair(text: String, name: String, ticket: Long) {
         val uri = Uri.parse(text.trim())
         fun field(key: String) = uri.getQueryParameter(key) ?: throw UserError("邀请不完整，请重新复制或扫码")
-        if (uri.scheme != "desklet" || uri.host != "pair" || field("v") != "1") throw UserError("这不是 Desklet 连接邀请")
+        if (uri.scheme != "deskbar" || uri.host != "pair" || field("v") != "1") throw UserError("这不是 DeskBar 连接邀请")
         val expires = field("expires").toLongOrNull() ?: throw UserError("邀请不完整")
         if (expires <= System.currentTimeMillis() / 1000) throw UserError("邀请已过期，请在电脑上重新生成")
         val pin = field("pin")
@@ -238,7 +238,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                             store.save(saved)
                         }
                         emit(JSONObject().put("type", "snapshot").put("snapshot", json), ticket)
-                    } else { webSocket.cancel(); socket = null; state("offline", "电脑版本不兼容，请更新 Desklet 连接助手", ticket) }
+                    } else { webSocket.cancel(); socket = null; state("offline", "电脑版本不兼容，请更新 DeskBar 连接助手", ticket) }
                 } catch (_: Exception) { webSocket.cancel(); socket = null; state("offline", "未能读取电脑状态，请重试", ticket) }
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -281,10 +281,10 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
 
     private fun discover(): JSONArray {
         val nonce = UUID.randomUUID().toString()
-        val query = JSONObject().put("product", "desklet").put("version", 1).put("type", "query").put("nonce", nonce).toString().toByteArray()
+        val query = JSONObject().put("product", "deskbar").put("version", 1).put("type", "query").put("nonce", nonce).toString().toByteArray()
         val found = linkedMapOf<String, JSONObject>()
         val wifi = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        val lock = wifi.createMulticastLock("desklet-discovery").apply { setReferenceCounted(false); acquire() }
+        val lock = wifi.createMulticastLock("deskbar-discovery").apply { setReferenceCounted(false); acquire() }
         try {
             DatagramSocket().use { udp ->
                 udp.soTimeout = 250
@@ -295,7 +295,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                     try {
                         val packet = DatagramPacket(buffer, buffer.size); udp.receive(packet)
                         val offer = JSONObject(String(packet.data, 0, packet.length, Charsets.UTF_8))
-                        if (offer.optString("product") != "desklet" || offer.optInt("version") != 1 || offer.optString("type") != "offer" || offer.optString("nonce") != nonce) continue
+                        if (offer.optString("product") != "deskbar" || offer.optInt("version") != 1 || offer.optString("type") != "offer" || offer.optString("nonce") != nonce) continue
                         val port = offer.getInt("port")
                         if (port !in 1..65535 || found.size >= 32) continue
                         offer.put("endpoint", "https://${packet.address.hostAddress}:$port")

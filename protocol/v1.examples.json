@@ -1,12 +1,12 @@
 {
   "discovery_query": {
-    "product": "desklet",
+    "product": "deskbar",
     "version": 1,
     "type": "query",
     "nonce": "example-random-nonce"
   },
   "discovery_offer": {
-    "product": "desklet",
+    "product": "deskbar",
     "version": 1,
     "type": "offer",
     "nonce": "example-random-nonce",
@@ -39,7 +39,7 @@
         "session_id": "00000000-0000-4000-8000-000000000001",
         "version": "example-resource-version",
         "title": "继续实现工作台",
-        "project": "desklet",
+        "project": "deskbar",
         "status": "running",
         "updated_at": 1792123200
       }

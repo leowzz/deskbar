@@ -3,7 +3,7 @@ import 'package:integration_test/integration_test_driver_extended.dart';
 
 Future<void> main() async {
   final directory = Directory(
-    Platform.environment['DESKLET_SCREENSHOT_DIR'] ?? 'build/ui-screenshots',
+    Platform.environment['DESKBAR_SCREENSHOT_DIR'] ?? 'build/ui-screenshots',
   );
   await directory.create(recursive: true);
   await integrationDriver(

@@ -1,15 +1,15 @@
-# Desklet
+# DeskBar
 
-Desklet 让 Android 工作台与用户电脑在局域网内配对并协作。以下术语区分设备、连接、数据和页面组成。
+DeskBar 让 Android 工作台与用户电脑在局域网内配对并协作。以下术语区分设备、连接、数据和页面组成。
 
 ## Language
 
 **Host**：提供数据和执行动作的来源电脑。它的身份独立于当前网络地址。
 _Avoid_：服务端 IP、中心服务器。
 
-**Agent**：安装在 Host 上的桌面程序，对外名称为「Desklet 连接助手」，代表这台电脑提供已授权能力。
+**Agent**：安装在 Host 上的桌面程序，对外名称为「DeskBar 连接助手」，代表这台电脑提供已授权能力。
 
-**Workbench**：Android App 内承载页面、组件和操作入口的工作台；移动端应用对外名称为「Desklet 工作台」。
+**Workbench**：Android App 内承载页面、组件和操作入口的工作台；移动端应用对外名称为「DeskBar 工作台」。
 _Avoid_：Core Console。
 
 **Pairing**：用户将工作台与某台 Host 建立持久信任，并授予指定能力的过程。

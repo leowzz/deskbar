@@ -1,9 +1,9 @@
 import 'workbench_fixture.dart';
 import 'dart:convert';
-import 'package:desklet/connection.dart';
-import 'package:desklet/rawblock.dart';
-import 'package:desklet/workbench_content.dart';
-import 'package:desklet/workbench_data.dart';
+import 'package:deskbar/connection.dart';
+import 'package:deskbar/rawblock.dart';
+import 'package:deskbar/workbench_content.dart';
+import 'package:deskbar/workbench_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,7 +19,7 @@ void main() {
     commandError = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('app.desklet/connection'),
+          const MethodChannel('app.deskbar/connection'),
           (call) async {
             if (call.method == 'command') {
               sent = call.arguments as Map;

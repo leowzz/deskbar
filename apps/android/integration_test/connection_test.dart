@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:desklet/connection.dart';
-import 'package:desklet/layout_repository.dart';
-import 'package:desklet/layout_workspace.dart';
+import 'package:deskbar/connection.dart';
+import 'package:deskbar/layout_repository.dart';
+import 'package:deskbar/layout_workspace.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -11,7 +11,7 @@ void main() {
   testWidgets(
     'native display preferences persist and select full sensor rotation',
     (tester) async {
-      const preferences = MethodChannel('app.desklet/layout');
+      const preferences = MethodChannel('app.deskbar/layout');
       final old = await preferences.invokeMapMethod<String, dynamic>(
         'loadDisplayPreferences',
       );
@@ -59,14 +59,14 @@ void main() {
   testWidgets(
     'native TLS pinning, approval, encrypted restore, WSS and revocation',
     (tester) async {
-      const invitation = String.fromEnvironment('DESKLET_INVITE');
+      const invitation = String.fromEnvironment('DESKBAR_INVITE');
       expect(
         invitation,
         isNotEmpty,
         reason: 'Start the Rust Android fixture first',
       );
-      const native = MethodChannel('app.desklet/connection');
-      const preferences = MethodChannel('app.desklet/layout');
+      const native = MethodChannel('app.deskbar/connection');
+      const preferences = MethodChannel('app.deskbar/layout');
       final oldTheme = await preferences.invokeMethod<String>('loadTheme');
       await preferences.invokeMethod<void>('saveTheme', {'theme': 'dark'});
       expect(await preferences.invokeMethod<String>('loadTheme'), 'dark');
@@ -123,7 +123,7 @@ void main() {
       final stored = jsonDecode(
         (await native.invokeMethod<String>('restore'))!,
       );
-      expect(stored['name'], 'Desklet 连接测试');
+      expect(stored['name'], 'DeskBar 连接测试');
       await until(() => connection.data?.sessions.isNotEmpty ?? false);
       expect(connection.data!.sessions.single.title, '验证工作台连接');
       expect(connection.data!.quotas.single.remaining, 42);

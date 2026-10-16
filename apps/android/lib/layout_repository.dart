@@ -28,7 +28,7 @@ class LayoutLoadResult {
 /// valid file as a recovery copy; edit drafts and runtime state never reach it.
 class LayoutRepository {
   LayoutRepository({this._directory});
-  static const _channel = MethodChannel('app.desklet/layout');
+  static const _channel = MethodChannel('app.deskbar/layout');
   Directory? _directory;
   Future<void> _pending = Future.value();
   int _sequence = 0;

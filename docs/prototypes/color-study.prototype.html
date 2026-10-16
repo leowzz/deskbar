@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Desklet · 配色提案</title>
+<title>DeskBar · 配色提案</title>
 <style>
 /* Independent visual study. All data and actions are simulated. */
 :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #252629; background: #e9e9e7; font-synthesis: none; }
@@ -292,7 +292,7 @@ dialog button { display: block; margin: 22px 0 0 auto; }
 <body>
 <main class="shell">
  <header class="study-header">
-  <div><div class="study-title"><span class="wordmark">Desklet</span><h1>配色提案</h1></div><p class="study-intro">同一布局，四种气质。选择一套，查看双端完整效果。</p></div>
+  <div><div class="study-title"><span class="wordmark">DeskBar</span><h1>配色提案</h1></div><p class="study-intro">同一布局，四种气质。选择一套，查看双端完整效果。</p></div>
   <span class="prototype-note">独立原型 · 示例数据</span>
  </header>
  <nav class="toolbar" aria-label="预览方式">
@@ -331,10 +331,10 @@ const iconPaths = {
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name] || iconPaths.grid}</svg>`;
 const sessions = [
- { title:'完善设备连接体验', project:'Desklet', state:'进行中', kind:'running', time:'刚刚' },
+ { title:'完善设备连接体验', project:'DeskBar', state:'进行中', kind:'running', time:'刚刚' },
  { title:'整理本周工作记录', project:'笔记', state:'进行中', kind:'running', time:'2 分钟前' },
- { title:'修复长列表滚动', project:'Desklet', state:'已完成', kind:'', time:'18 分钟前' },
- { title:'调整账号用量展示', project:'Desklet', state:'已中断', kind:'interrupted', time:'1 小时前' }
+ { title:'修复长列表滚动', project:'DeskBar', state:'已完成', kind:'', time:'18 分钟前' },
+ { title:'调整账号用量展示', project:'DeskBar', state:'已中断', kind:'interrupted', time:'1 小时前' }
 ];
 const settings = [ ['sessions','近期会话','标题、项目和运行状态'], ['quota','账号额度','剩余额度与重置时间'], ['shortcuts','快捷入口','电脑上配置的应用与网址'], ['open','允许在电脑上打开','可打开已共享的会话与入口'] ];
 const sharing = {sessions:true,quota:true,shortcuts:true,open:false};
@@ -348,8 +348,8 @@ let toastTimer;
 const swatches = p => `<span class="swatches" aria-hidden="true">${p.colors.slice(0,3).concat(p.colors[4]).map(c=>`<i style="background:${c}"></i>`).join('')}</span>`;
 const offlineBanner = () => offline ? `<div class="offline-banner">${icon('offline')}<span>电脑暂时离线，保留上次数据。连接恢复后才能打开内容。</span></div>` : '';
 function helper() {
- return `<div class="window-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span>Desklet 连接助手</div><div class="desktop-grid">
- <aside class="sidebar"><div class="app-brand">${icon('desk')}Desklet</div><div class="nav-items"><button class="nav-item active" data-demo="我的设备">${icon('devices')}我的设备</button><button class="nav-item" data-demo="快捷入口">${icon('grid')}快捷入口</button><button class="nav-item" data-demo="设置">${icon('sliders')}设置</button></div><div class="sidebar-bottom"><b>家里的 Mac</b>连接助手正在运行</div></aside>
+ return `<div class="window-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span>DeskBar 连接助手</div><div class="desktop-grid">
+ <aside class="sidebar"><div class="app-brand">${icon('desk')}DeskBar</div><div class="nav-items"><button class="nav-item active" data-demo="我的设备">${icon('devices')}我的设备</button><button class="nav-item" data-demo="快捷入口">${icon('grid')}快捷入口</button><button class="nav-item" data-demo="设置">${icon('sliders')}设置</button></div><div class="sidebar-bottom"><b>家里的 Mac</b>连接助手正在运行</div></aside>
  <section class="helper-main"><header class="page-heading"><div><h2>我的设备</h2><p>为身旁的屏幕选择共享内容</p></div><button class="primary" data-demo="连接设备">${icon('plus')}连接设备</button></header>
  <div class="device-card"><span class="device-icon">${icon('tablet')}</span><div><p class="device-name">小米工作台</p><p class="device-info">${offline?'上次连接于 10:42':'今天配对 · 局域网连接'}</p></div><span class="badge"><i class="dot"></i>${offline?'离线':'已连接'}</span></div>
  <h3 class="subheading">向这台设备共享</h3><div>${settings.map(([id,name,desc])=>`<div class="setting-row"><div><p class="setting-name">${name}</p><p class="setting-desc">${desc}</p></div><label class="switch"><input type="checkbox" data-sharing="${id}" aria-label="${name}" ${sharing[id]?'checked':''}><span class="switch-track"></span></label></div>`).join('')}</div>
@@ -385,7 +385,7 @@ function render() {
  }
  document.getElementById('selection-note').textContent=favorite?`本页已标记「${palettes[favorite].id} · ${palettes[favorite].name}」。可直接把编号告诉我；刷新后清除标记。`:'可以点击「单套细看」，标记你喜欢的方案。';
  const url=new URL(location.href);url.searchParams.set('palette',palette);url.searchParams.set('surface',surface);url.searchParams.set('mode',mode);offline?url.searchParams.set('offline','1'):url.searchParams.delete('offline');history.replaceState(null,'',url);
- document.title=`Desklet · ${mode==='compare'?'四套配色对比':palettes[palette].name}`;
+ document.title=`DeskBar · ${mode==='compare'?'四套配色对比':palettes[palette].name}`;
 }
 function notify(text) {clearTimeout(toastTimer);const toast=document.getElementById('toast');toast.textContent=text;toast.classList.add('show');toastTimer=setTimeout(()=>toast.classList.remove('show'),3000);}
 function showDemo(title,text) {document.getElementById('dialog-title').textContent=title;document.getElementById('dialog-body').textContent=text;document.getElementById('demo-dialog').showModal();}

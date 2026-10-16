@@ -17,7 +17,7 @@ Android 12 / API 31 临时模拟器通过 `layout_editing_test.dart`，新增导
 ```sh
 cd apps/android
 flutter drive --driver=test_driver/ui.dart --target=integration_test/layout_editing_test.dart \
-  -d <测试模拟器序列号> --dart-define=DESKLET_SCREENSHOTS=true
+  -d <测试模拟器序列号> --dart-define=DESKBAR_SCREENSHOTS=true
 ```
 
 截图在 `apps/android/build/ui-screenshots/editing-*.png`。本轮尚未在物理设备验收手指触控和系统边缘手势。
@@ -42,7 +42,7 @@ make test-android-connection ANDROID_DEVICE=emulator-5560
 
 - macOS：桌面前端生产构建、Tauri 原生编译与开发程序启动；桌面浏览器在宽屏与 560 像素窗口检查设备管理、邀请、确认与移除，交互使用测试桥接数据。
 - Android：Flutter 分析、组件测试、debug APK 构建；Android 12 / API 31 arm64 模拟器的上述原生连接测试通过。
-- 小米 14 Ultra / Android 16（API 36、arm64）：改名后的「Desklet 工作台」开发 APK 已通过 USB 安装并启动，确认前台 Activity 和进程存在。随后用户确认已连接成功；这不等同于相机扫码和各种权限拒绝路径都已验证。
+- 小米 14 Ultra / Android 16（API 36、arm64）：此前工作台开发 APK 已通过 USB 安装并启动，确认前台 Activity 和进程存在。随后用户确认已连接成功；这不等同于相机扫码和各种权限拒绝路径都已验证，也不代表本次 DeskBar 更名后的安装与配对已经验证。
 - Rust：邀请过期、错误秘密、一次邀请不能被其他设备复用、相同请求重试、审批、摘要保存、撤权、重启保留身份 / 更换 epoch、重复进程锁、真实 TLS 认证测试通过。
 
 ## 仍未完成
@@ -61,10 +61,10 @@ Flutter 组件测试覆盖 360 × 640、1.8 倍系统字号、800 × 360 横屏�
 # 仅在独立测试模拟器运行：测试会清除这台模拟器上的连接信息。
 cd apps/android
 flutter drive --driver=test_driver/ui.dart --target=integration_test/ui_test.dart \
-  -d emulator-5560 --dart-define=DESKLET_SCREENSHOTS=true
+  -d emulator-5560 --dart-define=DESKBAR_SCREENSHOTS=true
 ```
 
-截图默认保存到 Android 工程的 `build/ui-screenshots`，也可用 `DESKLET_SCREENSHOT_DIR` 环境变量指定本机目录。字体来源与许可见 [字体说明](../assets/fonts/README.md)。物理设备视觉效果与相机扫码仍需验证。
+截图默认保存到 Android 工程的 `build/ui-screenshots`，也可用 `DESKBAR_SCREENSHOT_DIR` 环境变量指定本机目录。字体来源与许可见 [字体说明](../assets/fonts/README.md)。物理设备视觉效果与相机扫码仍需验证。
 
 ## 铂银 / 墨黑与多页编辑验证
 
@@ -92,7 +92,7 @@ API 采集器使用本地 HTTP 夹具验证登录、令牌续期、429 Retry-Aft
 本机只读来源冒烟测试可显式运行：
 
 ```sh
-cargo test --locked -p desklet-host live_local_sources -- --ignored --nocapture
+cargo test --locked -p deskbar-host live_local_sources -- --ignored --nocapture
 ```
 
 该测试读取当前电脑的 Codex 数据库，通过本机 app-server 查询已登录账户额度，只输出会话数量与额度窗口数量。2026-10-16 已通过；不代表所有 Codex 历史数据库格式都受支持。来源异常提示与其他来源独立。

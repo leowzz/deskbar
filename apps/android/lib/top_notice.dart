@@ -51,7 +51,7 @@ class _TopNoticeState extends State<_TopNotice> {
 
   @override
   Widget build(BuildContext context) {
-    final c = deskletColors(context);
+    final c = deskbarColors(context);
     return Positioned(
       top: 0,
       left: 0,

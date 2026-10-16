@@ -23,7 +23,7 @@ Map<String, dynamic> snapshot({bool expired = false}) {
         'session_id': 'session',
         'version': 'version',
         'title': '一个比较长的真实工作任务标题，需要在大字号和窄屏下保持可读',
-        'project': 'Desklet',
+        'project': 'DeskBar',
         'status': 'running',
         'updated_at': now,
       },

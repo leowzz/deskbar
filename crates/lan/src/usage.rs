@@ -1,6 +1,6 @@
 use super::Agent;
 use anyhow::{ensure, Context, Result};
-use desklet_host::{
+use deskbar_host::{
     now,
     usage::{Error, Source, UsageConfig},
 };
@@ -14,7 +14,7 @@ fn credential_account(host: &str, config: &UsageConfig) -> String {
 }
 fn credentials(host: &str, config: &UsageConfig) -> Result<keyring::Entry> {
     keyring::Entry::new(
-        "app.desklet.agent.sub2api",
+        "app.deskbar.agent.sub2api",
         &credential_account(host, config),
     )
     .context("无法访问用量账号，请检查系统钥匙串权限")
@@ -247,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn account_and_secret_are_read_as_one_generation() {
         let dir = tempfile::tempdir().unwrap();
-        let mut host = desklet_host::Host::load(dir.path().into(), "fixture".into()).unwrap();
+        let mut host = deskbar_host::Host::load(dir.path().into(), "fixture".into()).unwrap();
         let old = UsageConfig {
             base_url: "https://old.example.com".into(),
             email: "old@example.com".into(),

@@ -6,7 +6,7 @@ LocalSend 使用自定义 UDP 多播发现，再通过 HTTP / HTTPS 双向登记
 
 ## 查的是哪个版本，结论是什么
 
-> **对 Desklet 的建议**
+> **对 DeskBar 的建议**
 >
 > 将原方案的单一 mDNS 发现，调整为「UDP 发现 + 已配对地址探测 + 按需网段扫描」。mDNS 可留作后续 Adapter。Android 继续作为客户端，配对和远程操作授权仍然独立。
 
@@ -128,7 +128,7 @@ LocalSend 的 fingerprint 是整张证书的 SHA-256。我们可继续固定主�
 
 Android 的网络权限也不能靠换发现协议跳过。该版 LocalSend 在启动服务器和发现之前请求局域网权限。我们的实现需按系统与 target SDK 处理授权、拒绝和恢复路径。[启动顺序](https://github.com/localsend/localsend/blob/v1.18.2/app/lib/config/init.dart#L190-L218)、[Android 权限实现](https://github.com/localsend/localsend/blob/v1.18.2/app/android/app/src/main/kotlin/org/localsend/localsend_app/MainActivity.kt#L128-L165)
 
-## 具体怎样用到Desklet 仓库
+## 具体怎样用到DeskBar 仓库
 
 ```mermaid
 sequenceDiagram

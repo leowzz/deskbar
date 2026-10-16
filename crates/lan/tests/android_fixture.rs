@@ -1,26 +1,26 @@
 //! Explicitly launched test fixture. Never linked into the desktop application.
 //! Creates a temporary identity, auto-approves one device, then revokes it.
-use desklet_host::{
+use deskbar_host::{
     now,
     workbench::{Permissions, Quota, Session, ShortcutConfig},
     Host,
 };
-use desklet_lan::{Agent, Identity};
+use deskbar_lan::{Agent, Identity};
 use std::{fs, path::PathBuf, time::Duration};
 
 #[tokio::test]
 #[ignore = "requires a running Android integration test; see tests/README.md"]
 async fn android_connection_fixture() {
     let directory = PathBuf::from(
-        std::env::var("DESKLET_FIXTURE_DIR").expect("Set a private fixture directory"),
+        std::env::var("DESKBAR_FIXTURE_DIR").expect("Set a private fixture directory"),
     );
     fs::create_dir_all(&directory).unwrap();
-    let mut host = Host::load(directory.join("host"), "Desklet 连接测试".into()).unwrap();
+    let mut host = Host::load(directory.join("host"), "DeskBar 连接测试".into()).unwrap();
     host.workbench.sessions = vec![Session {
         session_id: "00000000-0000-4000-8000-000000000001".into(),
         version: "fixture-version".into(),
         title: "验证工作台连接".into(),
-        project: "Desklet".into(),
+        project: "DeskBar".into(),
         status: "running".into(),
         updated_at: now(),
     }];
@@ -35,7 +35,7 @@ async fn android_connection_fixture() {
     host.workbench
         .observed("codex.sessions", Ok(()), now(), 180);
     host.workbench.observed("codex.quota", Ok(()), now(), 180);
-    host.workbench.api_usage = vec![desklet_host::usage::parse_usage(
+    host.workbench.api_usage = vec![deskbar_host::usage::parse_usage(
         &serde_json::json!({"today_actual_cost":1.25,"today_tokens":1234,"tpm":42}),
         "Asia/Shanghai",
         now(),
@@ -66,7 +66,7 @@ async fn android_connection_fixture() {
     let path = directory.join("invite.json");
     fs::write(
         &path,
-        serde_json::json!({"DESKLET_INVITE":uri.as_str()}).to_string(),
+        serde_json::json!({"DESKBAR_INVITE":uri.as_str()}).to_string(),
     )
     .unwrap();
     #[cfg(unix)]

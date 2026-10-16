@@ -1,4 +1,4 @@
-package app.desklet.workbench
+package app.deskbar.workbench
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
@@ -14,11 +14,11 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val connection = ConnectionRuntime(applicationContext)
         runtime = connection
-        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "app.desklet/events").setStreamHandler(connection)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.desklet/connection").setMethodCallHandler { call, result -> connection.call(call, result) }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "app.deskbar/events").setStreamHandler(connection)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.deskbar/connection").setMethodCallHandler { call, result -> connection.call(call, result) }
         // Layout contains only local display preferences and stable resource IDs.
         // Keep it separate from the encrypted pairing credentials and cache.
-        val preferences = getSharedPreferences("desklet-display", MODE_PRIVATE)
+        val preferences = getSharedPreferences("deskbar-display", MODE_PRIVATE)
         // FULL_SENSOR follows the physical device even when Android's system
         // rotation toggle is off. Flutter's fullUser policy does not do this.
         requestedOrientation = if (preferences.getBoolean("rotationLocked", false)) {
@@ -26,7 +26,7 @@ class MainActivity : FlutterActivity() {
         } else {
             ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.desklet/layout").setMethodCallHandler { call, result ->
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.deskbar/layout").setMethodCallHandler { call, result ->
             when (call.method) {
                 "directory" -> result.success(filesDir.absolutePath)
                 "loadTheme" -> result.success(preferences.getString("theme", "light").let { if (it == "dark") "dark" else "light" })

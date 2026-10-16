@@ -12,7 +12,7 @@
 
 ## 发现
 
-采用产品自己的 UDP 多播 query / offer，参考 [LocalSend 研究](research/localsend-discovery.md)。Desklet 不复用 LocalSend 的组地址、端口或登记接口。产品组地址和默认端口尚待选择。
+采用产品自己的 UDP 多播 query / offer，参考 [LocalSend 研究](research/localsend-discovery.md)。DeskBar 不复用 LocalSend 的组地址、端口或登记接口。产品组地址和默认端口尚待选择。
 
 ```mermaid
 sequenceDiagram
@@ -124,8 +124,8 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 
 本节记录代码当前行为，前文的完整协议仍需按阶段验证。
 
-- IPv4 多播组 `239.77.68.76`，UDP `42831`；JSON query 包含 `product=desklet`、`version=1`、`type=query`、随机 `nonce`。offer 回显 nonce，提供 `host_id`、`name`、实际 `port` 与 `pin`。响应向查询源单播，按源 IP 两秒内最多一次。发现不授予信任。当前只在启动时绑定接口，尚不覆盖 IPv6 和网络切换重绑。
-- 连接邀请为 `desklet://pair` URI，携带版本、Host、名称、SPKI pin、候选 HTTPS 地址、配对会话、256 位秘密和过期时刻。完整邀请只能经用户可信的扫码 / 复制路径输入；普通发现消息不替换已保存 pin。无摄像头路径使用完整邀请，尚无短码 PAKE。
+- IPv4 多播组 `239.77.68.76`，UDP `42831`；JSON query 包含 `product=deskbar`、`version=1`、`type=query`、随机 `nonce`。offer 回显 nonce，提供 `host_id`、`name`、实际 `port` 与 `pin`。响应向查询源单播，按源 IP 两秒内最多一次。发现不授予信任。当前只在启动时绑定接口，尚不覆盖 IPv6 和网络切换重绑。
+- 连接邀请为 `deskbar://pair` URI，携带版本、Host、名称、SPKI pin、候选 HTTPS 地址、配对会话、256 位秘密和过期时刻。完整邀请只能经用户可信的扫码 / 复制路径输入；普通发现消息不替换已保存 pin。无摄像头路径使用完整邀请，尚无短码 PAKE。
 - `POST /v1/pairing/request` 接收 `session_id`、`secret`、`claim`（客户端 256 位随机秘密）、`name`，返回 `id`、`name`、`expires_at`。相同邀请与 claim 重试返回原请求，其他请求无法再次消费邀请。
 - `POST /v1/pairing/status` 接收 `request_id` 与 `claim`；审批前返回 `token: null`，电脑审批后在邀请有效期内返回独立 256 位设备令牌。过期、取消与移除后不可再领取。
 - `GET /v1/snapshot` 与 `GET /v1/events`（WSS）使用 Authorization Bearer。WSS 订阅先登记再读取初始完整快照，十秒发送一次授权状态。快照携带按设备许可裁剪的来源、近期会话、额度、入口和能力；心跳不延长来源新鲜度。撤权使后续请求返回 401，并向现存 WSS 发送 `{"type":"revoked"}` 后关闭。

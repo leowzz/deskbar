@@ -1,4 +1,4 @@
-# Desklet 架构
+# DeskBar 架构
 
 状态：连接、Codex / Sub2API 来源、设备许可、有限打开动作和 Android 多页组件编辑已实现。2026-10-16。
 
@@ -66,7 +66,7 @@ App 不可见时持续刷新需要单独验证前台服务、通知和平台要�
 | 原路径或模块 | 提取方式 |
 | --- | --- |
 | `agents/desktop` | 复用 Tauri 外壳与设置；连接设置换为配对与设备许可 |
-| `codex.rs`、`usage.rs` | 复用采集规则，改用 Desklet 领域类型 |
+| `codex.rs`、`usage.rs` | 复用采集规则，改用 DeskBar 领域类型 |
 | `commands.rs`、`shortcuts.rs` | 复用资源校验与本机打开能力，替换授权与命令信封 |
 | `runtime.rs` | 保留采集调度；MQTT 状态机替换为 LAN 监听与会话管理 |
 | `nodes/app` | 复用工作台、点阵、主题和适配；移除 InboxController 依赖 |
@@ -77,7 +77,7 @@ App 不可见时持续刷新需要单独验证前台服务、通知和平台要�
 
 ## 独立产品约束
 
-Desklet 使用独立的 Android applicationId、桌面 bundle ID、配置目录、设备身份、签名和更新通道，可与 Orbit 并存。当前标识为 `app.desklet.agent` 与 `app.desklet.workbench`。
+DeskBar 使用独立的 Android applicationId、桌面 bundle ID、配置目录、设备身份、签名和更新通道，可与 Orbit 并存。当前标识为 `app.deskbar.agent` 与 `app.deskbar.workbench`。
 
 平台差异通过 Adapter 隔开：应用发现、打开应用、安全存储、登录启动与来源采集。首版按实际需求实现，不预建通用插件框架。
 
@@ -96,7 +96,7 @@ macOS 安装路径需验证签名、公证与本地网络授权。Windows 需验
 - `apps/desktop`：React 设备与共享管理、来源健康 / 额度、入口编辑与原生应用选择器、Tauri 托盘；关闭窗口继续运行，菜单栏可打开或退出。启动失败时保留窗口显示可操作提示。
 - `apps/android`：Flutter 工作台；`WorkbenchData` 解析授权状态，`Connection` 提供来源和有限动作。Kotlin 管理 HTTPS / WSS、发现、Keystore 加密凭据 / 快照、动作提交和结果查询。普通断线保留上次数据，来源失效或离线禁用会话打开；撤销共享会替换并清除对应缓存。
 
-Codex 数据库和 app-server 读取、Sub2API 登录 / 续期 / 聚合指标、深链、入口校验及 macOS 应用图标取得参考 Orbit 的成熟规则，已改用 Desklet 自有类型；没有 Orbit 运行依赖、额外后端、MQTT 或共享插件框架。Sub2API 配置归 Host，密码存独立钥匙串条目；账号变更清除旧值并丢弃在途旧账号响应。
+Codex 数据库和 app-server 读取、Sub2API 登录 / 续期 / 聚合指标、深链、入口校验及 macOS 应用图标取得参考 Orbit 的成熟规则，已改用 DeskBar 自有类型；没有 Orbit 运行依赖、额外后端、MQTT 或共享插件框架。Sub2API 配置归 Host，密码存独立钥匙串条目；账号变更清除旧值并丢弃在途旧账号响应。
 
 Android `LayoutWorkspace` 使用不可变文档管理全页面草稿、历史和双方向网格校验，临时选中 / 铺满不参与保存。`LayoutRepository` 经串行队列在 App 私有目录写临时文件后原子替换，保留有效副本和旧配置 / 损坏原文件；未来版本禁止降级覆盖。`WorkbenchCanvas` 将文档绑定到单个 `Connection` 的授权快照，同源多个实例复用一条 WSS，按稳定 Host / 来源 / 资源筛选。页面滚动通过实例 ID 保留，非当前页由按需 PageView 构建。
 

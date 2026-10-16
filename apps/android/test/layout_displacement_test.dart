@@ -1,4 +1,4 @@
-import 'package:desklet/layout_workspace.dart';
+import 'package:deskbar/layout_workspace.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 LayoutWorkspace crowdedWorkspace({bool chain = false}) => LayoutWorkspace(

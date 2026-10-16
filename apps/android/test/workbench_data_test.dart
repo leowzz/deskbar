@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:desklet/workbench_data.dart';
+import 'package:deskbar/workbench_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'workbench_fixture.dart';
 

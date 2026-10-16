@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:desklet/main.dart';
+import 'package:deskbar/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -10,17 +10,17 @@ void main() {
     savedHost = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('app.desklet/layout'),
+          const MethodChannel('app.deskbar/layout'),
           (call) async => call.method == 'loadTheme' ? 'light' : null,
         );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('app.desklet/connection'),
+          const MethodChannel('app.deskbar/connection'),
           (call) async => call.method == "restore" ? savedHost : null,
         );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('app.desklet/events'),
+          const MethodChannel('app.deskbar/events'),
           (call) async => null,
         );
   });
@@ -39,7 +39,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await tester.pumpWidget(const DeskletApp());
+        await tester.pumpWidget(const DeskBarApp());
         await tester.pumpAndSettle();
         expect(find.text('粘贴邀请'), findsOneWidget);
         await tester.ensureVisible(find.text('粘贴邀请'));
@@ -65,7 +65,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await tester.pumpWidget(const DeskletApp());
+        await tester.pumpWidget(const DeskBarApp());
         await tester.pumpAndSettle();
         // Paired workbenches start immersed. Display and connection settings
         // are reached by long-pressing the canvas, not persistent controls.

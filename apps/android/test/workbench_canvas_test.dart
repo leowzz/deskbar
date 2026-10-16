@@ -1,12 +1,12 @@
 import 'dart:async';
-import 'package:desklet/connection.dart';
-import 'package:desklet/display_preferences.dart';
-import 'package:desklet/layout_repository.dart';
-import 'package:desklet/layout_workspace.dart';
-import 'package:desklet/rawblock.dart';
-import 'package:desklet/workbench_canvas.dart';
-import 'package:desklet/workbench_content.dart';
-import 'package:desklet/workbench_data.dart';
+import 'package:deskbar/connection.dart';
+import 'package:deskbar/display_preferences.dart';
+import 'package:deskbar/layout_repository.dart';
+import 'package:deskbar/layout_workspace.dart';
+import 'package:deskbar/rawblock.dart';
+import 'package:deskbar/workbench_canvas.dart';
+import 'package:deskbar/workbench_content.dart';
+import 'package:deskbar/workbench_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'workbench_fixture.dart';
@@ -47,7 +47,7 @@ Future<void> launch(
     MaterialApp(
       theme: rawBlockTheme(brightness),
       home: Scaffold(
-        appBar: withChrome ? AppBar(title: const Text('Desklet 工作台')) : null,
+        appBar: withChrome ? AppBar(title: const Text('DeskBar 工作台')) : null,
         body: SafeArea(
           child: Column(
             children: [
@@ -366,7 +366,7 @@ void main() {
           );
           final project = find.descendant(
             of: card,
-            matching: find.text('Desklet'),
+            matching: find.text('DeskBar'),
           );
           expect(project.hitTestable(), findsOneWidget);
           expect(
@@ -423,7 +423,7 @@ void main() {
         );
         final project = find.descendant(
           of: card,
-          matching: find.text('Desklet'),
+          matching: find.text('DeskBar'),
         );
         expect(project.hitTestable(), findsOneWidget);
         expect(

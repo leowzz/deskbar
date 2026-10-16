@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Desklet · 工作台布局原型</title>
+<title>DeskBar · 工作台布局原型</title>
 <!-- Throwaway prototype. Three structural presets on one page via ?variant=A|B|C.
      Question: can usage, sessions and shortcuts be composed, resized and maximized without losing readability?
      In-memory sample data only. No network calls, device operations or persistence. -->
@@ -15,7 +15,7 @@
 </style>
 </head>
 <body>
-<header><div class="brand"><div class="brandmark" id="brand-mark"></div><div><h1>Desklet <span style="font-weight:400;color:var(--muted)">自由工作台</span></h1><div class="eyebrow">交互原型 · 示例数据 · 不连接设备</div></div></div><div class="headnote">用量、会话、快捷入口，自由组合。<br>长按空白或点击「编辑布局」开始。</div></header>
+<header><div class="brand"><div class="brandmark" id="brand-mark"></div><div><h1>DeskBar <span style="font-weight:400;color:var(--muted)">自由工作台</span></h1><div class="eyebrow">交互原型 · 示例数据 · 不连接设备</div></div></div><div class="headnote">用量、会话、快捷入口，自由组合。<br>长按空白或点击「编辑布局」开始。</div></header>
 <main class="shell">
   <div class="toolbar">
     <div class="toolbar-group"><span class="toolbar-label">预览屏幕</span><div class="seg"><button id="wide-btn" type="button">横屏</button><button id="portrait-btn" type="button">竖屏</button></div><button id="immersive-btn" type="button" class="subtle">沉浸预览</button><span id="focus-note" class="focus-note"></span></div>
@@ -56,7 +56,7 @@ const $=id=>document.getElementById(id),clone=value=>JSON.parse(JSON.stringify(v
 const icons={grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',code:'<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/>',terminal:'<path d="m5 7 5 5-5 5m8 0h6"/><rect x="2" y="3" width="20" height="18" rx="3"/>',globe:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',folder:'<path d="M3 7h6l2-3h7a3 3 0 0 1 3 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',music:'<path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',moon:'<path d="M20.5 13a9 9 0 0 1-9.5-9.5A9 9 0 1 0 20.5 13Z"/>',grip:'<circle cx="8" cy="5" r="1"/><circle cx="16" cy="5" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="8" cy="19" r="1"/><circle cx="16" cy="19" r="1"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>',expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',resize:'<path d="m8 20 12-12m-5 12 5-5"/>'};
 const svg=name=>`<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]||icons.grid}</svg>`;
 const apps=[['Codex','code','#e6ebe8'],['终端','terminal','#86d4ad'],['浏览器','globe','#83aaf4'],['文件','folder','#d5b878'],['音乐','music','#d79aa8'],['专注模式','moon','#b5a0e3']];
-const tasks=[['布局自由调整','desklet · GPT-6','运行中'],['局域网自动发现','desklet · GPT-6','运行中'],['Android 横竖屏适配','orbit · GPT-6','已完成'],['快捷入口图标','desklet · GPT-6','已完成'],['账号额度展示','orbit · GPT-6','已完成'],['Windows Agent 配对','desklet · GPT-6','已完成'],['工作台配色调整','orbit · GPT-6','已完成'],['主机断线重连','desklet · GPT-6','已完成']];
+const tasks=[['布局自由调整','deskbar · GPT-6','运行中'],['局域网自动发现','deskbar · GPT-6','运行中'],['Android 横竖屏适配','orbit · GPT-6','已完成'],['快捷入口图标','deskbar · GPT-6','已完成'],['账号额度展示','orbit · GPT-6','已完成'],['Windows Agent 配对','deskbar · GPT-6','已完成'],['工作台配色调整','orbit · GPT-6','已完成'],['主机断线重连','deskbar · GPT-6','已完成']];
 const names={usage:'用量',sessions:'会话',shortcuts:'快捷入口'},variants=['A','B','C'],variantNames={A:'完整工作台',B:'用量 + 快捷入口',C:'全屏大图标'};
 let variant=new URLSearchParams(location.search).get('variant')||'A';if(!variants.includes(variant))variant='A';
 const navPages={};let pendingRestore=null;
@@ -117,7 +117,7 @@ $('canvas').addEventListener('click',e=>{const pageButton=e.target.closest('[dat
 document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)||e.target.isContentEditable)return;if(e.key==='ArrowLeft'){e.preventDefault();cycle(-1)}if(e.key==='ArrowRight'){e.preventDefault();cycle(1)}if(e.key==='Escape'){if(focusId){focusId=null;render()}else if(editing)$('cancel-btn').click()}});
 window.addEventListener('resize',()=>{$('wide-btn').disabled=innerWidth<620;if(innerWidth<620&&orientation==='wide')setOrientation('portrait')});
 new ResizeObserver(()=>renderCanvas()).observe($('canvas'));editEntry=state();updateUrl();render();
-window.DeskletPrototype={getState:()=>clone({...state(),editing,selected}),loadVariant,setOrientation,toggleVisible,arrange,maximize,select:id=>{selected=id;render()},getGeometry:()=>widgets.filter(w=>w.visible).map(w=>({id:w.id,rect:w.rect,pixels:pixelRect(visibleRect(w)),minimum:minimum(w)}))};
+window.DeskBarPrototype={getState:()=>clone({...state(),editing,selected}),loadVariant,setOrientation,toggleVisible,arrange,maximize,select:id=>{selected=id;render()},getGeometry:()=>widgets.filter(w=>w.visible).map(w=>({id:w.id,rect:w.rect,pixels:pixelRect(visibleRect(w)),minimum:minimum(w)}))};
 })();
 </script>
 </body></html>

@@ -28,7 +28,7 @@ export function call<T>(
 ): Promise<T> {
   if (!isTauri())
     return Promise.reject(
-      new Error("请在 Desklet 连接助手中连接设备。浏览器只能预览界面。"),
+      new Error("请在 DeskBar 连接助手中连接设备。浏览器只能预览界面。"),
     );
   return invoke<T>(command, args);
 }

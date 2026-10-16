@@ -103,7 +103,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
 
   Widget _status(BuildContext context, WorkbenchData data, String sourceId) {
     final s = data.source(sourceId);
-    final c = deskletColors(context);
+    final c = deskbarColors(context);
     return Text(
       _sourceStatusLabel(data, sourceId),
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -158,7 +158,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
               if (notice.isNotEmpty) ...[
                 Text(
                   notice,
-                  style: style.copyWith(color: deskletColors(context).warning),
+                  style: style.copyWith(color: deskbarColors(context).warning),
                 ),
                 const SizedBox(height: 4),
               ],
@@ -203,7 +203,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                           itemCount: sessions.length,
                           itemBuilder: (context, index) {
                             final session = sessions[index];
-                            final c = deskletColors(context);
+                            final c = deskbarColors(context);
                             final statusColor = session.status == 'running'
                                 ? c.success
                                 : [
@@ -375,7 +375,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                 Text(
                   notice,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: deskletColors(context).warning,
+                    color: deskbarColors(context).warning,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -393,7 +393,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                   itemCount: entries.length,
                   itemBuilder: (context, index) {
                     final entry = entries[index];
-                    final c = deskletColors(context);
+                    final c = deskbarColors(context);
                     Widget fallback() => Container(
                       width: iconSize,
                       height: iconSize,

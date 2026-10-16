@@ -11,7 +11,7 @@ function message(error: unknown) {
 
 type View = "devices" | "shortcuts" | "settings";
 type Theme = "light" | "dark";
-const themeKey = "desklet.theme";
+const themeKey = "deskbar.theme";
 
 function initialTheme(): Theme {
   try {
@@ -215,7 +215,7 @@ export function App() {
       <aside className="sidebar">
         <div className="brand">
           <Icon name="desk" />
-          <span>Desklet</span>
+          <span>DeskBar</span>
         </div>
         <nav aria-label="主导航">
           {(
@@ -381,7 +381,7 @@ export function App() {
               <section className="empty-state">
                 <h2>为电脑添一块屏幕</h2>
                 <p>
-                  在 Android 上打开 Desklet
+                  在 Android 上打开 DeskBar
                   工作台，扫描连接邀请，再回到这里确认。
                 </p>
                 <button className="secondary" disabled={busy} onClick={invite}>
@@ -469,7 +469,7 @@ export function App() {
           <section className="help">
             <h3>找不到电脑？</h3>
             <p>
-              确认两端已连接同一 Wi-Fi，并允许 Desklet
+              确认两端已连接同一 Wi-Fi，并允许 DeskBar
               连接助手访问本地网络。访客网络可能禁止设备互相连接。
             </p>
             <p>自动发现不可用时，可以扫描或粘贴完整连接邀请。</p>
@@ -528,10 +528,10 @@ export function App() {
           ) : (
             <>
               <h2 id="pair-title">在 Android 上扫码连接</h2>
-              <p>打开 Desklet 工作台，点击「扫码连接电脑」。</p>
+              <p>打开 DeskBar 工作台，点击「扫码连接电脑」。</p>
               <div className="qr">
                 {remaining > 0 && qr ? (
-                  <img src={qr} alt="Desklet 一次性连接邀请二维码" />
+                  <img src={qr} alt="DeskBar 一次性连接邀请二维码" />
                 ) : (
                   <div>
                     <p>{remaining ? "正在生成邀请…" : "邀请已过期"}</p>

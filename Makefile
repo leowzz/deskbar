@@ -7,7 +7,7 @@ ANDROID_DEVICE ?=
 .PHONY: help setup dev prototype android android-build desktop-build check docs-check test-android-connection
 
 help:
-	@printf '%s\n' 'Desklet — 电脑旁的工作台' '  make setup          安装依赖' '  make dev            运行 Desklet 连接助手' '  make android        运行 Desklet 工作台（设置 ANDROID_DEVICE）' '  make check          文档与代码检查' '  make desktop-build  构建桌面开发版本' '  make android-build  构建 Android 开发 APK' '  make prototype      预览 HTML 布局原型'
+	@printf '%s\n' 'DeskBar — 电脑旁的工作台' '  make setup          安装依赖' '  make dev            运行 DeskBar 连接助手' '  make android        运行 DeskBar 工作台（设置 ANDROID_DEVICE）' '  make check          文档与代码检查' '  make desktop-build  构建桌面开发版本' '  make android-build  构建 Android 开发 APK' '  make prototype      预览 HTML 布局原型'
 
 setup:
 	pnpm install --frozen-lockfile
@@ -36,7 +36,7 @@ docs-check:
 check: docs-check
 	cargo fmt --all -- --check
 	cargo test --locked
-	cargo check --locked -p desklet-desktop
+	cargo check --locked -p deskbar-desktop
 	pnpm --dir apps/desktop run check
 	pnpm --dir apps/desktop exec prettier --check src vite.config.ts
 	cd apps/android && dart format --output=none --set-exit-if-changed lib test integration_test test_driver

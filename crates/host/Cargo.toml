@@ -1,5 +1,5 @@
 [package]
-name = "desklet-host"
+name = "deskbar-host"
 version.workspace = true
 edition.workspace = true
 

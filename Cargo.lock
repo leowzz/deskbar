@@ -1041,11 +1041,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "desklet-desktop"
+name = "deskbar-desktop"
 version = "0.1.0"
 dependencies = [
- "desklet-host",
- "desklet-lan",
+ "deskbar-host",
+ "deskbar-lan",
  "hostname",
  "tauri",
  "tauri-build",
@@ -1054,7 +1054,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "desklet-host"
+name = "deskbar-host"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1078,14 +1078,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "desklet-lan"
+name = "deskbar-lan"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
  "axum-server",
  "base64 0.22.1",
- "desklet-host",
+ "deskbar-host",
  "futures-util",
  "if-addrs",
  "keyring",

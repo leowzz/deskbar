@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:desklet/layout_repository.dart';
-import 'package:desklet/layout_workspace.dart';
+import 'package:deskbar/layout_repository.dart';
+import 'package:deskbar/layout_workspace.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late Directory directory;
   late LayoutRepository repository;
   setUp(() async {
-    directory = await Directory.systemTemp.createTemp('desklet-layout-test-');
+    directory = await Directory.systemTemp.createTemp('deskbar-layout-test-');
     repository = LayoutRepository(directory: directory);
   });
   tearDown(() async => directory.delete(recursive: true));

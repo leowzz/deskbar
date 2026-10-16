@@ -1,4 +1,4 @@
-package app.desklet.workbench
+package app.deskbar.workbench
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
@@ -13,12 +13,12 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** One paired computer, encrypted by a non-exportable Android Keystore key. */
 class CredentialStore(context: Context) {
-    private val prefs = context.getSharedPreferences("desklet-connection", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("deskbar-connection", Context.MODE_PRIVATE)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (store.getKey("desklet-host", null) as? SecretKey)?.let { return it }
+        (store.getKey("deskbar-host", null) as? SecretKey)?.let { return it }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder("desklet-host", KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            init(KeyGenParameterSpec.Builder("deskbar-host", KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }

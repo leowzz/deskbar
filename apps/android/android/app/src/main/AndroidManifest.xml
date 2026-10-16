@@ -5,13 +5,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
-        android:label="Desklet 工作台"
+        android:label="DeskBar 工作台"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
-            android:name="app.desklet.workbench.MainActivity"
+            android:name="app.deskbar.workbench.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

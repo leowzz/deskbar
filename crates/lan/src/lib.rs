@@ -11,7 +11,7 @@ use axum::{
 };
 use axum_server::tls_rustls::RustlsConfig;
 use base64::{engine::general_purpose::STANDARD, Engine};
-use desklet_host::{
+use deskbar_host::{
     now,
     workbench::{Command, OpenTarget, Permissions, ShortcutConfig},
     Device, Host, PairingRequest,
@@ -38,14 +38,14 @@ pub struct Identity {
 
 impl Identity {
     pub fn load(host_id: &str) -> Result<Self> {
-        let entry = keyring::Entry::new("app.desklet.agent", host_id)?;
+        let entry = keyring::Entry::new("app.deskbar.agent", host_id)?;
         let key_pem = match entry.get_password() {
             Ok(value) => value,
             Err(keyring::Error::NoEntry) => {
                 let value = KeyPair::generate()?.serialize_pem();
                 entry
                     .set_password(&value)
-                    .context("无法保存电脑身份，请允许 Desklet 连接助手访问系统钥匙串后重试")?;
+                    .context("无法保存电脑身份，请允许 DeskBar 连接助手访问系统钥匙串后重试")?;
                 value
             }
             Err(e) => return Err(e).context("无法读取电脑身份，请解锁系统钥匙串后重试"),
@@ -59,7 +59,7 @@ impl Identity {
             "sha256/{}",
             STANDARD.encode(Sha256::digest(key.subject_public_key_info()))
         );
-        let cert = CertificateParams::new(vec!["desklet.local".into()])?.self_signed(&key)?;
+        let cert = CertificateParams::new(vec!["deskbar.local".into()])?.self_signed(&key)?;
         Ok(Self {
             key_pem,
             cert_pem: cert.pem(),
@@ -89,9 +89,9 @@ pub struct AgentStatus {
     pub pending: Option<PairingRequest>,
     pub addresses: Vec<String>,
     pub discovery_warning: Option<String>,
-    pub workbench: desklet_host::Snapshot,
+    pub workbench: deskbar_host::Snapshot,
     pub shortcuts: Vec<ShortcutConfig>,
-    pub usage_config: Option<desklet_host::usage::UsageConfig>,
+    pub usage_config: Option<deskbar_host::usage::UsageConfig>,
 }
 
 #[derive(Serialize)]
@@ -159,7 +159,7 @@ impl Agent {
                 .serve(app.into_make_service_with_connect_info::<SocketAddr>())
                 .await
             {
-                eprintln!("Desklet TLS listener stopped: {error}");
+                eprintln!("DeskBar TLS listener stopped: {error}");
                 // A listener dying must not leave a healthy-looking background app.
                 std::process::exit(1);
             }
@@ -187,7 +187,7 @@ impl Agent {
         tokio::spawn(async move {
             loop {
                 let result = tokio::task::spawn_blocking(|| {
-                    desklet_host::sources::sessions(&desklet_host::sources::codex_home())
+                    deskbar_host::sources::sessions(&deskbar_host::sources::codex_home())
                 })
                 .await;
                 {
@@ -214,7 +214,7 @@ impl Agent {
         let agent = self.clone();
         tokio::spawn(async move {
             loop {
-                let result = desklet_host::sources::quotas().await;
+                let result = deskbar_host::sources::quotas().await;
                 {
                     let mut host = agent.host.lock().unwrap();
                     let health = result.map(|quotas| {
@@ -253,7 +253,7 @@ impl Agent {
                 .map(|v| v.len())
                 .sum::<usize>();
             let new_bytes = STANDARD.decode(&item.icon_png).map_or(0, |v| v.len());
-            if previous_bytes + new_bytes > desklet_host::workbench::MAX_SHORTCUT_ICON_BYTES {
+            if previous_bytes + new_bytes > deskbar_host::workbench::MAX_SHORTCUT_ICON_BYTES {
                 item.icon_png.clear();
             }
         }
@@ -316,7 +316,7 @@ impl Agent {
         );
         let mut host = self.host.lock().unwrap();
         let invite = host.invite(now());
-        let mut uri = url::Url::parse("desklet://pair")?;
+        let mut uri = url::Url::parse("deskbar://pair")?;
         uri.query_pairs_mut()
             .append_pair("v", "1")
             .append_pair("host", &host.id)
@@ -571,7 +571,7 @@ async fn discovery(socket: tokio::net::UdpSocket, agent: Agent) {
         let Ok(query) = serde_json::from_slice::<serde_json::Value>(&bytes[..length]) else {
             continue;
         };
-        if query["product"] != "desklet" || query["version"] != 1 || query["type"] != "query" {
+        if query["product"] != "deskbar" || query["version"] != 1 || query["type"] != "query" {
             continue;
         }
         let Some(nonce) = query["nonce"]
@@ -588,7 +588,7 @@ async fn discovery(socket: tokio::net::UdpSocket, agent: Agent) {
         last.insert(source.ip(), instant);
         let offer = {
             let host = agent.host.lock().unwrap();
-            serde_json::json!({"product":"desklet", "version":1, "type":"offer", "nonce":nonce,
+            serde_json::json!({"product":"deskbar", "version":1, "type":"offer", "nonce":nonce,
                 "host_id":host.id, "name":host.name, "port":agent.port, "pin":agent.pin})
         };
         let _ = socket
@@ -610,13 +610,13 @@ mod tests {
         let client = reqwest::Client::builder()
             .add_root_certificate(cert)
             .resolve(
-                "desklet.local",
+                "deskbar.local",
                 SocketAddr::from(([127, 0, 0, 1], agent.port)),
             )
             .no_proxy()
             .build()
             .unwrap();
-        let base = format!("https://desklet.local:{}", agent.port);
+        let base = format!("https://deskbar.local:{}", agent.port);
         assert_eq!(
             client
                 .get(format!("{base}/v1/snapshot"))
@@ -627,7 +627,7 @@ mod tests {
             401
         );
         let invite = agent.host.lock().unwrap().invite(now());
-        let claim = desklet_host::secret();
+        let claim = deskbar_host::secret();
         let pending: serde_json::Value = client.post(format!("{base}/v1/pairing/request")).json(&serde_json::json!({"session_id":invite.session_id,"secret":invite.secret,"claim":claim,"name":"屏幕"})).send().await.unwrap().json().await.unwrap();
         let id = pending["id"].as_str().unwrap();
         agent.approve(id).unwrap();
@@ -641,7 +641,7 @@ mod tests {
             .await
             .unwrap();
         let token = response["token"].as_str().unwrap();
-        let snapshot: desklet_host::Snapshot = client
+        let snapshot: deskbar_host::Snapshot = client
             .get(format!("{base}/v1/snapshot"))
             .bearer_auth(token)
             .send()

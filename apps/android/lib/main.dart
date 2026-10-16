@@ -8,16 +8,16 @@ import 'package:flutter/services.dart';
 import 'rawblock.dart';
 import 'top_notice.dart';
 
-void main() => runApp(const DeskletApp());
+void main() => runApp(const DeskBarApp());
 
-class DeskletApp extends StatefulWidget {
-  const DeskletApp({super.key});
+class DeskBarApp extends StatefulWidget {
+  const DeskBarApp({super.key});
   @override
-  State<DeskletApp> createState() => _DeskletAppState();
+  State<DeskBarApp> createState() => _DeskBarAppState();
 }
 
-class _DeskletAppState extends State<DeskletApp> {
-  static const preferences = MethodChannel('app.desklet/layout');
+class _DeskBarAppState extends State<DeskBarApp> {
+  static const preferences = MethodChannel('app.deskbar/layout');
   ThemeMode mode = ThemeMode.light;
   bool changedTheme = false;
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -60,14 +60,14 @@ class _DeskletAppState extends State<DeskletApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Desklet 工作台',
+    title: 'DeskBar 工作台',
     navigatorKey: navigatorKey,
     debugShowCheckedModeBanner: false,
     theme: rawBlockTheme(),
     darkTheme: rawBlockTheme(Brightness.dark),
     themeMode: mode,
     builder: (context, child) {
-      final c = deskletColors(context);
+      final c = deskbarColors(context);
       final icons = Theme.of(context).brightness == Brightness.dark
           ? Brightness.light
           : Brightness.dark;
@@ -171,14 +171,14 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('在电脑上的 Desklet 连接助手点击「连接设备」，复制完整邀请。'),
+                const Text('在电脑上的 DeskBar 连接助手点击「连接设备」，复制完整邀请。'),
                 const SizedBox(height: 20),
                 TextField(
                   controller: invitation,
                   style: rawMono,
                   decoration: const InputDecoration(
                     labelText: '连接邀请',
-                    hintText: 'desklet://pair…',
+                    hintText: 'deskbar://pair…',
                   ),
                   minLines: 2,
                   maxLines: 4,
@@ -321,7 +321,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
       final paired = connection.hostName != null;
       final online = connection.phase == ConnectionPhase.online;
       final text = Theme.of(context).textTheme;
-      final c = deskletColors(context);
+      final c = deskbarColors(context);
       final compact = MediaQuery.sizeOf(context).height < 400;
       final immersive = paired && display.immersive;
       return Scaffold(
@@ -329,7 +329,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
             ? null
             : AppBar(
                 title: Text(
-                  compact && paired ? connection.hostName! : 'Desklet 工作台',
+                  compact && paired ? connection.hostName! : 'DeskBar 工作台',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: compact ? 16 : 22),
@@ -474,7 +474,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                           ] else ...[
                             Text('电脑旁的另一块屏幕', style: text.headlineSmall),
                             const SizedBox(height: 16),
-                            const Text('在电脑上打开 Desklet 连接助手，连接同一 Wi-Fi，即可开始。'),
+                            const Text('在电脑上打开 DeskBar 连接助手，连接同一 Wi-Fi，即可开始。'),
                             const SizedBox(height: 24),
                             Wrap(
                               spacing: 12,
@@ -565,7 +565,7 @@ class _ScanScreenState extends State<ScanScreen> {
           final value = barcode.rawValue;
           if (!captured &&
               value != null &&
-              value.startsWith('desklet://pair?')) {
+              value.startsWith('deskbar://pair?')) {
             captured = true;
             Navigator.pop(context, value);
             return;

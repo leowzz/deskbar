@@ -17,7 +17,7 @@ cleanup() {
   rm -rf "$test_dir"
 }
 trap cleanup EXIT
-DESKLET_FIXTURE_DIR="$test_dir" cargo test --locked -p desklet-lan --test android_fixture -- --ignored >"$test_dir/fixture.log" 2>&1 &
+DESKBAR_FIXTURE_DIR="$test_dir" cargo test --locked -p deskbar-lan --test android_fixture -- --ignored >"$test_dir/fixture.log" 2>&1 &
 fixture_pid=$!
 for ((attempt=0; attempt<90; attempt++)); do
   if [ -s "$test_dir/invite.json" ]; then break; fi

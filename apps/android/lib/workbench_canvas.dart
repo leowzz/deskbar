@@ -274,7 +274,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    final c = deskletColors(context);
+    final c = deskbarColors(context);
     return PopScope(
       canPop: !workspace.editing && !display.immersive && !saving,
       onPopInvokedWithResult: (didPop, result) {
@@ -384,7 +384,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   }
 
   Widget _editToolbar() => Material(
-    color: deskletColors(context).sidebar,
+    color: deskbarColors(context).sidebar,
     child: SizedBox(
       height: 48,
       child: Row(
@@ -531,7 +531,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                     ? CustomPaint(
                         painter: _GridPainter(
                           orientation,
-                          deskletColors(context).line,
+                          deskbarColors(context).line,
                         ),
                       )
                     : const SizedBox(),
@@ -617,7 +617,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       ),
     );
     return Material(
-      color: deskletColors(context).surface,
+      color: deskbarColors(context).surface,
       child: Column(
         children: [
           SizedBox(
@@ -682,7 +682,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         if (display.error != null)
           Text(
             display.error!,
-            style: TextStyle(color: deskletColors(context).warning),
+            style: TextStyle(color: deskbarColors(context).warning),
           ),
         if (widget.onConnectionSettings != null)
           TextButton.icon(
@@ -1224,10 +1224,10 @@ class _FloatingEditorWindowState extends State<_FloatingEditorWindow> {
             child: Material(
               key: const ValueKey('floating-editor-window'),
               elevation: 12,
-              color: deskletColors(context).surface,
+              color: deskbarColors(context).surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: deskletColors(context).edge),
+                side: BorderSide(color: deskbarColors(context).edge),
               ),
               clipBehavior: Clip.antiAlias,
               child: widget.builder((details) {
@@ -1459,7 +1459,7 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final c = deskletColors(context);
+    final c = deskbarColors(context);
     final r =
         candidate ??
         widget.preview ??

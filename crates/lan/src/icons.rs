@@ -2,7 +2,7 @@
 //! never the application path, image filename, URL or source image metadata.
 use anyhow::{ensure, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use desklet_host::workbench::{normalize_icon_png, ShortcutConfig};
+use deskbar_host::workbench::{normalize_icon_png, ShortcutConfig};
 use serde::Serialize;
 use std::path::Path;
 
@@ -84,7 +84,7 @@ pub fn import_icon(path: &Path) -> Result<String> {
 
 #[cfg(target_os = "macos")]
 fn convert_icon(path: &Path) -> Result<String> {
-    let directory = tempfile::Builder::new().prefix("desklet-icon-").tempdir()?;
+    let directory = tempfile::Builder::new().prefix("deskbar-icon-").tempdir()?;
     let output = directory.path().join("icon.png");
     let converted = std::process::Command::new("/usr/bin/sips")
         .args(["-s", "format", "png", "-Z", "64"])
@@ -116,7 +116,7 @@ fn workspace_icon(path: Option<&Path>) -> Result<String> {
     })
     .context("无法读取系统图标")?;
     let directory = tempfile::Builder::new()
-        .prefix("desklet-system-icon-")
+        .prefix("deskbar-system-icon-")
         .tempdir()?;
     let image = directory.path().join("icon.tiff");
     std::fs::write(&image, bytes).context("无法转换系统图标")?;
@@ -173,7 +173,7 @@ mod tests {
         let metadata = application_metadata(app).unwrap();
         assert_eq!(metadata.name, "Notes");
         assert!(!metadata.icon_png.is_empty());
-        assert!(desklet_host::workbench::validate_icon_png(&metadata.icon_png).unwrap() <= 32768);
+        assert!(deskbar_host::workbench::validate_icon_png(&metadata.icon_png).unwrap() <= 32768);
         let mut shortcut = ShortcutConfig {
             id: uuid::Uuid::new_v4().to_string(),
             name: "网页".into(),
@@ -191,7 +191,7 @@ mod tests {
     #[tokio::test]
     async fn existing_entries_are_backfilled_and_persisted_without_changing_action_version() {
         let dir = tempfile::tempdir().unwrap();
-        let mut host = desklet_host::Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let mut host = deskbar_host::Host::load(dir.path().into(), "电脑".into()).unwrap();
         let item = ShortcutConfig {
             id: uuid::Uuid::new_v4().to_string(),
             name: "Notes".into(),
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn missing_images_do_not_import() {
-        assert!(import_icon(Path::new("/missing/desklet-icon.png")).is_err());
-        assert!(application_metadata(Path::new("/missing/Desklet.app")).is_err());
+        assert!(import_icon(Path::new("/missing/deskbar-icon.png")).is_err());
+        assert!(application_metadata(Path::new("/missing/DeskBar.app")).is_err());
     }
 }

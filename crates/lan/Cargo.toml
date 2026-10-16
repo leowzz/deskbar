@@ -1,5 +1,5 @@
 [package]
-name = "desklet-lan"
+name = "deskbar-lan"
 version.workspace = true
 edition.workspace = true
 
@@ -7,7 +7,7 @@ edition.workspace = true
 open = "5"
 tempfile = "3"
 uuid.workspace = true
-desklet-host = { path = "../host" }
+deskbar-host = { path = "../host" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

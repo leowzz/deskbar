@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:desklet/connection.dart';
-import 'package:desklet/layout_repository.dart';
-import 'package:desklet/layout_workspace.dart';
-import 'package:desklet/rawblock.dart';
-import 'package:desklet/workbench_canvas.dart';
-import 'package:desklet/workbench_content.dart';
-import 'package:desklet/workbench_data.dart';
+import 'package:deskbar/connection.dart';
+import 'package:deskbar/layout_repository.dart';
+import 'package:deskbar/layout_workspace.dart';
+import 'package:deskbar/rawblock.dart';
+import 'package:deskbar/workbench_canvas.dart';
+import 'package:deskbar/workbench_content.dart';
+import 'package:deskbar/workbench_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -46,7 +46,7 @@ void main() {
     'session limits persist per instance and support undo and cancellation',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'desklet-session-limit-',
+        'deskbar-session-limit-',
       );
       addTearDown(() => directory.delete(recursive: true));
       final workspace = LayoutWorkspace(document: sessionPage())..beginEdit();

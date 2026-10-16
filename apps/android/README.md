@@ -1,6 +1,6 @@
-# Desklet 工作台
+# DeskBar 工作台
 
-Flutter + Kotlin 的独立 Android App，标识 `app.desklet.workbench`，最低 Android 9。支持扫码 / 粘贴邀请、前台恢复重连、授权会话 / 额度 / API 用量 / 快捷入口，以及多页自由组合、重复组件、网格编辑和本机保存。
+Flutter + Kotlin 的独立 Android App，标识 `app.deskbar.workbench`，最低 Android 9。支持扫码 / 粘贴邀请、前台恢复重连、授权会话 / 额度 / API 用量 / 快捷入口，以及多页自由组合、重复组件、网格编辑和本机保存。
 
 从根目录运行 `make setup`，再运行 `make android ANDROID_DEVICE=<设备序列号>`。`make android-build` 构建开发 APK。生产签名未配置，不能把 debug APK 当作发布版本。
 

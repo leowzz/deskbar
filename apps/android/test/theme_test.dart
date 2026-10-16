@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:desklet/main.dart';
-import 'package:desklet/rawblock.dart';
+import 'package:deskbar/main.dart';
+import 'package:deskbar/rawblock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,11 +11,11 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(
-      const MethodChannel('app.desklet/connection'),
+      const MethodChannel('app.deskbar/connection'),
       (call) async => null,
     );
     messenger.setMockMethodCallHandler(
-      const MethodChannel('app.desklet/events'),
+      const MethodChannel('app.deskbar/events'),
       (call) async => null,
     );
   });
@@ -24,7 +24,7 @@ void main() {
     (tester) async {
       String? preference;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(const MethodChannel('app.desklet/layout'), (
+          .setMockMethodCallHandler(const MethodChannel('app.deskbar/layout'), (
             call,
           ) async {
             if (call.method == 'saveTheme') {
@@ -32,7 +32,7 @@ void main() {
             }
             return call.method == 'loadTheme' ? preference : null;
           });
-      await tester.pumpWidget(const DeskletApp());
+      await tester.pumpWidget(const DeskBarApp());
       await tester.pumpAndSettle();
       expect(
         tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
@@ -41,8 +41,8 @@ void main() {
       expect(
         Theme.of(
           tester.element(find.byType(Scaffold)),
-        ).extension<DeskletColors>()!.canvas,
-        DeskletColors.silver.canvas,
+        ).extension<DeskBarColors>()!.canvas,
+        DeskBarColors.silver.canvas,
       );
       await tester.tap(find.byTooltip('切换暗色主题'));
       await tester.pumpAndSettle();
@@ -50,11 +50,11 @@ void main() {
       expect(
         Theme.of(
           tester.element(find.byType(Scaffold)),
-        ).extension<DeskletColors>()!.canvas,
-        DeskletColors.graphite.canvas,
+        ).extension<DeskBarColors>()!.canvas,
+        DeskBarColors.graphite.canvas,
       );
       await tester.pumpWidget(const SizedBox());
-      await tester.pumpWidget(const DeskletApp());
+      await tester.pumpWidget(const DeskBarApp());
       await tester.pumpAndSettle();
       expect(
         tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
@@ -69,10 +69,10 @@ void main() {
     final load = Completer<String>();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('app.desklet/layout'),
+          const MethodChannel('app.deskbar/layout'),
           (call) async => call.method == 'loadTheme' ? load.future : null,
         );
-    await tester.pumpWidget(const DeskletApp());
+    await tester.pumpWidget(const DeskBarApp());
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('切换暗色主题'));
     await tester.pumpAndSettle();
@@ -88,7 +88,7 @@ void main() {
     'theme save failures replace the top notice and reset its timer',
     (tester) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(const MethodChannel('app.desklet/layout'), (
+          .setMockMethodCallHandler(const MethodChannel('app.deskbar/layout'), (
             call,
           ) async {
             if (call.method == 'saveTheme') {
@@ -96,7 +96,7 @@ void main() {
             }
             return null;
           });
-      await tester.pumpWidget(const DeskletApp());
+      await tester.pumpWidget(const DeskBarApp());
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('切换暗色主题'));
       await tester.pumpAndSettle();

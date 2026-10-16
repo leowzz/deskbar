@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Desklet 连接助手",
+  "productName": "DeskBar 连接助手",
   "version": "0.1.0",
-  "identifier": "app.desklet.agent",
+  "identifier": "app.deskbar.agent",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://127.0.0.1:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Desklet 连接助手",
+        "title": "DeskBar 连接助手",
         "width": 1040,
         "height": 760,
         "minWidth": 560,

@@ -12,7 +12,7 @@ class DisplayPreferences extends ChangeNotifier {
   }) : _immersive = initialImmersive,
        _rotationLocked = initialRotationLocked;
 
-  static const _channel = MethodChannel('app.desklet/layout');
+  static const _channel = MethodChannel('app.deskbar/layout');
   bool _immersive;
   bool _rotationLocked;
   bool _active = false;

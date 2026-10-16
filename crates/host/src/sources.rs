@@ -170,7 +170,7 @@ pub async fn quotas() -> Result<Vec<Quota>> {
     let result = tokio::time::timeout(Duration::from_secs(15), async {
         let mut input = child.stdin.take().context("无法连接 Codex")?;
         let mut output = BufReader::new(child.stdout.take().context("无法连接 Codex")?);
-        input.write_all(b"{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"desklet\",\"title\":\"Desklet\",\"version\":\"0.1.0\"}}}\n").await?;
+        input.write_all(b"{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"deskbar\",\"title\":\"DeskBar\",\"version\":\"0.1.0\"}}}\n").await?;
         let mut initialized = false;
         loop {
             let mut bytes = Vec::new();

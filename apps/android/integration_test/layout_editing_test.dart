@@ -1,9 +1,9 @@
-import 'package:desklet/connection.dart';
-import 'package:desklet/layout_repository.dart';
-import 'package:desklet/layout_workspace.dart';
-import 'package:desklet/rawblock.dart';
-import 'package:desklet/workbench_canvas.dart';
-import 'package:desklet/workbench_data.dart';
+import 'package:deskbar/connection.dart';
+import 'package:deskbar/layout_repository.dart';
+import 'package:deskbar/layout_workspace.dart';
+import 'package:deskbar/rawblock.dart';
+import 'package:deskbar/workbench_canvas.dart';
+import 'package:deskbar/workbench_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -85,7 +85,7 @@ void main() {
       }
 
       await render(Brightness.light);
-      const capture = bool.fromEnvironment('DESKLET_SCREENSHOTS');
+      const capture = bool.fromEnvironment('DESKBAR_SCREENSHOTS');
       if (capture) await binding.convertFlutterSurfaceToImage();
       Future<void> screenshot(String name) async {
         await tester.pump(const Duration(milliseconds: 300));

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:desklet/display_preferences.dart';
+import 'package:deskbar/display_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -18,7 +18,7 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(
-      const MethodChannel('app.desklet/layout'),
+      const MethodChannel('app.deskbar/layout'),
       (call) async {
         calls.add(call);
         if (call.method == 'loadDisplayPreferences') return stored;
@@ -33,7 +33,7 @@ void main() {
       return null;
     });
     messenger.setMockMethodCallHandler(
-      const MethodChannel('app.desklet/connection'),
+      const MethodChannel('app.deskbar/connection'),
       (call) async {
         if (call.method == 'command') commands++;
         return null;
@@ -113,7 +113,7 @@ void main() {
   test('late restore cannot replace a newer display choice', () async {
     final loaded = Completer<Map<String, dynamic>>();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel('app.desklet/layout'), (
+        .setMockMethodCallHandler(const MethodChannel('app.deskbar/layout'), (
           call,
         ) async {
           if (call.method == 'loadDisplayPreferences') return loaded.future;
@@ -136,7 +136,7 @@ void main() {
       final loaded = Completer<Map<String, dynamic>>();
       Map<String, dynamic>? written;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(const MethodChannel('app.desklet/layout'), (
+          .setMockMethodCallHandler(const MethodChannel('app.deskbar/layout'), (
             call,
           ) async {
             if (call.method == 'loadDisplayPreferences') return loaded.future;
@@ -179,7 +179,7 @@ void main() {
     'failed persistence leaves the display usable and reports restart impact',
     () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(const MethodChannel('app.desklet/layout'), (
+          .setMockMethodCallHandler(const MethodChannel('app.deskbar/layout'), (
             call,
           ) async {
             if (call.method == 'saveDisplayPreferences') {
