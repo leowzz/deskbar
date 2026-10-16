@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desklet · 配色提案</title>
+<style>
+/* Independent visual study. All data and actions are simulated. */
+:root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #252629; background: #e9e9e7; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button { color: inherit; }
+button:disabled { cursor: default; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid #527bc2; outline-offset: 4px; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button svg, .icon { width: 19px; height: 19px; flex-shrink: 0; }
+h1, h2, h3, p { margin: 0; }
+[hidden] { display: none !important; }
+.shell { max-width: 1360px; margin: 0 auto; padding: 34px 36px 28px; }
+.study-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.study-title { display: flex; align-items: baseline; gap: 14px; }
+.wordmark { font-size: 26px; font-weight: 700; letter-spacing: -.9px; }
+.study-title h1 { font-size: 19px; font-weight: 500; color: #626366; border-left: 1px solid #bdbebb; padding-left: 16px; }
+.study-intro { color: #626366; font-size: 14px; line-height: 1.7; margin-top: 11px; }
+.prototype-note { color: #626366; font-size: 12px; border: 1px solid #c6c7c4; border-radius: 5px; padding: 7px 10px; white-space: nowrap; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 25px 0 22px; flex-wrap: wrap; }
+.segment { display: inline-flex; align-items: center; gap: 3px; background: #dededb; border-radius: 8px; padding: 3px; }
+.segment button { background: none; border: 0; border-radius: 5px; padding: 9px 14px; color: #5d5f61; font-size: 13px; line-height: 20px; }
+.segment button[aria-pressed="true"] { background: #fafaf9; color: #222426; box-shadow: 0 1px 3px #0000000d; }
+.segment button:hover { color: #171819; }
+.toolbar-right { display: flex; align-items: center; gap: 12px; }
+.outline-button { border: 1px solid #c7c8c4; background: transparent; padding: 9px 13px; border-radius: 6px; font-size: 13px; min-height: 38px; }
+.outline-button:hover { background: #f6f6f3; }
+.outline-button[aria-pressed="true"] { background: #333537; color: white; border-color: #333537; }
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 27px 26px; }
+.proposal { min-width: 0; }
+.proposal-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 1px 12px; }
+.proposal-heading h2 { display: flex; align-items: baseline; gap: 9px; font-size: 17px; letter-spacing: -.2px; }
+.proposal-heading h2 span { font-size: 12px; font-weight: 500; color: #747678; font-variant-numeric: tabular-nums; }
+.proposal-heading button { border: 0; background: none; display: flex; gap: 5px; align-items: center; font-size: 12px; padding: 7px 0 7px 8px; color: #535659; }
+.proposal-heading button svg { width: 15px; height: 15px; }
+.proposal-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 2px 0; }
+.proposal-footer p { font-size: 13px; line-height: 1.6; color: #626366; }
+.swatches { display: flex; gap: 5px; flex-shrink: 0; }
+.swatches i { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #00000012; }
+.app { color: var(--text); background: var(--canvas); border: 1px solid var(--edge); border-radius: 11px; overflow: hidden; box-shadow: 0 4px 8px #00000004, 0 18px 40px -24px #00000038; container-type: inline-size; }
+.app[data-palette="silver"] { color-scheme: light; --canvas:#f6f7f9; --surface:#ffffff; --sidebar:#eef0f3; --raised:#f0f2f5; --text:#22262d; --muted:#626c7b; --line:#e1e5eb; --edge:#cbd0d8; --accent:#303e52; --on-accent:#ffffff; --selection:#e4eaf3; --selected-text:#314a71; --success:#39765a; --success-bg:#e9f3ec; --warning:#956320; --warning-bg:#faf0da; --danger:#a84545; --danger-bg:#faebeb; --control:#a0a9b6; --chart:#607fa7; --focus:#527bc2; }
+.app[data-palette="graphite"] { color-scheme: dark; --canvas:#191a1c; --surface:#222426; --sidebar:#151618; --raised:#2c2e31; --text:#eeefef; --muted:#a1a6ad; --line:#35383d; --edge:#3b3d41; --accent:#d7dce2; --on-accent:#22262c; --selection:#30363f; --selected-text:#d1dbe9; --success:#a2c4b0; --success-bg:#293a31; --warning:#d8b87a; --warning-bg:#403725; --danger:#e7a4a4; --danger-bg:#422c30; --control:#69717c; --chart:#a9bacd; --focus:#adc6eb; }
+.app[data-palette="paper"] { color-scheme: light; --canvas:#f4f1eb; --surface:#fdfbf7; --sidebar:#eae7df; --raised:#ebe8e0; --text:#32382f; --muted:#63675d; --line:#dedfd3; --edge:#c9ccbf; --accent:#4b6049; --on-accent:#ffffff; --selection:#dce3d5; --selected-text:#445c40; --success:#4b6e49; --success-bg:#e5ecde; --warning:#825b25; --warning-bg:#f3e9d3; --danger:#a34a3d; --danger-bg:#f5e6dd; --control:#999d8d; --chart:#78896a; --focus:#647f56; }
+.app[data-palette="slate"] { color-scheme: dark; --canvas:#18212c; --surface:#222e3b; --sidebar:#141c26; --raised:#2d3a49; --text:#e7edf4; --muted:#a1b0c1; --line:#384757; --edge:#415061; --accent:#a8bfd9; --on-accent:#17293f; --selection:#304259; --selected-text:#c2d6ee; --success:#9fc8bf; --success-bg:#2a403f; --warning:#dfc18a; --warning-bg:#433e31; --danger:#e8aeb7; --danger-bg:#45333f; --control:#71869e; --chart:#a8bfd9; --focus:#b6d4f4; }
+.app button:focus-visible, .app input:focus-visible { outline-color: var(--focus); }
+.app button { border: 0; }
+.app svg { stroke-width: 1.65; }
+.window-bar { display: flex; align-items: center; justify-content: center; position: relative; height: 33px; background: var(--sidebar); border-bottom: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.window-dots { position: absolute; left: 14px; display: flex; gap: 5px; }
+.window-dots i { height: 7px; width: 7px; border: 1px solid var(--control); border-radius: 50%; }
+.desktop-grid { display: grid; grid-template-columns: 148px minmax(0,1fr); min-height: 384px; }
+.sidebar { background: var(--sidebar); padding: 23px 13px 16px; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.app-brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 19px; letter-spacing: -.5px; padding: 0 10px; }
+.app-brand .icon { width: 23px; height: 23px; }
+.nav-items { margin-top: 26px; display: grid; gap: 5px; }
+.nav-item { background: none; padding: 10px; font-size: 13px; border-radius: 6px; color: var(--muted); display: flex; align-items: center; gap: 10px; text-align: left; }
+.nav-item .icon { width: 17px; height: 17px; }
+.nav-item.active { background: var(--selection); color: var(--selected-text); font-weight: 550; }
+.nav-item:hover { background: var(--raised); color: var(--text); }
+.sidebar-bottom { margin-top: auto; padding: 26px 10px 0; font-size: 11px; line-height: 1.9; color: var(--muted); }
+.sidebar-bottom b { display: block; font-weight: 500; color: var(--text); }
+.helper-main { padding: 24px 24px 16px; min-width: 0; }
+.page-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 22px; }
+.page-heading h2 { font-size: 22px; letter-spacing: -.7px; font-weight: 620; }
+.page-heading p { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.primary { background: var(--accent); color: var(--on-accent); padding: 10px 13px; border-radius: 6px; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; min-height: 36px; }
+.primary .icon { width: 15px; height: 15px; }
+.primary:hover { filter: brightness(.94); }
+.device-card { display: flex; align-items: center; gap: 13px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.device-icon { background: var(--raised); width: 41px; height: 46px; border-radius: 7px; display: grid; place-items: center; color: var(--text); flex-shrink: 0; }
+.device-icon .icon { width: 25px; height: 25px; }
+.device-name { font-size: 14px; font-weight: 560; }
+.device-info { font-size: 11px; color: var(--muted); margin-top: 5px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1.4; color: var(--success); white-space: nowrap; }
+.device-card .badge { margin-left: auto; }
+.dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; display: inline-block; flex-shrink: 0; }
+.subheading { font-size: 12px; color: var(--muted); font-weight: 500; margin: 21px 0 8px; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.setting-row:last-child { border-bottom: 0; }
+.setting-name { font-size: 13px; font-weight: 450; }
+.setting-desc { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.switch { display: flex; align-items: center; justify-content: center; position: relative; min-width: 44px; min-height: 32px; cursor: pointer; }
+.switch input { appearance: none; position: absolute; margin: 0; inset: 0; width: 100%; height: 100%; border-radius: 6px; cursor: pointer; }
+.switch-track { pointer-events: none; display: block; width: 30px; height: 18px; background: var(--control); border-radius: 20px; padding: 3px; }
+.switch-track::after { content: ""; display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); transition: transform .15s; }
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track::after { background: var(--on-accent); transform: translateX(12px); }
+.helper-foot { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; padding-top: 18px; }
+.helper-foot .dot { color: var(--success); }
+.workbench { padding: 22px; }
+.workbench-header { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 25px; }
+.workbench-identity h2 { font-size: 20px; font-weight: 600; letter-spacing: -.6px; }
+.workbench-identity p { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; margin-top: 7px; }
+.workbench-identity .dot { color: var(--success); }
+.icon-button { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 6px; background: var(--raised); color: var(--muted); }
+.icon-button:hover { color: var(--text); }
+.workbench-actions { display: flex; gap: 7px; }
+.workbench-layout { display: grid; grid-template-columns: minmax(0,1fr) 176px; gap: 18px; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.section-title h3 { font-size: 13px; font-weight: 550; }
+.section-title small { font-size: 11px; color: var(--muted); }
+.session-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.session { min-width: 0; border: 1px solid var(--line) !important; background: var(--surface); text-align: left; padding: 14px; border-radius: 8px; color: var(--text); }
+.session:hover:not(:disabled) { border-color: var(--control) !important; background: var(--raised); }
+.session-state { display: inline-flex; gap: 6px; align-items: center; font-size: 10px; color: var(--muted); }
+.session-state.running { color: var(--success); }
+.session-state.interrupted { color: var(--warning); }
+.session h3 { font-size: 13px; font-weight: 550; line-height: 1.6; margin: 12px 0 14px; }
+.session-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--muted); }
+.session-meta .icon { width: 12px; height: 12px; }
+.quota { padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.quota-label { font-size: 12px; color: var(--muted); }
+.quota-value { font-size: 38px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -1.7px; margin: 17px 0 2px; }
+.quota-value span { font-size: 16px; letter-spacing: 0; margin-left: 3px; }
+.quota-caption { font-size: 11px; color: var(--muted); }
+.quota-track { height: 4px; background: var(--raised); border-radius: 4px; margin: 18px 0 10px; overflow: hidden; }
+.quota-track i { display: block; width: 64%; background: var(--chart); height: 100%; border-radius: 4px; }
+.quota-reset { font-size: 10px; color: var(--muted); }
+.shortcut-section { margin-top: 20px; }
+.shortcut-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.shortcut { background: var(--surface); border: 1px solid var(--line) !important; padding: 12px 8px; border-radius: 7px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11px; color: var(--text); }
+.shortcut .icon { width: 18px; height: 18px; }
+.shortcut:hover:not(:disabled) { background: var(--raised); }
+.workbench-footer { margin-top: 23px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--muted); }
+.page-dots { display: flex; gap: 5px; }
+.page-dots i { width: 4px; height: 4px; border-radius: 5px; background: var(--control); }
+.page-dots i:first-child { width: 13px; background: var(--accent); }
+.offline-banner { display: flex; align-items: flex-start; gap: 8px; color: var(--warning); background: var(--warning-bg); border: 1px solid color-mix(in srgb, var(--warning) 22%, transparent); padding: 10px 12px; font-size: 12px; line-height: 1.6; border-radius: 6px; margin-bottom: 16px; }
+.offline-banner .icon { width: 16px; height: 16px; margin-top: 1px; }
+.offline .session-state.running, .offline .workbench-identity .dot { color: var(--muted); }
+.offline .badge { color: var(--warning); }
+.phone-wrap { background: #dcdedb; padding: 22px; display: grid; place-items: center; border-radius: 11px; }
+.phone-wrap .app { width: 360px; max-width: 100%; border-radius: 25px; border-width: 5px; box-shadow: 0 10px 20px -10px #00000040; }
+.phone-status { display: flex; align-items: center; justify-content: space-between; padding: 13px 21px 0; font-size: 11px; font-weight: 600; }
+.phone-status span { display: flex; align-items: center; gap: 6px; }
+.phone-status .icon { width: 15px; height: 15px; }
+.phone .workbench { padding: 22px 17px 15px; }
+.phone .workbench-layout { display: flex; flex-direction: column-reverse; gap: 22px; }
+.phone .quota { display: grid; grid-template-columns: 1fr auto; gap: 5px 20px; padding: 14px; }
+.phone .quota-label { align-self: center; }
+.phone .quota-value { font-size: 30px; grid-column: 2; grid-row: 1/3; margin: 0; align-self: center; }
+.phone .quota-caption { grid-column: 1; }
+.phone .quota-track { margin: 6px 0 0; grid-column: 1/-1; }
+.phone .quota-reset { display: none; }
+.phone .session h3 { font-size: 14px; margin: 10px 0 13px; }
+.phone .session-grid { gap: 9px; }
+.phone .session { padding: 12px; }
+.phone .session-meta { flex-wrap: wrap; }
+.phone .shortcut { flex-direction: column; gap: 7px; font-size: 12px; }
+.phone .workbench-header { margin-bottom: 20px; }
+.home-indicator { width: 83px; height: 4px; border-radius: 5px; background: var(--text); margin: 6px auto 9px; opacity: .6; }
+.detail-navigation { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin-bottom: 22px; }
+.palette-tab { background: transparent; border: 1px solid #c7c9c5; border-radius: 8px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
+.palette-tab[aria-pressed="true"] { background: #fafaf8; border-color: #545c65; box-shadow: inset 0 0 0 1px #545c65; }
+.palette-tab-name { font-size: 14px; font-weight: 550; }
+.palette-tab-name span { margin-right: 7px; font-size: 11px; color: #73777b; }
+.detail-stage { max-width: 1060px; margin: auto; }
+.detail-stage .desktop-grid { grid-template-columns: 200px minmax(0,1fr); min-height: 555px; }
+.detail-stage .sidebar { padding: 33px 16px 24px; }
+.detail-stage .helper-main { padding: 34px 40px 24px; }
+.detail-stage .page-heading { margin-bottom: 29px; }
+.detail-stage .page-heading h2 { font-size: 28px; }
+.detail-stage .page-heading p { font-size: 14px; margin-top: 9px; }
+.detail-stage .primary { font-size: 14px; padding: 11px 16px; }
+.detail-stage .nav-item { font-size: 14px; padding: 12px; }
+.detail-stage .device-card { padding: 21px; }
+.detail-stage .device-name { font-size: 17px; }
+.detail-stage .device-info, .detail-stage .badge { font-size: 12px; }
+.detail-stage .subheading { margin-top: 27px; font-size: 13px; }
+.detail-stage .setting-row { padding: 14px 0; }
+.detail-stage .setting-name { font-size: 15px; }
+.detail-stage .setting-desc { font-size: 12px; }
+.detail-stage .switch { min-height: 40px; min-width: 48px; }
+.detail-stage .switch-track { width: 34px; height: 20px; }
+.detail-stage .switch-track::after { width: 14px; height: 14px; }
+.detail-stage .switch input:checked + .switch-track::after { transform: translateX(14px); }
+.detail-stage .helper-foot { font-size: 12px; padding-top: 24px; }
+.detail-stage > .app > .workbench { padding: 30px; }
+.detail-stage > .app .workbench-layout { grid-template-columns: minmax(0,1fr) 245px; gap: 24px; }
+.detail-stage > .app .workbench-header { margin-bottom: 31px; }
+.detail-stage > .app .workbench-identity h2 { font-size: 25px; }
+.detail-stage > .app .session { padding: 20px; }
+.detail-stage > .app .session h3 { font-size: 18px; margin: 20px 0 28px; }
+.detail-stage > .app .session-state, .detail-stage > .app .session-meta { font-size: 12px; }
+.detail-stage > .app .section-title h3 { font-size: 15px; }
+.detail-stage > .app .quota { padding: 21px; }
+.detail-stage > .app .quota-value { font-size: 54px; margin-top: 28px; }
+.detail-stage > .app .quota-track { margin-top: 25px; }
+.detail-stage > .app .quota-caption, .detail-stage > .app .quota-reset { font-size: 12px; }
+.detail-stage > .app .shortcut { font-size: 14px; padding: 16px; }
+.detail-stage > .app .workbench-footer { margin-top: 32px; font-size: 12px; }
+.detail-stage .phone-wrap { padding: 28px; }
+.detail-caption { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 0; }
+.detail-caption h2 { font-size: 19px; margin-bottom: 7px; }
+.detail-caption p { font-size: 13px; color: #626366; line-height: 1.7; }
+.pick-button { border: 0; background: #2d3034; color: white; border-radius: 7px; padding: 13px 18px; font-size: 14px; white-space: nowrap; }
+.pick-button[aria-pressed="true"] { background: #4b6049; }
+.token-list { border-top: 1px solid #cfd1cc; padding-top: 18px; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 15px; }
+.token { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #626366; }
+.token i { height: 30px; width: 30px; border-radius: 6px; border: 1px solid #00000012; flex-shrink: 0; }
+.token code { display: block; font-size: 11px; margin-top: 5px; color: #363a40; }
+.state-samples { margin-top: 22px; padding: 20px; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: none; flex-wrap: wrap; border-radius: 8px; }
+.state-samples p { font-size: 12px; color: var(--muted); margin-right: 5px; }
+.state-chip { font-size: 12px; padding: 6px 10px; border-radius: 5px; background: var(--raised); color: var(--muted); }
+.state-chip.success { background: var(--success-bg); color: var(--success); }
+.state-chip.warning { background: var(--warning-bg); color: var(--warning); }
+.state-chip.danger { background: var(--danger-bg); color: var(--danger); }
+.study-footer { border-top: 1px solid #ced0ca; display: flex; justify-content: space-between; gap: 15px; margin-top: 30px; padding-top: 17px; color: #686b6d; font-size: 12px; line-height: 1.8; }
+.study-footer a { color: inherit; text-underline-offset: 3px; }
+#selection-note { color: #445b42; }
+.toast { position: fixed; left: 50%; bottom: 26px; transform: translate(-50%,15px); background: #292c30; color: white; font-size: 13px; line-height: 1.7; padding: 12px 18px; border-radius: 8px; z-index: 10; box-shadow: 0 8px 30px #0002; max-width: calc(100% - 32px); width: max-content; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
+.toast.show { opacity: 1; transform: translate(-50%,0); }
+dialog { width: 400px; max-width: calc(100% - 32px); padding: 25px; border: 0; border-radius: 12px; background: #fafaf8; color: #292c30; box-shadow: 0 15px 70px #0003; }
+dialog::backdrop { background: #10141866; backdrop-filter: blur(3px); }
+dialog h2 { font-size: 20px; margin-bottom: 13px; }
+dialog p { color: #666c72; font-size: 14px; line-height: 1.8; }
+dialog button { display: block; margin: 22px 0 0 auto; }
+@container (max-width: 590px) {
+ .desktop-grid { grid-template-columns: 123px minmax(0,1fr); }
+ .sidebar { padding: 23px 10px 16px; }
+ .app-brand { font-size: 17px; gap: 7px; padding: 0 5px; }
+ .app-brand .icon { width: 20px; }
+ .nav-item { padding: 10px 8px; gap: 8px; font-size: 12px; }
+ .helper-main { padding: 22px 18px 15px; }
+ .page-heading h2 { font-size: 20px; }
+ .page-heading p { font-size: 11px; }
+ .device-card { gap: 10px; padding: 13px; }
+ .device-icon { width: 32px; height: 38px; }
+ .device-name { font-size: 13px; }
+ .workbench-layout { grid-template-columns: minmax(0,1fr) 153px; gap: 14px; }
+ .workbench { padding: 20px; }
+ .session { padding: 11px; }
+ .session h3 { font-size: 12px; }
+ .session-meta { font-size: 10px; }
+}
+@media (max-width: 1100px) {
+ .shell { padding: 27px 24px; }
+ .gallery { grid-template-columns: 1fr; max-width: 760px; margin: 0 auto; gap: 28px; }
+ .gallery .phone-wrap .app { width: 360px; }
+}
+@media (max-width: 700px) {
+ .shell { padding: 23px 16px; }
+ .study-header { align-items: flex-start; gap: 10px; }
+ .wordmark { font-size: 23px; }
+ .study-title { gap: 10px; }
+ .study-title h1 { font-size: 16px; padding-left: 12px; }
+ .prototype-note { font-size: 10px; padding: 6px; }
+ .study-intro { font-size: 12px; }
+ .toolbar { gap: 12px; padding: 22px 0 18px; }
+ .toolbar-right { width: 100%; justify-content: space-between; }
+ .segment button { padding: 8px 12px; }
+ .detail-navigation { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .palette-tab { padding: 12px; }
+ .detail-caption { align-items: flex-start; }
+ .token-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .study-footer { flex-direction: column; gap: 6px; }
+ .detail-stage .desktop-grid, .desktop-grid { grid-template-columns: 1fr; }
+ .sidebar, .detail-stage .sidebar { padding: 15px; border-bottom: 1px solid var(--line); border-right: 0; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+ .sidebar-bottom, .nav-item:not(.active) { display: none; }
+ .nav-items { margin: 0; display: block; }
+ .detail-stage .nav-item { font-size: 12px; padding: 8px; }
+ .detail-stage .helper-main, .helper-main { padding: 22px 18px; }
+ .detail-stage .page-heading h2 { font-size: 23px; }
+ .detail-stage .page-heading p { font-size: 12px; }
+ .detail-stage .primary { font-size: 12px; padding: 10px 12px; }
+ .detail-stage .device-card { padding: 15px; }
+ .detail-stage .device-name { font-size: 14px; }
+ .detail-stage .setting-name { font-size: 14px; }
+ .detail-stage > .app > .workbench { padding: 20px 16px; }
+ .detail-stage > .app .workbench-layout, .workbench-layout { display: flex; flex-direction: column-reverse; gap: 20px; }
+ .detail-stage > .app .session { padding: 14px; }
+ .detail-stage > .app .session h3 { font-size: 15px; margin: 13px 0 18px; }
+ .detail-stage > .app .session-meta { font-size: 11px; }
+ .detail-stage > .app .quota-value { font-size: 38px; margin: 14px 0 2px; }
+ .detail-stage > .app .shortcut { font-size: 12px; flex-direction: column; padding: 13px 5px; }
+ .proposal-footer p { max-width: 230px; }
+ .phone-wrap, .detail-stage .phone-wrap { padding: 17px 8px; }
+ .state-samples { justify-content: flex-start; gap: 8px; }
+ .state-samples p { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="shell">
+ <header class="study-header">
+  <div><div class="study-title"><span class="wordmark">Desklet</span><h1>配色提案</h1></div><p class="study-intro">同一布局，四种气质。选择一套，查看双端完整效果。</p></div>
+  <span class="prototype-note">独立原型 · 示例数据</span>
+ </header>
+ <nav class="toolbar" aria-label="预览方式">
+  <div class="segment" aria-label="设备"><button data-surface="helper">电脑连接助手</button><button data-surface="wide">横屏工作台</button><button data-surface="phone">手机竖屏</button></div>
+  <div class="toolbar-right"><button class="outline-button" id="offline" aria-pressed="false">离线效果</button><div class="segment" aria-label="比较方式"><button data-mode="compare">四套对比</button><button data-mode="detail">单套细看</button></div></div>
+ </nav>
+ <div id="gallery" class="gallery"></div>
+ <section id="detail" hidden><nav id="palette-navigation" class="detail-navigation" aria-label="配色"></nav><div id="detail-stage" class="detail-stage"></div></section>
+ <footer class="study-footer"><div><p>配色尚未定稿，正式 App 未修改。开关与点击仅作示意。</p><p id="selection-note" aria-live="polite">可以点击「单套细看」，标记你喜欢的方案。</p></div><a href="ui-directions.prototype.html">查看上一轮原型 ↗</a></footer>
+</main>
+<div id="toast" class="toast" role="status"></div>
+<dialog id="demo-dialog"><h2 id="dialog-title"></h2><p id="dialog-body"></p><form method="dialog"><button class="pick-button">知道了</button></form></dialog>
+<script>
+const palettes = {
+ silver: { id:'01', name:'铂银', summary:'冷白与石墨灰，少量钢蓝。清晰、利落。', detail:'用明暗与细线建立层次；钢蓝只出现在选中项和额度进度，主按钮保持深灰。', colors:['#f6f7f9','#ffffff','#eef0f3','#22262d','#303e52'] },
+ graphite: { id:'02', name:'墨黑', summary:'中性深灰与柔白，低调、专注。', detail:'背景、卡片和侧栏分成三层灰；柔白主按钮留出明确的操作重心，适合常驻副屏。', colors:['#191a1c','#222426','#151618','#eeefef','#d7dce2'] },
+ paper: { id:'03', name:'暖纸', summary:'纸色与灰绿，温暖、松弛。', detail:'暖白保留阅读感；灰绿集中在操作和选中项，卡片仍保持接近纸张的颜色。', colors:['#f4f1eb','#fdfbf7','#eae7df','#32382f','#4b6049'] },
+ slate: { id:'04', name:'雾蓝', summary:'蓝灰底与浅钢蓝，沉静、有辨识度。', detail:'深蓝灰形成统一底色；浅钢蓝连接按钮、选中态和进度，让深色也有细腻的层次。', colors:['#18212c','#222e3b','#141c26','#e7edf4','#a8bfd9'] }
+};
+const iconPaths = {
+ desk:'<rect x="3" y="4" width="18" height="13" rx="3"/><path d="M8 21h8m-4-4v4M7 8h4v5H7zM14 8h3m-3 4h3"/>',
+ devices:'<rect x="3" y="4" width="12" height="13" rx="2"/><path d="M7 21h4m-2-4v4"/><rect x="17" y="8" width="5" height="12" rx="1.5"/>',
+ tablet:'<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M10 18h4"/>',
+ grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+ sliders:'<path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="2" fill="var(--canvas)"/><circle cx="16" cy="17" r="2" fill="var(--canvas)"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ arrow:'<path d="M5 12h14m-5-5 5 5-5 5"/>',
+ expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+ code:'<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/>',
+ globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18"/>',
+ folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10H3z"/>',
+ terminal:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/>',
+ wifi:'<path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0m-9 4a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r=".5"/>',
+ battery:'<rect x="2" y="6" width="18" height="12" rx="2"/><path d="M23 10v4M5 9h12v6H5z"/>',
+ offline:'<path d="m3 3 18 18M3 8a15 15 0 0 1 3-2m4-1a15 15 0 0 1 11 3M6 12a10 10 0 0 1 5-2m-2 6a5 5 0 0 1 6 0"/>'
+};
+const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name] || iconPaths.grid}</svg>`;
+const sessions = [
+ { title:'完善设备连接体验', project:'Desklet', state:'进行中', kind:'running', time:'刚刚' },
+ { title:'整理本周工作记录', project:'笔记', state:'进行中', kind:'running', time:'2 分钟前' },
+ { title:'修复长列表滚动', project:'Desklet', state:'已完成', kind:'', time:'18 分钟前' },
+ { title:'调整账号用量展示', project:'Desklet', state:'已中断', kind:'interrupted', time:'1 小时前' }
+];
+const settings = [ ['sessions','近期会话','标题、项目和运行状态'], ['quota','账号额度','剩余额度与重置时间'], ['shortcuts','快捷入口','电脑上配置的应用与网址'], ['open','允许在电脑上打开','可打开已共享的会话与入口'] ];
+const sharing = {sessions:true,quota:true,shortcuts:true,open:false};
+const params = new URLSearchParams(location.search);
+let palette = Object.hasOwn(palettes,params.get('palette')) ? params.get('palette') : 'silver';
+let surface = ['helper','wide','phone'].includes(params.get('surface')) ? params.get('surface') : 'helper';
+let mode = params.get('mode') === 'detail' ? 'detail' : 'compare';
+let offline = params.get('offline') === '1';
+let favorite = null;
+let toastTimer;
+const swatches = p => `<span class="swatches" aria-hidden="true">${p.colors.slice(0,3).concat(p.colors[4]).map(c=>`<i style="background:${c}"></i>`).join('')}</span>`;
+const offlineBanner = () => offline ? `<div class="offline-banner">${icon('offline')}<span>电脑暂时离线，保留上次数据。连接恢复后才能打开内容。</span></div>` : '';
+function helper() {
+ return `<div class="window-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span>Desklet 连接助手</div><div class="desktop-grid">
+ <aside class="sidebar"><div class="app-brand">${icon('desk')}Desklet</div><div class="nav-items"><button class="nav-item active" data-demo="我的设备">${icon('devices')}我的设备</button><button class="nav-item" data-demo="快捷入口">${icon('grid')}快捷入口</button><button class="nav-item" data-demo="设置">${icon('sliders')}设置</button></div><div class="sidebar-bottom"><b>家里的 Mac</b>连接助手正在运行</div></aside>
+ <section class="helper-main"><header class="page-heading"><div><h2>我的设备</h2><p>为身旁的屏幕选择共享内容</p></div><button class="primary" data-demo="连接设备">${icon('plus')}连接设备</button></header>
+ <div class="device-card"><span class="device-icon">${icon('tablet')}</span><div><p class="device-name">小米工作台</p><p class="device-info">${offline?'上次连接于 10:42':'今天配对 · 局域网连接'}</p></div><span class="badge"><i class="dot"></i>${offline?'离线':'已连接'}</span></div>
+ <h3 class="subheading">向这台设备共享</h3><div>${settings.map(([id,name,desc])=>`<div class="setting-row"><div><p class="setting-name">${name}</p><p class="setting-desc">${desc}</p></div><label class="switch"><input type="checkbox" data-sharing="${id}" aria-label="${name}" ${sharing[id]?'checked':''}><span class="switch-track"></span></label></div>`).join('')}</div>
+ <p class="helper-foot"><i class="dot"></i>关闭窗口后继续在菜单栏运行</p></section></div>`;
+}
+function workbench() {
+ return `${surface==='phone'?`<div class="phone-status"><span>09:41</span><span>${icon('wifi')}${icon('battery')}</span></div>`:''}<div class="workbench">
+ <header class="workbench-header"><div class="workbench-identity"><h2>我的工作台</h2><p><i class="dot"></i>家里的 Mac · ${offline?'离线':'已连接'}</p></div><div class="workbench-actions"><button class="icon-button" data-demo="调整工作台" aria-label="调整工作台">${icon('sliders')}</button>${surface==='phone'?'':`<button class="icon-button" data-demo="全屏显示" aria-label="全屏显示">${icon('expand')}</button>`}</div></header>
+ ${offlineBanner()}<div class="workbench-layout"><section><header class="section-title"><h3>近期会话</h3><small>${offline?'上次同步的状态':'2 个进行中'}</small></header><div class="session-grid">${sessions.map((s,i)=>`<button class="session" data-session="${i}" ${offline?'disabled':''}><span class="session-state ${s.kind}"><i class="dot"></i>${s.state}</span><h3>${s.title}</h3><span class="session-meta"><span>${s.project} · ${s.time}</span>${icon('arrow')}</span></button>`).join('')}</div></section>
+ <aside class="quota"><p class="quota-label">Codex 每周额度</p><p class="quota-value">64<span>%</span></p><p class="quota-caption">${offline?'上次剩余':'剩余可用'}</p><div class="quota-track"><i></i></div><p class="quota-reset">周五 18:00 重置</p></aside></div>
+ <section class="shortcut-section"><header class="section-title"><h3>常用入口</h3><small>在电脑上打开</small></header><div class="shortcut-grid">${[['code','Codex'],['globe','浏览器'],['folder','访达'],['terminal','终端']].map(([glyph,name])=>`<button class="shortcut" data-open="${name}" ${offline?'disabled':''}>${icon(glyph)}${name}</button>`).join('')}</div></section>
+ <footer class="workbench-footer"><span>总览</span><span class="page-dots" aria-label="当前第 1 页，共 3 页"><i></i><i></i><i></i></span><span>${offline?'上次数据':'刚刚更新'}</span></footer></div>${surface==='phone'?'<div class="home-indicator" aria-hidden="true"></div>':''}`;
+}
+function preview(key) {
+ const content=`<div class="app ${surface==='phone'?'phone':''} ${offline?'offline':''}" data-palette="${key}" aria-label="${palettes[key].name} · ${surface==='helper'?'电脑连接助手':surface==='phone'?'手机工作台':'横屏工作台'}">${surface==='helper'?helper():workbench()}</div>`;
+ return surface==='phone'?`<div class="phone-wrap">${content}</div>`:content;
+}
+function render() {
+ document.querySelectorAll('[data-surface]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.surface===surface));
+ document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===mode));
+ document.getElementById('offline').setAttribute('aria-pressed',offline);
+ document.getElementById('offline').textContent=offline?'恢复在线':'离线效果';
+ document.getElementById('gallery').hidden=mode!=='compare';
+ document.getElementById('detail').hidden=mode!=='detail';
+ if(mode==='compare'){
+  document.getElementById('gallery').innerHTML=Object.entries(palettes).map(([key,p])=>`<article class="proposal"><header class="proposal-heading"><h2><span>${p.id}</span>${p.name}${favorite===key?' · 已标记':''}</h2><button data-palette="${key}" aria-label="细看${p.name}">细看这套 ${icon('arrow')}</button></header>${preview(key)}<footer class="proposal-footer"><p>${p.summary}</p>${swatches(p)}</footer></article>`).join('');
+  document.getElementById('detail-stage').innerHTML='';
+ }else{
+  document.getElementById('gallery').innerHTML='';
+  document.getElementById('palette-navigation').innerHTML=Object.entries(palettes).map(([key,p])=>`<button class="palette-tab" data-palette="${key}" aria-pressed="${key===palette}"><span class="palette-tab-name"><span>${p.id}</span>${p.name}</span>${swatches(p)}</button>`).join('');
+  const p=palettes[palette];
+  document.getElementById('detail-stage').innerHTML=`${preview(palette)}<div class="detail-caption"><div><h2>${p.id} · ${p.name}</h2><p>${p.detail}</p></div><button class="pick-button" id="pick" aria-pressed="${favorite===palette}">${favorite===palette?'已标记喜欢':'喜欢这套'}</button></div><div class="token-list">${['页面底色','卡片','侧栏','正文','主按钮'].map((label,i)=>`<div class="token"><i style="background:${p.colors[i]}"></i><div>${label}<code>${p.colors[i].toUpperCase()}</code></div></div>`).join('')}</div><div class="app state-samples" data-palette="${palette}"><p>状态配色</p><span class="state-chip success">已连接 / 进行中</span><span class="state-chip warning">离线 / 已中断</span><span class="state-chip danger">打开失败</span><span class="state-chip">已完成</span></div>`;
+ }
+ document.getElementById('selection-note').textContent=favorite?`本页已标记「${palettes[favorite].id} · ${palettes[favorite].name}」。可直接把编号告诉我；刷新后清除标记。`:'可以点击「单套细看」，标记你喜欢的方案。';
+ const url=new URL(location.href);url.searchParams.set('palette',palette);url.searchParams.set('surface',surface);url.searchParams.set('mode',mode);offline?url.searchParams.set('offline','1'):url.searchParams.delete('offline');history.replaceState(null,'',url);
+ document.title=`Desklet · ${mode==='compare'?'四套配色对比':palettes[palette].name}`;
+}
+function notify(text) {clearTimeout(toastTimer);const toast=document.getElementById('toast');toast.textContent=text;toast.classList.add('show');toastTimer=setTimeout(()=>toast.classList.remove('show'),3000);}
+function showDemo(title,text) {document.getElementById('dialog-title').textContent=title;document.getElementById('dialog-body').textContent=text;document.getElementById('demo-dialog').showModal();}
+document.addEventListener('click',event=>{
+ const button=event.target.closest('button');if(!button||button.disabled)return;
+ if(button.dataset.surface){surface=button.dataset.surface;render();}
+ else if(button.dataset.mode){mode=button.dataset.mode;render();}
+ else if(button.dataset.palette){palette=button.dataset.palette;mode='detail';render();document.querySelector(`[data-palette="${palette}"].palette-tab`)?.focus({preventScroll:true});}
+ else if(button.id==='offline'){offline=!offline;render();}
+ else if(button.id==='pick'){favorite=favorite===palette?null:palette;render();document.getElementById('pick')?.focus({preventScroll:true});notify(favorite?`已在本页标记「${palettes[palette].name}」，尚未应用到 App。`:'已取消标记。');}
+ else if(button.dataset.session!==undefined){const s=sessions[Number(button.dataset.session)];showDemo(s.title,'正式 App 中会在来源电脑打开该会话。这里仅展示配色与点击反馈，不发送打开请求。');}
+ else if(button.dataset.open){notify(`入口示意：在电脑上打开${button.dataset.open}。本次未执行。`);}
+ else if(button.dataset.demo){showDemo(button.dataset.demo,'这里展示该入口的位置与视觉样式。连接、页面编辑和真实设置仍由正式 App 提供。');}
+});
+document.addEventListener('change',event=>{
+ const id=event.target.dataset.sharing;if(!Object.hasOwn(sharing,id))return;
+ sharing[id]=event.target.checked;
+ document.querySelectorAll(`[data-sharing="${id}"]`).forEach(input=>{input.checked=sharing[id];});
+ notify('仅改变原型中的开关，设备权限未修改。');
+});
+document.addEventListener('keydown',event=>{
+ if(mode!=='detail'||document.getElementById('demo-dialog').open||event.target.matches('input,textarea,select,[contenteditable]'))return;
+ if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();const keys=Object.keys(palettes);palette=keys[(keys.indexOf(palette)+(event.key==='ArrowLeft'?-1:1)+keys.length)%keys.length];render();document.querySelector(`[data-palette="${palette}"].palette-tab`)?.focus({preventScroll:true});}
+});
+render();
+</script>
+</body>
+</html>

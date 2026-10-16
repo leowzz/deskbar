@@ -1,139 +1,142 @@
-# RawBlock Design System
+# Desklet 视觉规范
 
-## Overview
+确认日期：2026-10-16。**01「铂银」作为默认浅色主题，02「墨黑」作为暗色主题。** 本文件是双端后续视觉实现的依据，替换之前的 RawBlock 与外部网站设计参考。
 
-RawBlock is an unapologetic, anti-design system that strips interfaces down to their structural bones. Built for experimental portfolios and avant-garde art sites, it embraces thick borders, system-level aesthetics, and the raw power of black-on-white. There are no rounded corners, no shadows, no polish. Every element looks like it was assembled from HTML primitives -- because that is the point. This is brutalism as a design language.
+设计已确认，正式 App 的主题接入仍待实现。本次固化规范与原型，不代表电脑端或 Android 已切换到新样式。
 
----
+## 主题与默认规则
 
-## Colors
+| 模式 | 方案 | 定位 |
+| --- | --- | --- |
+| `light`（默认） | 01 · 铂银 / `silver` | 冷白与石墨灰，少量钢蓝；清晰、利落 |
+| `dark` | 02 · 墨黑 / `graphite` | 中性深灰与柔白；低干扰，适合常驻副屏 |
 
-- **Black** (#000000): Text, borders, fills
-- **White** (#FFFFFF): Background, inverse text
-- **Blue** (#0000FF): Links only (hyperlink blue)
-- **Surface Base** (#FFFFFF): App background
-- **Surface Inverted** (#000000): Inverted sections
-- **Success** (#008000): Success (pure green)
-- **Warning** (#FFA500): Warning (pure orange)
-- **Error** (#FF0000): Error (pure red)
-- **Info** (#0000FF): Info (same as link blue)
+- 首次使用、没有保存偏好或偏好无效时，使用 `light`，即铂银。
+- 暗色模式固定使用墨黑，两端使用相同的颜色语义与色值。
+- 默认模式明确为浅色；本轮不增加「跟随系统」这一选择。
+- 主题偏好由每个 App 在本机保存。电脑与 Android 独立选择，切换立即生效，不改变共享权限、连接、数据或页面配置。
+- 浅色与暗色保持相同的信息层级、字号、布局与交互，只更换主题颜色。
+- 03「暖纸」、04「雾蓝」及上一轮八组配色保留为探索历史，不属于正式主题选项。
 
-## Typography
+## 视觉原则
 
-- **Headline Font**: Archivo Black
-- **Body Font**: Work Sans
-- **Mono Font**: Space Mono
+以中性色建立页面、侧栏与卡片层次，颜色集中用于操作、选中项和状态。主按钮在浅色中为深灰蓝，在暗色中为柔白；不把强调色铺满页面或额度卡片。
 
-- **h1**: Archivo Black 64px regular, 1.0 line height
-- **h2**: Archivo Black 48px regular, 1.05 line height
-- **h3**: Archivo Black 32px regular, 1.1 line height
-- **h4**: Work Sans 22px semibold, 1.2 line height
-- **body**: Work Sans 16px regular, 1.6 line height
-- **small**: Work Sans 14px regular, 1.5 line height
-- **tiny**: Work Sans 12px regular, 1.4 line height
-- **mono**: Space Mono 15px regular, 1.5 line height
+使用细边框、适度圆角与清楚的字号层级。标题、设备、会话和用户操作是视觉重心。去掉旧 RawBlock 的粗黑框、全局直角、超大展示字体和全局等宽字体。
 
----
+界面以简体中文为主，不加装饰性英文副标题。保留 Desklet、Codex、设备名称及必要技术标识。显示名继续使用「Desklet 连接助手」与「Desklet 工作台」。
 
-## Spacing
+## 颜色 Token
 
-Base unit: 8px (intentionally irregular usage)
-Spacing is deliberately inconsistent to create visual tension. Use the scale below as a starting point, then break it when the design demands it.
-- **sp-1**: 4px
-- **sp-2**: 8px
-- **sp-3**: 16px
-- **sp-4**: 24px
-- **sp-5**: 40px
-- **sp-6**: 64px
-- **sp-7**: 80px
-- **sp-8**: 120px
+下列 Token 与已确认原型逐项对应。CSS 使用 `--token`，Flutter 在主题对象中使用对应语义；组件不另行硬编码一套接近的颜色。
 
-## Border Radius
+| Token | 用途 | 默认浅色 · 铂银 | 暗色 · 墨黑 |
+| --- | --- | --- | --- |
+| `canvas` | 页面底色 | `#F6F7F9` | `#191A1C` |
+| `surface` | 卡片、内容面板 | `#FFFFFF` | `#222426` |
+| `sidebar` | 侧栏、窗口标题栏 | `#EEF0F3` | `#151618` |
+| `raised` | 次级容器、悬停底色 | `#F0F2F5` | `#2C2E31` |
+| `text` | 正文与标题 | `#22262D` | `#EEEFEF` |
+| `muted` | 辅助文字、次级图标 | `#626C7B` | `#A1A6AD` |
+| `line` | 内部边框与分隔线 | `#E1E5EB` | `#35383D` |
+| `edge` | 窗口或预览外边框 | `#CBD0D8` | `#3B3D41` |
+| `accent` | 主按钮、开启的开关 | `#303E52` | `#D7DCE2` |
+| `on-accent` | 主按钮文字、开启开关的圆点 | `#FFFFFF` | `#22262C` |
+| `selection` | 导航选中背景 | `#E4EAF3` | `#30363F` |
+| `selected-text` | 导航选中文字与图标 | `#314A71` | `#D1DBE9` |
+| `success` | 已连接、进行中 | `#39765A` | `#A2C4B0` |
+| `success-bg` | 成功状态底色 | `#E9F3EC` | `#293A31` |
+| `warning` | 离线、已中断等需关注状态 | `#956320` | `#D8B87A` |
+| `warning-bg` | 警告提示底色 | `#FAF0DA` | `#403725` |
+| `danger` | 打开失败、破坏性操作提示 | `#A84545` | `#E7A4A4` |
+| `danger-bg` | 错误提示底色 | `#FAEBEB` | `#422C30` |
+| `control` | 关闭的开关、非选中页码 | `#A0A9B6` | `#69717C` |
+| `chart` | 额度进度条 | `#607FA7` | `#A9BACD` |
+| `focus` | 键盘焦点描边 | `#527BC2` | `#ADC6EB` |
 
-- **radius-none** (0px): All elements -- no rounding
-Every single element uses 0px border radius. No exceptions.
+`accent` 是操作色，`chart` 是额度进度色，`success` 是状态色，三者各自承担用途。额度进度条不表示连接成功；普通选中态也不使用成功绿。
 
-## Elevation
+不要对整个暗色界面统一反色或降低透明度。输入框、下拉菜单、弹窗、提示、滚动区域和系统栏都应适配当前主题；暗色使用对应的 `color-scheme: dark` 或平台亮度设置。
 
-RawBlock uses **no shadows**. Visual hierarchy is achieved exclusively through border weight and scale contrast.
-- **shadow-none**: None. All elements.
-Use border-thin (1px), border-thick (3px), or border-heavy (5px) to define element boundaries.
+## 字体、尺寸与间距
 
-## Components
+使用清晰的系统无衬线字体，中文随平台回退。桌面参考 `-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif`；Android 使用平台可用字体。数值优先使用等宽数字特性，不将整段正文换成等宽字体。
 
-### Buttons
-#### Primary
-black (#000000) fill, white (#FFFFFF) text, 3px black border, square. 2px tracking. uppercase text-transform. Hover: background white, text black (full inversion). Active: background black, text white, border 5px.
-#### Secondary
-white fill, black text, 3px black border, square. Hover: background black, text white.
-#### Ghost
-transparent, black text, no border. underline text-decoration. Hover: text blue.
-#### Destructive
-error (#FF0000) fill, white text, 3px black border, square. Hover: background black, text error.
-#### Sizes
-Sizes: Small (6px 16px, 12px, 32px), Medium (10px 24px, 14px, 44px), Large (16px 40px, 18px, 56px).
-#### Disabled State
-surface-sunken fill, content-tertiary text, 3px #CCCCCC border.
-- disabled cursor
----
+下表是正式界面的起点。HTML 使用 CSS px，Android 的布局使用 dp、文字使用 sp；对比页的缩略图字号不应照搬到实际设备。
 
-### Cards
-#### Default
-white fill, 3px black border, square, no shadow. sp-4/(24px) padding.
-#### Elevated
-white fill, 5px black border, square, none (heavier border = more importance) shadow. sp-4 padding.
----
+| 元素 | 基准 |
+| --- | --- |
+| 电脑页面标题 | 24–28，字重 600 |
+| 工作台标题 | 20–24，字重 600 |
+| 会话或设备标题 | 16–18，字重 500–600 |
+| 正文、设置名称、主要操作 | 14–16 |
+| 辅助说明、状态、更新时间 | 12–13，使用 `muted` 或状态色 |
+| 额度主数字 | 38–54；百分号与标签退到次级 |
+| 正文行高 | 1.5–1.7，适应中文与系统大字号 |
+| 常用间距 | 4、8、12、16、24、32 |
+| 按钮与输入框圆角 | 6 |
+| 卡片与内容面板圆角 | 8 |
+| 弹窗圆角 | 12 |
+| 分隔与卡片边框 | 1，使用 `line` |
+| 标准线性图标 | 18–20，描边约 1.65；相同功能使用相同图形 |
 
-### Inputs
-surface-sunken (#F0F0F0) fill, content-primary text, 3px black border, square. Space Mono 15px. 10px/12px padding.
-- **Default**: 3px black border.
-- **Hover**: 3px black border, background #E8E8E8 other.
-- **Focus**: 5px black border, outline none other.
-- **Error**: 3px error border.
-- **Disabled**: 3px #CCCCCC border, background #F5F5F5 other.
-#### Label
-content-primary text. Archivo Black 14px regular uppercase. 4px margin-bottom.
-#### Helper Text
-content-secondary (default) | error (error state) text. Work Sans 12px regular. 4px margin-top.
----
+双端保留足够大的点击区域：桌面普通按钮高度至少 36，Android 触控区域至少 48 dp。开关、图标与页码的可见图形可以更小，触控区域不能随之缩小。
 
-### Chips
-#### Filter Chip
-white fill, black text, 2px black border, square. 4px/12px padding, uppercase, 10px, tracking 1px text-transform. Active: background black, text white.
-#### Status Chip
-square, 2px respective color border. 11px semibold uppercase tracking 1px. 2px/10px padding.
-- **Active**: #FFFFFF fill, #008000 text, #008000 border.
-- **Warning**: #FFFFFF fill, #FFA500 text, #FFA500 border.
-- **Error**: #FFFFFF fill, #FF0000 text, #FF0000 border.
-- **Default**: #FFFFFF fill, #000000 text, #000000 border.
----
+窄窗口和系统大字号通过换行、减少列数、增加卡片高度与内部滚动适配，不整体缩小文字。重复卡片的图标、标题、元信息和操作区域使用共同的对齐基准。
 
-### Lists
-transparent, Work Sans, 16px text. 3px black divider, 12px 0px item padding. Hover: text-decoration underline. Active: background black, text white, full-width.
-- No trailing icons; text only
----
+## 组件规则
 
-### Checkboxes
-20px x 20px, 3px black border, square. white unchecked background, black checked background, white, 3px stroke checkmark. Focus: 5px border. Disabled: border #CCCCCC, background #F5F5F5.
----
+| 组件 | 规则 |
+| --- | --- |
+| 页面与侧栏 | 页面使用 `canvas`，侧栏使用 `sidebar`；用 `line` 分界 |
+| 卡片与面板 | `surface` 底色、1 px `line` 边框、8 px 圆角；不加彩色大底或厚重阴影 |
+| 主按钮 | `accent` 底色、`on-accent` 文字；同一区域只突出必要的主要操作 |
+| 次级与图标按钮 | 使用透明或 `raised` 背景、`text` / `muted` 前景；图标按钮有可访问名称 |
+| 导航选中项 | `selection` 背景，`selected-text` 文字和图标，不依靠颜色单独区分当前项 |
+| 悬停 | 卡片或次级按钮使用 `raised`；主按钮可采用原型的轻微明度变化，不改变含义 |
+| 键盘焦点 | 2 px `focus` 描边、约 4 px 偏移；保持可见，不被容器裁切 |
+| 开关 | 开启使用 `accent` 轨道与 `on-accent` 圆点；关闭使用 `control` 轨道与 `surface` 圆点 |
+| 设置行 | 名称为主、说明为辅；开关固定对齐右侧，说明可以换行 |
+| 额度 | `surface` 卡片、`raised` 进度槽、`chart` 进度；保留剩余含义、重置时间和数据新鲜度 |
+| 快捷入口 | 统一的中性容器、图标与名称；保留可识别的品牌图标时不改变容器配色体系 |
+| 会话状态 | 进行中用 `success`，完成用 `muted`，中断用 `warning`；状态必须有文字 |
+| 警告与错误 | `warning` / `danger` 与各自 `-bg` 配对使用；说明实际影响与下一步 |
+| 禁用与离线 | 保留内容可读，禁用动作并展示原因；不要把所有缓存内容整体调暗 |
 
-### Radio Buttons
-20px x 20px, 3px black border. circle (the one exception to 0px radius) shape. Unchecked: white fill. Selected: black border, inner dot 10px black. Focus: 5px border. Disabled: border #CCCCCC.
----
+离线保留上次会话与额度，并明确标注旧状态或上次数据。电脑连接、来源健康与动作结果分别表达；「已连接」不能代表额度已更新或打开已完成。未知状态不冒充进行中或已完成。
 
-### Tooltips
-black fill, white, 13px, Space Mono text, square, none (inverted block) border, no shadow. 8px/12px padding, none (positioned directly adjacent) arrow, 260px max width.
----
+配对授权、确认弹窗、命令执行和数据刷新规则仍以产品与协议文档为准。视觉变化不改变功能语义。
 
-## Do's and Don'ts
+## 双端应用
 
-1. **Do** use thick borders (3-5px) as the primary visual organizer; they replace shadows entirely.
-2. **Don't** round any corners -- ever. Sharp edges are non-negotiable in this system.
-3. **Do** use full color inversions (black to white, white to black) for hover and active states.
-4. **Don't** use opacity for disabled states; use lighter border colors and grey fills instead.
-5. **Do** use Archivo Black at large sizes (48-64px) for maximum visual impact.
-6. **Don't** use the blue (#0000FF) for anything other than hyperlinks; it is reserved.
-7. **Do** embrace intentional spacing irregularity -- asymmetric layouts are encouraged.
-8. **Do** use uppercase + tracking for buttons and labels to amplify the raw aesthetic.
-9. **Don't** add decorative images, icons, or illustrations; content and typography do the work.
-10. **Don't** polish or refine; if something looks too "designed," strip it back further.
+### Desklet 连接助手
+
+电脑端负责设备、共享内容与快捷入口配置。设备页以设备卡片及其共享开关为主，「连接设备」为主操作。侧栏弱于内容区，设备连接状态靠近设备名称。
+
+主区域采用铂银或墨黑的页面与卡片层次，保留关闭窗口后在菜单栏运行的说明。主题设置位于应用设置中，不混入某台设备的共享权限。
+
+### Desklet 工作台
+
+会话是主要内容，额度与快捷入口作为可组合组件。横屏参考会话主区与额度侧区，竖屏参考额度上置、会话网格与入口区；实际摆放继续遵循页面与组件设计。
+
+这些参考不新增固定页面类型，也不限制用户自由组合组件。横竖屏、全屏、安全区和大字号均使用同一套主题；Android 系统栏的底色和图标亮度与主题协调。
+
+## 参考文件与实现边界
+
+- [配色原型](docs/prototypes/color-study.prototype.html)：01 铂银与 02 墨黑是本规范来源，可查看电脑端、横屏和手机效果；另外两套仅为历史探索。
+- [原型说明](docs/prototypes/README.md)：预览方式与历史方案。
+- [产品范围](docs/product.md)、[工作台设计](docs/workbench.md)、[协议草案](docs/protocol.md)：功能与行为依据。
+- 电脑端待接入：[style.css](apps/desktop/src/style.css)、[App.tsx](apps/desktop/src/App.tsx)、[WorkbenchSettings.tsx](apps/desktop/src/WorkbenchSettings.tsx)。
+- Android 待接入：[rawblock.dart](apps/android/lib/rawblock.dart)、[main.dart](apps/android/lib/main.dart)、[workbench_content.dart](apps/android/lib/workbench_content.dart)。现有文件名不代表继续沿用旧视觉规范。
+
+原型的比较页外框、方案选择工具、模拟手机边框和窗口投影属于展示环境，不搬进正式 App。
+
+## 验收
+
+- 首次启动使用铂银；选择暗色后使用墨黑；重启恢复本机选择。
+- 双端页面、菜单、输入、弹窗、加载、空状态、离线与失败反馈均完整适配两种主题。
+- 正文与辅助文字对比度至少 4.5:1；状态用文字和图形共同表达。已检查原型主要文本配对，正式接入后的透明度、叠层与交互状态仍需复核。
+- 常用与窄窗口、横竖屏、系统大字号下文字可读、卡片对齐，无越界；触控目标和安全区通过真机验证。
+- 切换主题不丢失页面配置、不改变设备权限、不触发连接或远程动作。
+
+当前确认了颜色与视觉规则，并有浏览器原型检查。主题持久化、正式 App 接入与双端真机验收仍待完成，完成后同步更新开发计划。
