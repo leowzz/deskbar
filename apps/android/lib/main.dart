@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'connection.dart';
+import 'display_preferences.dart';
 import 'workbench_canvas.dart';
 import 'package:flutter/services.dart';
 import 'rawblock.dart';
@@ -91,22 +92,54 @@ class Workbench extends StatefulWidget {
 
 class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
   final connection = Connection();
+  final display = DisplayPreferences();
   bool pasteOpen = false;
-  bool immersive = false;
+  bool editing = false;
+  String? _displayError;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    connection.addListener(_connectionChanged);
+    display.addListener(_displayChanged);
+    unawaited(display.restore());
     unawaited(connection.start());
+  }
+
+  void _connectionChanged() {
+    unawaited(
+      display.setWorkbenchActive(
+        connection.hostName != null && !connection.busy,
+      ),
+    );
+  }
+
+  void _displayChanged() {
+    final message = display.error;
+    if (message == null) {
+      _displayError = null;
+      return;
+    }
+    if (!mounted || _displayError == message) return;
+    _displayError = message;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Camera and system dialogs can briefly make the Activity inactive.
     if (state == AppLifecycleState.resumed) {
+      unawaited(display.setForeground(true));
       unawaited(connection.setActive(true));
     }
     if (state == AppLifecycleState.paused) {
+      unawaited(display.setForeground(false));
       unawaited(connection.setActive(false));
     }
   }
@@ -114,7 +147,10 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    connection.removeListener(_connectionChanged);
+    display.removeListener(_displayChanged);
     connection.dispose();
+    display.dispose();
     super.dispose();
   }
 
@@ -217,17 +253,79 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
     if (confirmed == true) await connection.forget();
   }
 
+  Future<void> _connectionSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          child: ListenableBuilder(
+            listenable: connection,
+            builder: (context, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('连接与外观设置', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                Text(
+                  connection.hostName ?? '尚未连接电脑',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Text(
+                  connection.phase == ConnectionPhase.online
+                      ? '已连接'
+                      : '暂时离线 · 显示上次数据',
+                ),
+                if (connection.error != null) Text(connection.error!),
+                const SizedBox(height: 16),
+                if (connection.phase != ConnectionPhase.online)
+                  OutlinedButton.icon(
+                    onPressed: connection.reconnect,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重新连接'),
+                  ),
+                ListTile(
+                  leading: Icon(
+                    Theme.of(context).brightness == Brightness.dark
+                        ? Icons.light_mode_outlined
+                        : Icons.dark_mode_outlined,
+                  ),
+                  title: Text(
+                    Theme.of(context).brightness == Brightness.dark
+                        ? '切换浅色主题'
+                        : '切换暗色主题',
+                  ),
+                  onTap: widget.onTheme,
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    unawaited(forget());
+                  },
+                  child: const Text('断开电脑'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: connection,
+    listenable: Listenable.merge([connection, display]),
     builder: (context, _) {
       final paired = connection.hostName != null;
       final online = connection.phase == ConnectionPhase.online;
       final text = Theme.of(context).textTheme;
       final c = deskletColors(context);
       final compact = MediaQuery.sizeOf(context).height < 400;
+      final immersive = paired && display.immersive;
       return Scaffold(
-        appBar: immersive
+        appBar: immersive || (paired && editing)
             ? null
             : AppBar(
                 title: Text(
@@ -257,7 +355,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
           child: paired && !connection.busy
               ? Column(
                   children: [
-                    if (!immersive && !compact)
+                    if (!immersive && !editing && !compact)
                       Container(
                         padding: const EdgeInsets.only(left: 16),
                         decoration: BoxDecoration(
@@ -305,7 +403,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
-                    if (connection.error != null && !immersive)
+                    if (connection.error != null && !immersive && !editing)
                       Container(
                         width: double.infinity,
                         color: c.warningBg,
@@ -321,8 +419,13 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                     Expanded(
                       child: WorkbenchCanvas(
                         connection: connection,
-                        onImmersiveChanged: (value) =>
-                            setState(() => immersive = value),
+                        displayPreferences: display,
+                        onConnectionSettings: _connectionSettings,
+                        onEditingChanged: (value) {
+                          if (mounted && editing != value) {
+                            setState(() => editing = value);
+                          }
+                        },
                       ),
                     ),
                   ],

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 class SourceState {
   SourceState(Map<String, dynamic> v)
     : id = v['source_id'] as String,
@@ -59,8 +62,30 @@ class WorkShortcut {
     : id = v['shortcut_id'] as String,
       version = v['version'] as String,
       name = v['name'] as String,
-      kind = v['kind'] as String;
+      kind = v['kind'] as String,
+      iconBytes = _shortcutIcon(v['icon_png']);
   final String id, version, name, kind;
+  final Uint8List? iconBytes;
+}
+
+Uint8List? _shortcutIcon(dynamic encoded) {
+  if (encoded is! String || encoded.isEmpty || encoded.length > 43692) {
+    return null;
+  }
+  try {
+    final bytes = base64Decode(encoded);
+    if (bytes.length > 32768 || bytes.length < 24) return null;
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+    for (var i = 0; i < signature.length; i++) {
+      if (bytes[i] != signature[i]) return null;
+    }
+    final dimensions = ByteData.sublistView(bytes);
+    final width = dimensions.getUint32(16), height = dimensions.getUint32(20);
+    if (width < 1 || height < 1 || width > 256 || height > 256) return null;
+    return bytes;
+  } on FormatException {
+    return null;
+  }
 }
 
 class WorkbenchData {

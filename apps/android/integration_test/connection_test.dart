@@ -9,6 +9,54 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
+    'native display preferences persist and select full sensor rotation',
+    (tester) async {
+      const preferences = MethodChannel('app.desklet/layout');
+      final old = await preferences.invokeMapMethod<String, dynamic>(
+        'loadDisplayPreferences',
+      );
+      addTearDown(() async {
+        await preferences.invokeMethod<void>(
+          'saveDisplayPreferences',
+          old ?? {'immersive': true, 'rotationLocked': false},
+        );
+        await preferences.invokeMethod<Object?>('applyDisplayPreferences', {
+          'rotationLocked': old?['rotationLocked'] == true,
+        });
+      });
+      await preferences.invokeMethod<void>('saveDisplayPreferences', {
+        'immersive': true,
+        'rotationLocked': false,
+      });
+      final unlocked = await preferences.invokeMapMethod<String, dynamic>(
+        'applyDisplayPreferences',
+        {'rotationLocked': false},
+      );
+      expect(unlocked?['requestedOrientation'], 10); // Android FULL_SENSOR.
+      await preferences.invokeMethod<void>('saveDisplayPreferences', {
+        'immersive': false,
+        'rotationLocked': true,
+      });
+      expect(
+        await preferences.invokeMapMethod<String, dynamic>(
+          'loadDisplayPreferences',
+        ),
+        {'immersive': false, 'rotationLocked': true},
+      );
+      final locked = await preferences.invokeMapMethod<String, dynamic>(
+        'applyDisplayPreferences',
+        {'rotationLocked': true},
+      );
+      expect(locked?['requestedOrientation'], isIn([0, 1, 8, 9]));
+      await expectLater(
+        preferences.invokeMethod<void>('saveDisplayPreferences', {
+          'immersive': true,
+        }),
+        throwsA(isA<PlatformException>()),
+      );
+    },
+  );
+  testWidgets(
     'native TLS pinning, approval, encrypted restore, WSS and revocation',
     (tester) async {
       const invitation = String.fromEnvironment('DESKLET_INVITE');
@@ -80,12 +128,17 @@ void main() {
       expect(connection.data!.sessions.single.title, '验证工作台连接');
       expect(connection.data!.quotas.single.remaining, 42);
       expect(connection.data!.shortcuts.single.name, '测试入口');
+      expect(connection.data!.shortcuts.single.iconBytes, isNotNull);
       expect(connection.data!.apiUsage.single.actualCostMicros, 1250000);
       final cached =
           jsonDecode((await native.invokeMethod<String>('restore'))!) as Map;
       expect(cached.containsKey('token'), isFalse);
       expect((cached['snapshot'] as Map)['sessions'], isNotEmpty);
       expect((cached['snapshot'] as Map)['api_usage'], isNotEmpty);
+      expect(
+        ((cached['snapshot'] as Map)['shortcuts'] as List).single['icon_png'],
+        isNotNull,
+      );
       final data = connection.data!;
       try {
         await native.invokeMethod<String>('command', {

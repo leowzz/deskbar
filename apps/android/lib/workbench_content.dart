@@ -20,11 +20,13 @@ class WorkbenchWidgetBody extends StatelessWidget {
     required this.options,
     required this.binding,
     this.editing = false,
+    this.onEditRequested,
   });
   final Connection connection;
   final String id, type;
   final Map<String, dynamic> options, binding;
   final bool editing;
+  final VoidCallback? onEditRequested;
   double number(String key, double fallback) =>
       (options[key] as num?)?.toDouble() ?? fallback;
   bool get online => connection.phase == ConnectionPhase.online;
@@ -45,7 +47,13 @@ class WorkbenchWidgetBody extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onLongPress: editing ? null : onEditRequested,
+    child: _body(context),
+  );
+
+  Widget _body(BuildContext context) {
     if (!const {'sessions', 'usage', 'shortcuts'}.contains(type)) {
       return const _Message('此组件暂不受支持。原有配置已保留，可更新应用后查看。');
     }
@@ -113,16 +121,13 @@ class WorkbenchWidgetBody extends StatelessWidget {
     final sessions = data.sessions
         .where((s) => resource == null || resource == '' || s.id == resource)
         .toList();
-    if (source == null) return const _Message('请在电脑的设备卡片中开启「近期会话」共享。');
+    if (source == null) return const _Message('请在电脑端开启「近期会话」共享。');
     if (resource != null && resource != '' && sessions.isEmpty) {
-      return const _Message('绑定的会话已不在共享范围。请在组件设置中选择其他会话。');
+      return const _Message('绑定的会话不在共享范围，长按调整来源。');
     }
-    final canOpen =
-        !editing &&
-        online &&
-        !connection.opening &&
-        data.capabilities.contains('open_session') &&
-        source.fresh(data.now);
+    final fresh = online && source.fresh(data.now);
+    final allowed = data.capabilities.contains('open_session');
+    final canOpen = !editing && fresh && allowed && !connection.opening;
     return LayoutBuilder(
       builder: (context, box) {
         final compact = options['density'] == 'compact';
@@ -130,94 +135,54 @@ class WorkbenchWidgetBody extends StatelessWidget {
           1.0,
           MediaQuery.textScalerOf(context).scale(14) / 14,
         );
-        final tight = compact && box.maxHeight < 240 * scale;
-        final padding = tight ? 8.0 : 12.0;
-        final headerGap = tight ? 4.0 : 8.0;
-        final count = '显示 ${sessions.length} 个 / 共 ${data.sessionTotal} 个';
-        final status = _sourceStatusLabel(data, 'codex.sessions');
-        final c = deskletColors(context);
         final style = Theme.of(context).textTheme.bodySmall!;
-        final statusStyle = style.copyWith(
-          color: !online || !source.fresh(data.now) ? c.warning : c.muted,
-        );
-        final permitted =
-            editing ||
-            data.capabilities.contains('open_session') ||
-            sessions.isEmpty;
-        const permission = '在电脑端开启「允许在电脑上打开」后可点击会话。';
-        final width = math.max(0.0, box.maxWidth - padding * 2);
-        final span = TextSpan(
-          style: style,
-          children: [
-            TextSpan(text: '${sessions.length} / ${data.sessionTotal} 个会话 · '),
-            TextSpan(text: status, style: statusStyle),
-          ],
-        );
-        final combined = TextPainter(
-          text: span,
+        final notice = [
+          if (!fresh) _sourceStatusLabel(data, 'codex.sessions'),
+          if (!allowed && sessions.isNotEmpty && !editing) '请在电脑端开启「允许在电脑上打开」。',
+        ].join(' · ');
+        const padding = 4.0;
+        final painter = TextPainter(
+          text: TextSpan(text: notice, style: style),
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
-          maxLines: 1,
-        )..layout(maxWidth: width);
-        final oneLine = tight && !combined.didExceedMaxLines;
-        double textHeight(String text) {
-          final painter = TextPainter(
-            text: TextSpan(text: text, style: style),
-            textDirection: Directionality.of(context),
-            textScaler: MediaQuery.textScalerOf(context),
-          )..layout(maxWidth: width);
-          final height = painter.height;
-          painter.dispose();
-          return height;
-        }
-
-        final headerHeight =
-            (oneLine
-                ? combined.height
-                : textHeight(count) + textHeight(status)) +
-            (permitted ? 0 : textHeight(permission));
-        combined.dispose();
+        )..layout(maxWidth: math.max(1, box.maxWidth - padding * 2));
+        final noticeHeight = notice.isEmpty ? 0.0 : painter.height + 4;
+        painter.dispose();
         final minimum = (compact ? 88.0 : 140.0) * scale;
-        final available =
-            box.maxHeight - padding * 2 - headerHeight - headerGap;
-        if (available < 0 || sessions.isNotEmpty && available < minimum) {
+        final available = box.maxHeight - padding * 2 - noticeHeight;
+        if (sessions.isNotEmpty && available < minimum) {
           return _smallMessage(
             context,
-            count,
-            '$status${permitted ? '' : '。$permission'}。扩大组件或临时铺满以查看完整会话。',
+            '${sessions.length} 个会话',
+            '${notice.isEmpty ? '' : '$notice。'}长按调整组件大小。',
           );
         }
         return Padding(
-          padding: EdgeInsets.all(padding),
+          padding: const EdgeInsets.all(padding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (oneLine)
-                Text.rich(span)
-              else ...[
-                Text(count, style: style),
-                Text(status, style: statusStyle),
+              if (notice.isNotEmpty) ...[
+                Text(
+                  notice,
+                  style: style.copyWith(color: deskletColors(context).warning),
+                ),
+                const SizedBox(height: 4),
               ],
-              if (!permitted) Text(permission, style: style),
-              SizedBox(height: headerGap),
               if (sessions.isEmpty)
                 const Expanded(child: _Message('还没有近期会话。'))
               else
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, grid) {
-                      final gap = number('gap', 12).clamp(0, 48).toDouble();
+                      final gap = number('gap', 8).clamp(0, 48).toDouble();
                       final columns = math.max(
                         1,
                         ((grid.maxWidth + gap) /
-                                (number('itemWidth', 280) + gap))
+                                (number('itemWidth', 280).clamp(120, 1000) +
+                                    gap))
                             .floor(),
                       );
-                      final compact = options['density'] == 'compact';
-                      final scale =
-                          MediaQuery.textScalerOf(context).scale(14) / 14;
-                      final minimum =
-                          (compact ? 88.0 : 140.0) * math.max(1, scale);
                       final target = math.max(
                         minimum,
                         number('itemHeight', compact ? 96 : 148),
@@ -227,70 +192,68 @@ class WorkbenchWidgetBody extends StatelessWidget {
                         ((grid.maxHeight + gap) / (target + gap)).floor(),
                       );
                       final height = options['fitRows'] != false
-                          ? math.max(
-                              minimum,
-                              (grid.maxHeight - gap * (rows - 1)) / rows,
-                            )
+                          ? (grid.maxHeight - gap * (rows - 1)) / rows
                           : target;
-                      return GridView.builder(
-                        key: PageStorageKey('sessions-$id'),
-                        padding: EdgeInsets.zero,
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          crossAxisSpacing: gap,
-                          mainAxisSpacing: gap,
-                          mainAxisExtent: height,
-                        ),
-                        itemCount: sessions.length,
-                        itemBuilder: (context, index) {
-                          final s = sessions[index];
-                          final c = deskletColors(context);
-                          final statusColor = s.status == 'running'
-                              ? c.success
-                              : ['failed', 'interrupted'].contains(s.status)
-                              ? c.warning
-                              : c.muted;
-                          return Semantics(
-                            button: !editing,
-                            label: '${s.title}，${s.statusLabel}',
-                            child: Material(
-                              key: ValueKey('session-card-$id-${s.id}'),
-                              color: c.raised,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(color: c.line),
+                      return Semantics(
+                        label:
+                            '${sessions.length} 个近期会话，共 ${data.sessionTotal} 个',
+                        child: GridView.builder(
+                          key: PageStorageKey('sessions-$id'),
+                          padding: EdgeInsets.zero,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                crossAxisSpacing: gap,
+                                mainAxisSpacing: gap,
+                                mainAxisExtent: height,
                               ),
-                              clipBehavior: Clip.antiAlias,
-                              child: InkWell(
-                                onTap: canOpen
-                                    ? () => open(
-                                        context,
-                                        'open_session',
-                                        s.id,
-                                        s.version,
-                                      )
-                                    : null,
-                                child: Tooltip(
-                                  message: s.title,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          s.statusLabel,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: statusColor,
+                          itemCount: sessions.length,
+                          itemBuilder: (context, index) {
+                            final session = sessions[index];
+                            final c = deskletColors(context);
+                            final statusColor = session.status == 'running'
+                                ? c.success
+                                : [
+                                    'failed',
+                                    'interrupted',
+                                  ].contains(session.status)
+                                ? c.warning
+                                : c.muted;
+                            return Semantics(
+                              button: !editing,
+                              label: '${session.title}，${session.statusLabel}',
+                              child: Material(
+                                key: ValueKey('session-card-$id-${session.id}'),
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                                child: InkWell(
+                                  onTap: canOpen
+                                      ? () => open(
+                                          context,
+                                          'open_session',
+                                          session.id,
+                                          session.version,
+                                        )
+                                      : null,
+                                  child: Tooltip(
+                                    message: session.title,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            session.statusLabel,
+                                            style: style.copyWith(
+                                              color: statusColor,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Expanded(
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
+                                          const SizedBox(height: 2),
+                                          Flexible(
+                                            fit: FlexFit.loose,
                                             child: Text(
-                                              s.title,
+                                              session.title,
                                               maxLines: compact ? 1 : 2,
                                               overflow: TextOverflow.ellipsis,
                                               style: Theme.of(
@@ -298,31 +261,45 @@ class WorkbenchWidgetBody extends StatelessWidget {
                                               ).textTheme.titleMedium,
                                             ),
                                           ),
-                                        ),
-                                        if (s.project.isNotEmpty)
-                                          Text(
-                                            s.project,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                        if (!compact)
-                                          Text(
-                                            workbenchTime(s.updatedAt),
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                      ],
+                                          const SizedBox(height: 2),
+                                          if (compact &&
+                                              session.project.isNotEmpty)
+                                            Text(
+                                              session.project,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: style,
+                                            ),
+                                          if (!compact)
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    session.project,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: style,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  workbenchTime(
+                                                    session.updatedAt,
+                                                  ),
+                                                  style: style,
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       );
                     },
                   ),
@@ -342,38 +319,57 @@ class WorkbenchWidgetBody extends StatelessWidget {
     if (entries.isEmpty) {
       return _Message(
         resource != null && resource != ''
-            ? '绑定的入口已不在共享范围，请在组件设置中重新选择。'
-            : '还没有共享入口。在电脑端添加入口，并向这台设备开启共享。',
+            ? '绑定的入口不在共享范围，长按调整来源。'
+            : '请在电脑端添加入口并开启共享。',
       );
     }
     final iconSize = number('iconSize', 56).clamp(24, 200).toDouble();
     final gapX = number(
       'gapX',
-      number('horizontalGap', 12),
+      number('horizontalGap', 8),
     ).clamp(0, 64).toDouble();
     final gapY = number(
       'gapY',
-      number('verticalGap', 12),
+      number('verticalGap', 8),
     ).clamp(0, 64).toDouble();
     final labels = options['labels'] != false;
-    final canOpen =
-        !editing &&
-        online &&
-        !connection.opening &&
-        data.capabilities.contains('open_shortcut');
+    final allowed = data.capabilities.contains('open_shortcut');
+    final canOpen = !editing && online && allowed && !connection.opening;
+    final labelStyle = Theme.of(
+      context,
+    ).textTheme.labelLarge!.copyWith(fontWeight: FontWeight.w400);
+    final notice = !online
+        ? '电脑离线 · 暂时无法打开'
+        : !allowed && !editing
+        ? '请在电脑端开启「允许在电脑上打开」。'
+        : '';
     return Padding(
-      padding: EdgeInsets.all(iconSize <= 40 ? 8 : 12),
+      padding: const EdgeInsets.all(4),
       child: LayoutBuilder(
         builder: (context, box) {
-          final tileWidth = math.max(48.0, iconSize + (labels ? 40 : 16));
-          final tileHeight = math.max(
-            48.0,
-            iconSize +
-                (labels ? MediaQuery.textScalerOf(context).scale(40) : 0) +
-                4,
-          );
-          if (box.maxWidth < tileWidth || box.maxHeight < tileHeight) {
-            return const _Message('图标放不下。请扩大组件或点击标题栏临时铺满。');
+          final tileWidth = math.max(48.0, iconSize + (labels ? 32 : 8));
+          final labelHeight = labels
+              ? MediaQuery.textScalerOf(context).scale(labelStyle.fontSize!) *
+                        (labelStyle.height ?? 1.5) *
+                        2 +
+                    4
+              : 0.0;
+          final tileHeight = math.max(48.0, iconSize + labelHeight + 8);
+          final noticePainter = TextPainter(
+            text: TextSpan(
+              text: notice,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout(maxWidth: math.max(1, box.maxWidth));
+          final noticeHeight = notice.isEmpty ? 0.0 : noticePainter.height + 4;
+          noticePainter.dispose();
+          if (box.maxWidth < tileWidth ||
+              box.maxHeight - noticeHeight < tileHeight) {
+            return _Message(
+              '${notice.isEmpty ? '' : '$notice。'}入口区域太小，长按调整大小。',
+            );
           }
           final columns = math.max(
             1,
@@ -382,14 +378,15 @@ class WorkbenchWidgetBody extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!online || !data.capabilities.contains('open_shortcut'))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    !online ? '电脑离线 · 暂时无法打开' : '请在电脑端开启「允许在电脑上打开」。',
-                    style: Theme.of(context).textTheme.bodySmall,
+              if (notice.isNotEmpty) ...[
+                Text(
+                  notice,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: deskletColors(context).warning,
                   ),
                 ),
+                const SizedBox(height: 4),
+              ],
               Expanded(
                 child: GridView.builder(
                   key: PageStorageKey('shortcuts-$id'),
@@ -402,53 +399,61 @@ class WorkbenchWidgetBody extends StatelessWidget {
                   ),
                   itemCount: entries.length,
                   itemBuilder: (context, index) {
-                    final s = entries[index];
+                    final entry = entries[index];
                     final c = deskletColors(context);
+                    Widget fallback() => Container(
+                      width: iconSize,
+                      height: iconSize,
+                      decoration: BoxDecoration(
+                        color: c.raised,
+                        borderRadius: BorderRadius.circular(iconSize * .2),
+                      ),
+                      child: Icon(
+                        entry.kind == 'app'
+                            ? Icons.apps_outlined
+                            : Icons.language_outlined,
+                        size: iconSize * .65,
+                        color: c.muted,
+                      ),
+                    );
                     return Tooltip(
-                      message: s.name,
+                      message: entry.name,
                       child: Semantics(
-                        label: s.name,
+                        label: entry.name,
                         button: !editing,
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(4),
                           onTap: canOpen
                               ? () => open(
                                   context,
                                   'open_shortcut',
-                                  s.id,
-                                  s.version,
+                                  entry.id,
+                                  entry.version,
                                 )
                               : null,
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Container(
-                                width: iconSize,
-                                height: iconSize,
-                                decoration: BoxDecoration(
-                                  color: c.raised,
-                                  borderRadius: BorderRadius.circular(
-                                    iconSize * .22,
-                                  ),
-                                  border: Border.all(color: c.line),
-                                ),
-                                child: Icon(
-                                  s.kind == 'app'
-                                      ? Icons.apps_outlined
-                                      : Icons.language_outlined,
-                                  size: iconSize * .5,
-                                  color: c.text,
-                                ),
-                              ),
+                              if (entry.iconBytes != null)
+                                Image.memory(
+                                  entry.iconBytes!,
+                                  width: iconSize,
+                                  height: iconSize,
+                                  fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.medium,
+                                  errorBuilder: (context, error, stack) =>
+                                      fallback(),
+                                )
+                              else
+                                fallback(),
                               if (labels) ...[
                                 const SizedBox(height: 4),
                                 Text(
-                                  s.name,
+                                  entry.name,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: c.text),
+                                  style: labelStyle,
                                 ),
                               ],
                             ],
@@ -558,7 +563,6 @@ class WorkbenchWidgetBody extends StatelessWidget {
       builder: (context, box) {
         final small = box.maxHeight < 200;
         final tiny = box.maxHeight < 100;
-        final c = deskletColors(context);
         final q = quotas.isEmpty ? null : quotas.first;
         final u = usages.isEmpty ? null : usages.first;
         final reset = !api && q!.resetsAt <= data.now;
@@ -575,7 +579,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
         return InkWell(
           onTap: editing ? null : detail,
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(tiny ? 4 : 12),
+            padding: const EdgeInsets.all(4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -606,7 +610,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                _status(context, data, sourceId),
+                if (!fresh) _status(context, data, sourceId),
                 if (!api && !reset && !small) ...[
                   const SizedBox(height: 12),
                   LinearProgressIndicator(
@@ -621,14 +625,6 @@ class WorkbenchWidgetBody extends StatelessWidget {
                         : '${workbenchTime(q!.resetsAt)} 重置',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                if (!editing)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '查看详情',
-                      style: TextStyle(fontSize: 12, color: c.selectedText),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -639,7 +635,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
 
   Widget _smallMessage(BuildContext context, String title, String subtitle) =>
       SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -662,7 +658,7 @@ class _Message extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) => SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(4),
       child: Text(message, style: Theme.of(context).textTheme.bodySmall),
     ),
   );

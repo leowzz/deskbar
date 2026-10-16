@@ -1,3 +1,6 @@
+const shortcutIconPng =
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGMwsAv6D8IMMAYAOewG/V2y8+cAAAAASUVORK5CYII=';
+
 Map<String, dynamic> snapshot({bool expired = false}) {
   final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
   return {
@@ -40,6 +43,7 @@ Map<String, dynamic> snapshot({bool expired = false}) {
         'version': 'shortcut-version',
         'name': '常用应用入口名称很长也能换行',
         'kind': 'app',
+        'icon_png': shortcutIconPng,
       },
     ],
     'capabilities': ['open_session', 'open_shortcut'],

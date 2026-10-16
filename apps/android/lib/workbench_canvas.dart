@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'connection.dart';
+import 'display_preferences.dart';
 import 'layout_repository.dart';
 import 'layout_workspace.dart';
 import 'rawblock.dart';
@@ -22,12 +23,16 @@ class WorkbenchCanvas extends StatefulWidget {
     required this.connection,
     this.workspace,
     this.repository,
-    this.onImmersiveChanged,
+    this.displayPreferences,
+    this.onEditingChanged,
+    this.onConnectionSettings,
   });
   final Connection connection;
   final LayoutWorkspace? workspace;
   final LayoutRepository? repository;
-  final ValueChanged<bool>? onImmersiveChanged;
+  final DisplayPreferences? displayPreferences;
+  final ValueChanged<bool>? onEditingChanged;
+  final VoidCallback? onConnectionSettings;
   @override
   State<WorkbenchCanvas> createState() => _WorkbenchCanvasState();
 }
@@ -38,14 +43,14 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       widget.repository ?? LayoutRepository();
   late final PageController pages = PageController(initialPage: _pageIndex);
   final storage = PageStorageBucket();
+  late final DisplayPreferences display =
+      widget.displayPreferences ?? DisplayPreferences();
+  String? panel, inspectedId;
+  bool reportedEditing = false;
   Size viewport = Size.zero;
   bool bindingQueued = false;
   Timer? _persist;
-  bool loading = true,
-      saving = false,
-      immersive = false,
-      _syncing = false,
-      readOnly = false;
+  bool loading = true, saving = false, _syncing = false, readOnly = false;
   String? warning, _activeId;
   DateTime _lastWheel = DateTime.fromMillisecondsSinceEpoch(0);
   LayoutOrientation orientation = LayoutOrientation.portrait;
@@ -55,6 +60,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   void initState() {
     super.initState();
     workspace.addListener(_changed);
+    display.addListener(_displayChanged);
     widget.connection.addListener(_connectionChanged);
     _activeId = workspace.activePage.id;
     if (widget.workspace != null) {
@@ -88,10 +94,13 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     widget.connection.removeListener(_connectionChanged);
     if (widget.workspace == null) workspace.dispose();
     pages.dispose();
-    if (immersive) {
-      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-    }
+    display.removeListener(_displayChanged);
+    if (widget.displayPreferences == null) display.dispose();
     super.dispose();
+  }
+
+  void _displayChanged() {
+    if (mounted) setState(() {});
   }
 
   void _connectionChanged() {
@@ -168,6 +177,16 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   void _changed() {
     if (!mounted) return;
     _scheduleBinding();
+    if (!workspace.editing) {
+      panel = null;
+      inspectedId = null;
+    }
+    if (reportedEditing != workspace.editing) {
+      reportedEditing = workspace.editing;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onEditingChanged?.call(workspace.editing);
+      });
+    }
     final activeChanged = _activeId != workspace.activePage.id;
     _activeId = workspace.activePage.id;
     setState(() {});
@@ -234,6 +253,10 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   }
 
   void _navigate(String id) {
+    if (workspace.activePage.id != id) {
+      panel = null;
+      inspectedId = null;
+    }
     workspace.setActivePage(id);
   }
 
@@ -243,25 +266,25 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     _navigate(workspace.pages[next].id);
   }
 
-  Future<void> _toggleImmersive() async {
-    setState(() => immersive = !immersive);
-    widget.onImmersiveChanged?.call(immersive);
-    await SystemChrome.setEnabledSystemUIMode(
-      immersive ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
-    );
-  }
+  void _closePanel() => setState(() {
+    panel = null;
+    inspectedId = null;
+  });
+  void _openPanel(String name) => setState(() => panel = name);
 
   @override
   Widget build(BuildContext context) {
     final c = deskletColors(context);
     return PopScope(
-      canPop: !workspace.editing && !immersive && !saving,
+      canPop: !workspace.editing && !display.immersive && !saving,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop || saving) return;
-        if (immersive) {
-          unawaited(_toggleImmersive());
-        } else {
+        if (panel != null) {
+          _closePanel();
+        } else if (workspace.editing) {
           workspace.cancelEdit();
+        } else if (display.immersive) {
+          unawaited(display.setImmersive(false));
         }
       },
       child: Focus(
@@ -283,289 +306,208 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         child: Column(
           children: [
             if (warning != null)
-              Material(
-                color: c.warningBg,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          warning!,
-                          style: TextStyle(color: c.warning, fontSize: 12),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '关闭提示',
-                      onPressed: () => setState(() => warning = null),
-                      icon: const Icon(Icons.close, size: 18),
-                    ),
-                  ],
-                ),
-              ),
-            if (!immersive || workspace.editing)
-              SizedBox(
-                height: 48,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final p in workspace.pages)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 2,
-                                ),
-                                child: TextButton(
-                                  style: TextButton.styleFrom(
-                                    backgroundColor:
-                                        p.id == workspace.activePage.id
-                                        ? c.selection
-                                        : null,
-                                    foregroundColor:
-                                        p.id == workspace.activePage.id
-                                        ? c.selectedText
-                                        : c.muted,
-                                  ),
-                                  onPressed: saving
-                                      ? null
-                                      : () => _navigate(p.id),
-                                  child: Text(
-                                    p.name,
-                                    style: TextStyle(
-                                      fontWeight:
-                                          p.id == workspace.activePage.id
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (workspace.editing)
-                      IconButton(
-                        tooltip: '管理页面',
-                        onPressed: saving ? null : _managePages,
-                        icon: const Icon(Icons.tab_outlined),
-                      )
-                    else
-                      IconButton(
-                        tooltip: '编辑布局',
-                        onPressed: _begin,
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                  ],
-                ),
-              ),
-            if (workspace.editing)
-              SizedBox(
-                height: 48,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 48),
+                child: Material(
+                  color: c.warningBg,
                   child: Row(
                     children: [
-                      IconButton(
-                        tooltip: '撤销',
-                        onPressed: workspace.canUndo && !saving
-                            ? workspace.undo
-                            : null,
-                        icon: const Icon(Icons.undo),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            warning!,
+                            style: TextStyle(color: c.warning, fontSize: 12),
+                          ),
+                        ),
                       ),
                       IconButton(
-                        tooltip: '重做',
-                        onPressed: workspace.canRedo && !saving
-                            ? workspace.redo
-                            : null,
-                        icon: const Icon(Icons.redo),
-                      ),
-                      TextButton.icon(
-                        onPressed: saving ? null : _addWidget,
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('添加组件'),
-                      ),
-                      TextButton.icon(
-                        onPressed: saving ? null : _components,
-                        icon: const Icon(Icons.layers_outlined, size: 18),
-                        label: const Text('显示的组件'),
-                      ),
-                      TextButton(
-                        onPressed: saving
-                            ? null
-                            : () => _result(workspace.arrangePage(orientation)),
-                        child: const Text('整理本页'),
-                      ),
-                      TextButton(
-                        onPressed: saving ? null : workspace.cancelEdit,
-                        child: const Text('取消'),
-                      ),
-                      FilledButton(
-                        onPressed: saving ? null : _finish,
-                        child: Text(saving ? '保存中…' : '完成'),
+                        tooltip: '关闭提示',
+                        onPressed: () => setState(() => warning = null),
+                        icon: const Icon(Icons.close, size: 18),
                       ),
                     ],
                   ),
                 ),
               ),
+            if (workspace.editing) _editToolbar(),
             Expanded(
-              child: loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : LayoutBuilder(
-                      builder: (context, box) {
-                        viewport = box.biggest;
-                        orientation =
-                            MediaQuery.orientationOf(context) ==
-                                Orientation.landscape
-                            ? LayoutOrientation.wide
-                            : LayoutOrientation.portrait;
-                        return Listener(
-                          onPointerSignal: (event) {
-                            if (event is PointerScrollEvent &&
-                                !workspace.editing &&
-                                event.scrollDelta.dx.abs() >
-                                    event.scrollDelta.dy.abs() &&
-                                event.scrollDelta.dx.abs() > 8 &&
-                                DateTime.now()
-                                        .difference(_lastWheel)
-                                        .inMilliseconds >
-                                    550) {
-                              _lastWheel = DateTime.now();
-                              _step(event.scrollDelta.dx > 0 ? 1 : -1);
-                            }
-                          },
-                          child: PageStorage(
-                            bucket: storage,
-                            child: AbsorbPointer(
-                              absorbing: saving,
-                              child: PageView.builder(
-                                controller: pages,
-                                physics: workspace.editing
-                                    ? const NeverScrollableScrollPhysics()
-                                    : const PageScrollPhysics(),
-                                onPageChanged: (index) {
-                                  if (!_syncing &&
-                                      index < workspace.pages.length) {
-                                    _navigate(workspace.pages[index].id);
-                                  }
-                                },
-                                itemCount: workspace.pages.length,
-                                itemBuilder: (context, index) =>
-                                    _page(workspace.pages[index], box.biggest),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            if (workspace.focusedWidgetId != null &&
-                MediaQuery.sizeOf(context).height >= 400)
-              SizedBox(
-                height: 48,
-                child: TextButton.icon(
-                  onPressed: workspace.clearFocus,
-                  icon: const Icon(Icons.fullscreen_exit),
-                  label: const Text('还原组合'),
-                ),
-              ),
-            if (!workspace.editing || immersive)
-              SizedBox(
-                height: 48,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (!workspace.editing && !immersive)
-                      IconButton(
-                        tooltip: '上一页',
-                        onPressed: _pageIndex > 0 ? () => _step(-1) : null,
-                        icon: const Icon(Icons.chevron_left),
-                      ),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            for (var i = 0; i < workspace.pages.length; i++)
-                              Semantics(
-                                selected: i == _pageIndex,
-                                label:
-                                    '第 ${i + 1} 页，${workspace.pages[i].name}',
-                                child: TextButton(
-                                  style: TextButton.styleFrom(
-                                    minimumSize: const Size(48, 48),
-                                    foregroundColor: i == _pageIndex
-                                        ? c.selectedText
-                                        : c.muted,
-                                  ),
-                                  onPressed: saving
-                                      ? null
-                                      : () => _navigate(workspace.pages[i].id),
-                                  child: Text(
-                                    '${i + 1}',
-                                    style: TextStyle(
-                                      fontWeight: i == _pageIndex
-                                          ? FontWeight.w700
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  orientation =
+                      MediaQuery.orientationOf(context) == Orientation.landscape
+                      ? LayoutOrientation.wide
+                      : LayoutOrientation.portrait;
+                  final canvas = loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _canvas();
+                  if (!workspace.editing || panel == null) return canvas;
+                  final inspector = _editorPanel();
+                  if (box.maxWidth > box.maxHeight) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: canvas),
+                        SizedBox(
+                          width: math.min(320, box.maxWidth * .44),
+                          child: inspector,
                         ),
-                      ),
-                    ),
-                    if (!workspace.editing && !immersive)
-                      IconButton(
-                        tooltip: '下一页',
-                        onPressed: _pageIndex < workspace.pages.length - 1
-                            ? () => _step(1)
-                            : null,
-                        icon: const Icon(Icons.chevron_right),
-                      ),
-                    IconButton(
-                      tooltip: immersive ? '退出沉浸' : '沉浸显示',
-                      onPressed: _toggleImmersive,
-                      icon: Icon(
-                        immersive ? Icons.fullscreen_exit : Icons.fullscreen,
-                      ),
-                    ),
-                    if (immersive && !workspace.editing)
-                      IconButton(
-                        tooltip: '编辑布局',
-                        onPressed: _begin,
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                  ],
-                ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      Expanded(child: canvas),
+                      SizedBox(height: box.maxHeight * .54, child: inspector),
+                    ],
+                  );
+                },
               ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _page(LayoutPage page, Size size) {
-    final visible = page.widgets
-        .where(
-          (w) =>
-              w.visible &&
-              (workspace.focusedWidgetId == null ||
-                  workspace.focusedWidgetId == w.id),
-        )
-        .toList();
+  Widget _editToolbar() => Material(
+    color: deskletColors(context).sidebar,
+    child: SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          TextButton(
+            onPressed: saving ? null : workspace.cancelEdit,
+            child: const Text('取消'),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  PopupMenuButton<String>(
+                    tooltip: '切换编辑页面',
+                    enabled: !saving,
+                    onSelected: _navigate,
+                    itemBuilder: (context) => [
+                      for (final p in workspace.pages)
+                        PopupMenuItem(value: p.id, child: Text(p.name)),
+                    ],
+                    child: SizedBox(
+                      height: 48,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: [
+                            Text(
+                              '${_pageIndex + 1}/${workspace.pages.length} ${workspace.activePage.name}',
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.expand_more, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '撤销',
+                    onPressed: workspace.canUndo && !saving
+                        ? workspace.undo
+                        : null,
+                    icon: const Icon(Icons.undo),
+                  ),
+                  IconButton(
+                    tooltip: '重做',
+                    onPressed: workspace.canRedo && !saving
+                        ? workspace.redo
+                        : null,
+                    icon: const Icon(Icons.redo),
+                  ),
+                  IconButton(
+                    tooltip: '添加组件',
+                    onPressed: saving ? null : _addWidget,
+                    icon: const Icon(Icons.add),
+                  ),
+                  IconButton(
+                    tooltip: '显示的组件',
+                    onPressed: saving ? null : _components,
+                    icon: const Icon(Icons.layers_outlined),
+                  ),
+                  IconButton(
+                    tooltip: '管理页面',
+                    onPressed: saving ? null : _managePages,
+                    icon: const Icon(Icons.tab_outlined),
+                  ),
+                  IconButton(
+                    tooltip: '整理本页',
+                    onPressed: saving
+                        ? null
+                        : () => _result(workspace.arrangePage(orientation)),
+                    icon: const Icon(Icons.auto_awesome_mosaic_outlined),
+                  ),
+                  IconButton(
+                    tooltip: '显示设置',
+                    onPressed: saving ? null : () => _openPanel('display'),
+                    icon: const Icon(Icons.settings_display_outlined),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          FilledButton(
+            onPressed: saving ? null : _finish,
+            child: Text(saving ? '保存中…' : '完成'),
+          ),
+        ],
+      ),
+    ),
+  );
+  Widget _canvas() => LayoutBuilder(
+    builder: (context, box) {
+      viewport = box.biggest;
+      return Listener(
+        onPointerSignal: (event) {
+          if (event is PointerScrollEvent &&
+              !workspace.editing &&
+              event.scrollDelta.dx.abs() > event.scrollDelta.dy.abs() &&
+              event.scrollDelta.dx.abs() > 8 &&
+              DateTime.now().difference(_lastWheel).inMilliseconds > 550) {
+            _lastWheel = DateTime.now();
+            _step(event.scrollDelta.dx > 0 ? 1 : -1);
+          }
+        },
+        child: PageStorage(
+          bucket: storage,
+          child: AbsorbPointer(
+            absorbing: saving,
+            child: PageView.builder(
+              controller: pages,
+              physics: workspace.editing
+                  ? const NeverScrollableScrollPhysics()
+                  : const PageScrollPhysics(),
+              onPageChanged: (index) {
+                if (!_syncing && index < workspace.pages.length) {
+                  _navigate(workspace.pages[index].id);
+                }
+              },
+              itemCount: workspace.pages.length,
+              itemBuilder: (context, index) => _page(workspace.pages[index]),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  Widget _page(LayoutPage page) {
+    final visible = page.widgets.where((w) => w.visible).toList();
     return Padding(
-      padding: const EdgeInsets.all(4),
+      padding: EdgeInsets.all(workspace.editing ? 4 : 2),
       child: LayoutBuilder(
         builder: (context, box) => Stack(
           children: [
             Positioned.fill(
               child: GestureDetector(
+                key: ValueKey('page-edit-background-${page.id}'),
                 behavior: HitTestBehavior.opaque,
                 onLongPress: workspace.editing ? null : _begin,
                 onTap: workspace.editing
@@ -582,27 +524,17 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               ),
             ),
             if (visible.isEmpty)
-              Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '这一页是空的',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('添加组件，或恢复已隐藏的组件。'),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: () {
-                          if (!workspace.editing) _begin();
-                          _components();
-                        },
-                        child: const Text('选择组件'),
-                      ),
-                    ],
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPress: workspace.editing ? null : _begin,
+                  child: Center(
+                    child: workspace.editing
+                        ? OutlinedButton(
+                            onPressed: _components,
+                            child: const Text('选择组件'),
+                          )
+                        : const SizedBox(),
                   ),
                 ),
               ),
@@ -616,6 +548,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 connection: widget.connection,
                 onError: _toast,
                 onSettings: () => _inspect(w.id),
+                onEditRequested: _begin,
               ),
           ],
         ),
@@ -623,11 +556,110 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     );
   }
 
+  Widget _editorPanel() {
+    final title = switch (panel) {
+      'widget' =>
+        '${widgetTypeName(workspace.findWidget(inspectedId)?.type ?? '')}设置',
+      'components' => '显示的组件',
+      'pages' => '管理页面',
+      'add' => '添加组件',
+      _ => '显示设置',
+    };
+    final body = switch (panel) {
+      'widget' => _widgetInspector(),
+      'components' => _componentsBody(),
+      'pages' => _pagesBody(),
+      'add' => ListView(
+        children: [
+          for (final t in ['sessions', 'usage', 'shortcuts'])
+            ListTile(
+              title: Text(widgetTypeName(t)),
+              onTap: () => _createWidget(t),
+            ),
+        ],
+      ),
+      _ => _displayBody(),
+    };
+    return Material(
+      color: deskletColors(context).surface,
+      child: Column(
+        children: [
+          SizedBox(
+            height: 48,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '关闭设置',
+                  onPressed: _closePanel,
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: AbsorbPointer(
+              absorbing: saving,
+              child: KeyedSubtree(
+                key: ValueKey('editor-panel-$panel-${inspectedId ?? ''}'),
+                child: body,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _displayBody() => ListenableBuilder(
+    listenable: display,
+    builder: (context, _) => ListView(
+      padding: const EdgeInsets.all(8),
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('沉浸显示'),
+          value: display.immersive,
+          onChanged: display.setImmersive,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('锁定旋转'),
+          subtitle: const Text('保持当前方向'),
+          value: display.rotationLocked,
+          onChanged: display.setRotationLocked,
+        ),
+        if (display.error != null)
+          Text(
+            display.error!,
+            style: TextStyle(color: deskletColors(context).warning),
+          ),
+        if (widget.onConnectionSettings != null)
+          TextButton.icon(
+            onPressed: widget.onConnectionSettings,
+            icon: const Icon(Icons.computer_outlined),
+            label: const Text('连接与外观设置'),
+          ),
+      ],
+    ),
+  );
+
   Future<String?> _askName(String title, String initial) async {
     final controller = TextEditingController(text: initial);
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: TextField(
           controller: controller,
@@ -660,159 +692,96 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   }
 
   Future<void> _managePages() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ListenableBuilder(
-          listenable: workspace,
-          builder: (context, _) => SizedBox(
-            height: MediaQuery.sizeOf(context).height * .75,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '管理页面',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () async {
-                          final name = await _askName('新建空白页', '新页面');
-                          if (name != null && mounted) {
-                            workspace.addPage(name: name);
-                          }
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('新建'),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    buildDefaultDragHandles: false,
-                    onReorderItem: (oldIndex, newIndex) {
-                      _result(
-                        workspace.movePage(
-                          workspace.pages[oldIndex].id,
-                          newIndex,
-                        ),
-                      );
-                    },
-                    itemCount: workspace.pages.length,
-                    itemBuilder: (context, index) {
-                      final p = workspace.pages[index];
-                      return ListTile(
-                        key: ValueKey(p.id),
-                        leading: ReorderableDragStartListener(
-                          index: index,
-                          child: const SizedBox(
-                            width: 48,
-                            height: 48,
-                            child: Icon(Icons.drag_handle),
-                          ),
-                        ),
-                        title: Text(p.name),
-                        subtitle: Text('${p.widgets.length} 个组件'),
-                        onTap: () => _navigate(p.id),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: '重命名 ${p.name}',
-                              onPressed: () async {
-                                final name = await _askName('重命名页面', p.name);
-                                if (name != null && mounted) {
-                                  _result(workspace.renamePage(p.id, name));
-                                }
-                              },
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            IconButton(
-                              tooltip: '删除 ${p.name}',
-                              onPressed: workspace.pages.length > 1
-                                  ? () async {
-                                      final confirmed = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          title: Text('删除「${p.name}」？'),
-                                          content: const Text(
-                                            '页面和其中的组件会一并删除。本次编辑完成前可以撤销。',
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(context, false),
-                                              child: const Text('取消'),
-                                            ),
-                                            FilledButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(context, true),
-                                              child: const Text('删除页面'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                      if (confirmed == true && mounted) {
-                                        _result(workspace.deletePage(p.id));
-                                      }
-                                    }
-                                  : null,
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('返回布局'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    _openPanel('pages');
   }
 
-  Future<void> _addWidget() async {
-    final type = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                '添加组件',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            for (final t in ['sessions', 'usage', 'shortcuts'])
-              ListTile(
-                leading: Icon(
-                  t == 'sessions'
-                      ? Icons.view_agenda_outlined
-                      : t == 'usage'
-                      ? Icons.pie_chart_outline
-                      : Icons.apps,
-                ),
-                title: Text(widgetTypeName(t)),
-                onTap: () => Navigator.pop(context, t),
-              ),
-          ],
+  Widget _pagesBody() => Column(
+    children: [
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () async {
+            final name = await _askName('新建空白页', '新页面');
+            if (name != null && mounted) workspace.addPage(name: name);
+          },
+          icon: const Icon(Icons.add),
+          label: const Text('新建页面'),
         ),
       ),
-    );
-    if (type == null || !mounted) return;
+      Expanded(
+        child: ReorderableListView.builder(
+          buildDefaultDragHandles: false,
+          onReorderItem: (oldIndex, newIndex) => _result(
+            workspace.movePage(workspace.pages[oldIndex].id, newIndex),
+          ),
+          itemCount: workspace.pages.length,
+          itemBuilder: (context, index) {
+            final p = workspace.pages[index];
+            return ListTile(
+              key: ValueKey(p.id),
+              contentPadding: EdgeInsets.zero,
+              leading: ReorderableDragStartListener(
+                index: index,
+                child: const SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Icon(Icons.drag_handle),
+                ),
+              ),
+              title: Text(p.name),
+              onTap: () => _navigate(p.id),
+              trailing: PopupMenuButton<String>(
+                tooltip: '页面操作 ${p.name}',
+                onSelected: (action) async {
+                  if (action == 'rename') {
+                    final name = await _askName('重命名页面', p.name);
+                    if (name != null && mounted) {
+                      _result(workspace.renamePage(p.id, name));
+                    }
+                  } else {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        scrollable: true,
+                        title: Text('删除「${p.name}」？'),
+                        content: const Text('页面和其中的组件会一并删除。本次编辑完成前可以撤销。'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('删除页面'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true && mounted) {
+                      _result(workspace.deletePage(p.id));
+                    }
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'rename', child: Text('重命名')),
+                  PopupMenuItem(
+                    value: 'delete',
+                    enabled: workspace.pages.length > 1,
+                    child: const Text('删除'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    ],
+  );
+  Future<void> _addWidget() async {
+    _openPanel('add');
+  }
+
+  Future<void> _createWidget(String type) async {
     Map<String, dynamic> binding() => {
       if (widget.connection.data != null)
         'hostId': widget.connection.data!.hostId,
@@ -861,236 +830,166 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   }
 
   Future<void> _components() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ListenableBuilder(
-          listenable: workspace,
-          builder: (context, _) => ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * .75,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    title: Text(
-                      '显示的组件',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    subtitle: const Text('隐藏会保留参数与位置。'),
-                  ),
-                  for (final w in workspace.activePage.widgets)
-                    ListTile(
-                      leading: Checkbox(
-                        value: w.visible,
-                        onChanged: (v) => _result(
-                          workspace.setWidgetVisible(w.id, v ?? false),
-                        ),
-                      ),
-                      title: Text(
-                        w.title.isEmpty ? widgetTypeName(w.type) : w.title,
-                      ),
-                      subtitle: Text(widgetTypeName(w.type)),
-                      trailing: IconButton(
-                        tooltip: '设置组件',
-                        onPressed: () {
-                          Navigator.pop(context);
-                          workspace.selectWidget(w.id);
-                          unawaited(_inspect(w.id));
-                        },
-                        icon: const Icon(Icons.tune),
-                      ),
-                    ),
-                  if (workspace.activePage.widgets.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text('新页面从空白开始，可以重复添加同类组件。'),
-                    ),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      unawaited(_addWidget());
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('添加组件'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    _openPanel('components');
   }
 
+  Widget _componentsBody() => ListView(
+    children: [
+      for (final w in workspace.activePage.widgets)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Checkbox(
+            value: w.visible,
+            onChanged: (v) =>
+                _result(workspace.setWidgetVisible(w.id, v ?? false)),
+          ),
+          title: Text(w.title.isEmpty ? widgetTypeName(w.type) : w.title),
+          onTap: () => _inspect(w.id),
+          trailing: IconButton(
+            tooltip: '设置组件',
+            onPressed: () => _inspect(w.id),
+            icon: const Icon(Icons.tune),
+          ),
+        ),
+      if (workspace.activePage.widgets.isEmpty)
+        const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text('新页面从空白开始，可以重复添加同类组件。'),
+        ),
+      TextButton.icon(
+        onPressed: _addWidget,
+        icon: const Icon(Icons.add),
+        label: const Text('添加组件'),
+      ),
+    ],
+  );
   Future<void> _inspect(String id) async {
     workspace.selectWidget(id);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ListenableBuilder(
-          listenable: workspace,
-          builder: (context, _) {
-            final w = workspace.findWidget(id);
-            if (w == null) {
-              return const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('组件已移除，可撤销恢复。'),
-              );
-            }
-            return SizedBox(
-              height: MediaQuery.sizeOf(context).height * .8,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      '${widgetTypeName(w.type)}设置',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      key: ValueKey('title-$id'),
-                      initialValue: w.title,
-                      decoration: const InputDecoration(labelText: '组件标题'),
-                      onChanged: (v) => workspace.updateWidget(id, title: v),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('显示标题'),
-                      value: w.options['showTitle'] != false,
-                      onChanged: (v) =>
-                          workspace.updateWidget(id, options: {'showTitle': v}),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('显示组件'),
-                      value: w.visible,
-                      onChanged: (v) =>
-                          _result(workspace.setWidgetVisible(id, v)),
-                    ),
-                    _bindingControls(w),
-                    const SizedBox(height: 16),
-                    Text(
-                      orientation == LayoutOrientation.wide ? '横屏摆放' : '竖屏摆放',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const Text('拖动标题移动，拖动右下角缩放。冲突时保留原位置。'),
-                    for (final field in ['w', 'h', 'x', 'y'])
-                      _placementSlider(w, field),
-                    const Divider(),
-                    if (w.type == 'sessions') ...[
-                      _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
-                      _optionSlider(w, 'itemHeight', '卡片目标高度', 64, 400, 96),
-                      _optionSlider(w, 'gap', '卡片间距', 0, 40, 12),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('自动铺满完整行'),
-                        subtitle: const Text('根据目标高度计算完整行数，大字号时增加最小高度。'),
-                        value: w.options['fitRows'] != false,
-                        onChanged: (v) =>
-                            workspace.updateWidget(id, options: {'fitRows': v}),
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: w.options['density'] == 'compact'
-                            ? 'compact'
-                            : 'normal',
-                        decoration: const InputDecoration(labelText: '会话信息'),
-                        items: const [
-                          DropdownMenuItem(value: 'normal', child: Text('标准')),
-                          DropdownMenuItem(value: 'compact', child: Text('精简')),
-                        ],
-                        onChanged: (v) =>
-                            workspace.updateWidget(id, options: {'density': v}),
-                      ),
-                    ],
-                    if (w.type == 'shortcuts') ...[
-                      _optionSlider(w, 'iconSize', '图标尺寸', 24, 200, 56),
-                      _optionSlider(w, 'gapX', '横向间距', 0, 64, 16),
-                      _optionSlider(w, 'gapY', '纵向间距', 0, 64, 16),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('显示名称'),
-                        value: w.options['labels'] != false,
-                        onChanged: (v) =>
-                            workspace.updateWidget(id, options: {'labels': v}),
-                      ),
-                    ],
-                    if (w.type == 'usage')
-                      DropdownButtonFormField<String>(
-                        initialValue: w.options['content'] == 'api'
-                            ? 'api'
-                            : 'quota',
-                        decoration: const InputDecoration(labelText: '用量内容'),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'quota',
-                            child: Text('Codex 额度'),
-                          ),
-                          DropdownMenuItem(value: 'api', child: Text('API 用量')),
-                        ],
-                        onChanged: (v) => workspace.updateWidget(
-                          id,
-                          options: {'content': v},
-                          binding: {
-                            if (widget.connection.data != null)
-                              'hostId': widget.connection.data!.hostId,
-                            'source': v == 'api'
-                                ? 'sub2api.usage'
-                                : 'codex.quota',
-                          },
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        workspace.toggleFocus(id);
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.fullscreen),
-                      label: const Text('临时铺满'),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: '移到其他页面'),
-                      items: [
-                        for (final p in workspace.pages.where(
-                          (p) => p.id != workspace.activePage.id,
-                        ))
-                          DropdownMenuItem(value: p.id, child: Text(p.name)),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          final ok = workspace.moveWidgetToPage(id, v);
-                          _result(ok);
-                          if (ok) Navigator.pop(context);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () {
-                        workspace.removeWidget(id);
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('删除组件'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('返回布局'),
-                    ),
-                  ],
-                ),
+    setState(() {
+      panel = 'widget';
+      inspectedId = id;
+    });
+  }
+
+  Widget _widgetInspector() {
+    final id = inspectedId;
+    final w = workspace.findWidget(id);
+    if (id == null || w == null) {
+      return const Center(child: Text('组件已移除，可撤销恢复。'));
+    }
+    return SingleChildScrollView(
+      key: PageStorageKey('widget-inspector-$id'),
+      primary: false,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _WidgetNameField(
+            key: ValueKey('name-editor-$id'),
+            id: id,
+            value: w.title,
+            onChanged: (v) => workspace.updateWidget(id, title: v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('显示组件'),
+            value: w.visible,
+            onChanged: (v) => _result(workspace.setWidgetVisible(id, v)),
+          ),
+          _bindingControls(w),
+          const SizedBox(height: 16),
+          Text(
+            orientation == LayoutOrientation.wide ? '横屏摆放' : '竖屏摆放',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const Text('拖动组件把手移动，拖动缩放把手调整大小。'),
+          for (final field in ['w', 'h', 'x', 'y']) _placementSlider(w, field),
+          const Divider(),
+          if (w.type == 'sessions') ...[
+            _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
+            _optionSlider(w, 'itemHeight', '卡片目标高度', 64, 400, 96),
+            _optionSlider(w, 'gap', '卡片间距', 0, 40, 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('自动铺满完整行'),
+              subtitle: const Text('根据目标高度计算完整行数，大字号时增加最小高度。'),
+              value: w.options['fitRows'] != false,
+              onChanged: (v) =>
+                  workspace.updateWidget(id, options: {'fitRows': v}),
+            ),
+            DropdownButtonFormField<String>(
+              key: ValueKey('density-$id-${w.options['density']}'),
+              initialValue: w.options['density'] == 'compact'
+                  ? 'compact'
+                  : 'normal',
+              decoration: const InputDecoration(labelText: '会话信息'),
+              items: const [
+                DropdownMenuItem(value: 'normal', child: Text('标准')),
+                DropdownMenuItem(value: 'compact', child: Text('精简')),
+              ],
+              onChanged: (v) =>
+                  workspace.updateWidget(id, options: {'density': v}),
+            ),
+          ],
+          if (w.type == 'shortcuts') ...[
+            _optionSlider(w, 'iconSize', '图标尺寸', 24, 200, 56),
+            _optionSlider(w, 'gapX', '横向间距', 0, 64, 16),
+            _optionSlider(w, 'gapY', '纵向间距', 0, 64, 16),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('显示名称'),
+              value: w.options['labels'] != false,
+              onChanged: (v) =>
+                  workspace.updateWidget(id, options: {'labels': v}),
+            ),
+          ],
+          if (w.type == 'usage')
+            DropdownButtonFormField<String>(
+              key: ValueKey('content-$id-${w.options['content']}'),
+              initialValue: w.options['content'] == 'api' ? 'api' : 'quota',
+              decoration: const InputDecoration(labelText: '用量内容'),
+              items: const [
+                DropdownMenuItem(value: 'quota', child: Text('Codex 额度')),
+                DropdownMenuItem(value: 'api', child: Text('API 用量')),
+              ],
+              onChanged: (v) => workspace.updateWidget(
+                id,
+                options: {'content': v},
+                binding: {
+                  if (widget.connection.data != null)
+                    'hostId': widget.connection.data!.hostId,
+                  'source': v == 'api' ? 'sub2api.usage' : 'codex.quota',
+                },
               ),
-            );
-          },
-        ),
+            ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            key: ValueKey('move-$id'),
+            decoration: const InputDecoration(labelText: '移到其他页面'),
+            items: [
+              for (final p in workspace.pages.where(
+                (p) => p.id != workspace.activePage.id,
+              ))
+                DropdownMenuItem(value: p.id, child: Text(p.name)),
+            ],
+            onChanged: (v) {
+              if (v != null) {
+                final ok = workspace.moveWidgetToPage(id, v);
+                _result(ok);
+                if (ok) _closePanel();
+              }
+            },
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: () {
+              workspace.removeWidget(id);
+              _closePanel();
+            },
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('删除组件'),
+          ),
+        ],
       ),
     );
   }
@@ -1295,6 +1194,55 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   );
 }
 
+/// Keep the same editor and focus while external undo/redo updates its value.
+class _WidgetNameField extends StatefulWidget {
+  const _WidgetNameField({
+    super.key,
+    required this.id,
+    required this.value,
+    required this.onChanged,
+  });
+  final String id, value;
+  final ValueChanged<String> onChanged;
+  @override
+  State<_WidgetNameField> createState() => _WidgetNameFieldState();
+}
+
+class _WidgetNameFieldState extends State<_WidgetNameField> {
+  late final TextEditingController controller = TextEditingController(
+    text: widget.value,
+  );
+  @override
+  void didUpdateWidget(covariant _WidgetNameField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (controller.text != widget.value) {
+      final previous = controller.selection.extentOffset;
+      controller.value = TextEditingValue(
+        text: widget.value,
+        selection: TextSelection.collapsed(
+          offset: previous < 0
+              ? widget.value.length
+              : math.min(previous, widget.value.length),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+    key: ValueKey('title-${widget.id}'),
+    controller: controller,
+    decoration: const InputDecoration(labelText: '组件名称'),
+    onChanged: widget.onChanged,
+  );
+}
+
 class _PlacedWidget extends StatefulWidget {
   const _PlacedWidget({
     super.key,
@@ -1305,6 +1253,7 @@ class _PlacedWidget extends StatefulWidget {
     required this.connection,
     required this.onError,
     required this.onSettings,
+    required this.onEditRequested,
   });
   final LayoutWidget widget;
   final LayoutOrientation orientation;
@@ -1313,6 +1262,7 @@ class _PlacedWidget extends StatefulWidget {
   final Connection connection;
   final ValueChanged<String> onError;
   final VoidCallback onSettings;
+  final VoidCallback onEditRequested;
   @override
   State<_PlacedWidget> createState() => _PlacedWidgetState();
 }
@@ -1397,186 +1347,116 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
   @override
   Widget build(BuildContext context) {
     final c = deskletColors(context);
-    final focused = widget.workspace.focusedWidgetId == widget.widget.id;
-    final r = focused
-        ? GridPlacement(
-            x: 0,
-            y: 0,
-            w: widget.orientation.columns,
-            h: widget.orientation.rows,
-          )
-        : candidate ?? widget.widget.placementFor(widget.orientation);
+    final r = candidate ?? widget.widget.placementFor(widget.orientation);
     final cw = widget.size.width / widget.orientation.columns,
         ch = widget.size.height / widget.orientation.rows;
+    final gap = editing ? 4.0 : 2.0;
     final selected =
         editing && widget.workspace.selectedWidgetId == widget.widget.id;
-    final showTitle = editing || widget.widget.options['showTitle'] != false;
+    final body = WorkbenchWidgetBody(
+      connection: widget.connection,
+      id: widget.widget.id,
+      type: widget.widget.type,
+      options: widget.widget.options,
+      binding: widget.widget.binding,
+      editing: editing,
+      onEditRequested: widget.onEditRequested,
+    );
     return Positioned(
-      left: r.x * cw + 4,
-      top: r.y * ch + 4,
-      width: math.max(0, r.w * cw - 8),
-      height: math.max(0, r.h * ch - 8),
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: editing
-            ? () => widget.workspace.selectWidget(widget.widget.id)
-            : null,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: c.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: !valid
-                  ? c.danger
-                  : selected
-                  ? c.focus
-                  : c.line,
-              width: selected || !valid ? 2 : 1,
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LayoutBuilder(
-              builder: (context, box) {
-                if (box.maxHeight < 48 ||
-                    box.maxWidth < (editing ? 160 : 112)) {
-                  final label = widget.widget.title.isEmpty
-                      ? widgetTypeName(widget.widget.type)
-                      : widget.widget.title;
-                  return Tooltip(
-                    message: label,
-                    child: InkWell(
-                      onTap: editing
-                          ? widget.onSettings
-                          : () =>
-                                widget.workspace.toggleFocus(widget.widget.id),
-                      child: Center(
-                        child: Icon(
-                          editing ? Icons.tune : Icons.fullscreen,
-                          size: math.max(
-                            1,
-                            math.min(20, math.min(box.maxWidth, box.maxHeight)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-                return Stack(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (showTitle)
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onPanStart: editing && !focused
-                                ? (_) => _start()
-                                : null,
-                            onPanUpdate: editing && !focused
-                                ? (d) => _update(d, false)
-                                : null,
-                            onPanEnd: editing && !focused
-                                ? (_) => _end()
-                                : null,
-                            onPanCancel: () => setState(() => candidate = null),
-                            child: Container(
-                              height: 48,
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(color: c.line),
+      left: r.x * cw + gap / 2,
+      top: r.y * ch + gap / 2,
+      width: math.max(0, r.w * cw - gap),
+      height: math.max(0, r.h * ch - gap),
+      child: editing
+          ? GestureDetector(
+              onTap: () => widget.workspace.selectWidget(widget.widget.id),
+              child: DecoratedBox(
+                key: ValueKey('widget-edit-frame-${widget.widget.id}'),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: !valid
+                        ? c.danger
+                        : selected
+                        ? c.focus
+                        : c.line,
+                    width: selected || !valid ? 2 : 1,
+                  ),
+                ),
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final name = widgetTypeName(widget.widget.type);
+                    if (box.maxWidth < 96 || box.maxHeight < 48) {
+                      return Tooltip(
+                        message: '设置$name',
+                        child: InkWell(
+                          onTap: widget.onSettings,
+                          child: Center(
+                            child: Icon(
+                              Icons.tune,
+                              size: math.max(
+                                1,
+                                math.min(
+                                  18,
+                                  math.min(box.maxWidth, box.maxHeight),
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  const SizedBox(width: 12),
-                                  if (editing) ...[
-                                    const Icon(Icons.drag_indicator, size: 18),
-                                    const SizedBox(width: 4),
-                                  ],
-                                  Expanded(
-                                    child: Text(
-                                      widget.widget.title.isEmpty
-                                          ? widgetTypeName(widget.widget.type)
-                                          : widget.widget.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color: c.text,
-                                          ),
-                                    ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    final header = Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: widget.onSettings,
+                            onPanStart: (_) => _start(),
+                            onPanUpdate: (d) => _update(d, false),
+                            onPanEnd: (_) => _end(),
+                            onPanCancel: () => setState(() => candidate = null),
+                            child: Tooltip(
+                              message: '设置$name',
+                              child: SizedBox(
+                                height: 48,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
                                   ),
-                                  if (editing)
-                                    IconButton(
-                                      tooltip:
-                                          '设置${widgetTypeName(widget.widget.type)}',
-                                      onPressed: widget.onSettings,
-                                      icon: const Icon(Icons.tune, size: 18),
-                                    )
-                                  else
-                                    IconButton(
-                                      tooltip: focused
-                                          ? '还原组合'
-                                          : '临时铺满${widgetTypeName(widget.widget.type)}',
-                                      onPressed: () => widget.workspace
-                                          .toggleFocus(widget.widget.id),
-                                      icon: Icon(
-                                        focused
-                                            ? Icons.fullscreen_exit
-                                            : Icons.fullscreen,
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.drag_indicator,
                                         size: 18,
                                       ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        Expanded(
-                          child: IgnorePointer(
-                            ignoring: editing,
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                right: !showTitle ? 48 : 0,
-                              ),
-                              child: WorkbenchWidgetBody(
-                                connection: widget.connection,
-                                id: widget.widget.id,
-                                type: widget.widget.type,
-                                options: widget.widget.options,
-                                binding: widget.widget.binding,
-                                editing: editing,
+                                      if (box.maxWidth >= 156)
+                                        Expanded(
+                                          child: Text(
+                                            name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    if (!showTitle)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: IconButton(
-                          tooltip: focused
-                              ? '还原组合'
-                              : '临时铺满${widgetTypeName(widget.widget.type)}',
-                          onPressed: () =>
-                              widget.workspace.toggleFocus(widget.widget.id),
-                          icon: Icon(
-                            focused ? Icons.fullscreen_exit : Icons.fullscreen,
-                            size: 18,
+                        if (box.maxWidth >= 192)
+                          IconButton(
+                            tooltip: '设置$name',
+                            onPressed: widget.onSettings,
+                            icon: const Icon(Icons.tune, size: 18),
                           ),
-                        ),
-                      ),
-                    if (editing && !focused)
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Semantics(
-                          label: '拖动缩放${widgetTypeName(widget.widget.type)}',
+                        Semantics(
+                          label: '拖动缩放$name',
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onPanStart: (_) => _start(),
@@ -1586,34 +1466,29 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
                             child: SizedBox(
                               width: 48,
                               height: 48,
-                              child: Align(
-                                alignment: Alignment.bottomRight,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: c.selection,
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(8),
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    Icons.open_in_full,
-                                    size: 18,
-                                    color: c.selectedText,
-                                  ),
-                                ),
+                              child: Icon(
+                                Icons.open_in_full,
+                                size: 18,
+                                color: c.selectedText,
                               ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ),
+                      ],
+                    );
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(height: 48, child: header),
+                        if (box.maxHeight > 48)
+                          Expanded(child: IgnorePointer(child: body)),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            )
+          : body,
     );
   }
 }

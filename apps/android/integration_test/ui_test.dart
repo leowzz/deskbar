@@ -1,4 +1,5 @@
 import 'package:desklet/connection.dart';
+import 'package:desklet/display_preferences.dart';
 import 'package:desklet/layout_workspace.dart';
 import 'package:desklet/rawblock.dart';
 import 'package:desklet/workbench_canvas.dart';
@@ -65,6 +66,8 @@ void main() {
       ..data = WorkbenchData(value)
       ..phase = ConnectionPhase.online;
     final workspace = LayoutWorkspace();
+    final display = DisplayPreferences();
+    addTearDown(display.dispose);
     addTearDown(connection.dispose);
     addTearDown(workspace.dispose);
     Future<void> render(Brightness brightness) async {
@@ -73,16 +76,18 @@ void main() {
           debugShowCheckedModeBanner: false,
           theme: rawBlockTheme(brightness),
           home: Scaffold(
-            appBar: AppBar(title: const Text('Desklet 工作台')),
             body: SafeArea(
               child: WorkbenchCanvas(
                 connection: connection,
                 workspace: workspace,
+                displayPreferences: display,
               ),
             ),
           ),
         ),
       );
+      await tester.pumpAndSettle();
+      await display.setWorkbenchActive(true);
       await tester.pumpAndSettle();
     }
 
@@ -90,24 +95,35 @@ void main() {
     expect(find.text('43%'), findsOneWidget);
     expect(tester.takeException(), isNull);
     if (capture) await binding.takeScreenshot('silver-workbench');
-    await tester.tap(find.text('任务'));
+    expect(find.byTooltip('编辑布局'), findsNothing);
+    expect(find.byIcon(Icons.fullscreen), findsNothing);
+    expect(find.text('1'), findsNothing);
+    await tester.drag(
+      find.byType(PageView),
+      Offset(-tester.getSize(find.byType(PageView)).width * .8, 0),
+    );
     await tester.pumpAndSettle();
     expect(workspace.activePage.name, '任务');
     expect(tester.takeException(), isNull);
     if (capture) await binding.takeScreenshot('silver-sessions');
-    await tester.tap(find.byTooltip('编辑布局'));
+    final background = find.byKey(
+      const ValueKey('page-edit-background-page-tasks'),
+    );
+    await tester.longPressAt(
+      tester.getTopLeft(background) + const Offset(.25, .25),
+    );
     await tester.pumpAndSettle();
     final pageBefore = workspace.activePage.id;
     await tester.drag(find.byType(PageView), const Offset(-300, 0));
     await tester.pumpAndSettle();
     expect(workspace.activePage.id, pageBefore);
     if (capture) await binding.takeScreenshot('silver-editor');
-    await tester.tap(find.byTooltip('设置会话'));
+    await tester.tap(find.byTooltip('设置会话').last);
     await tester.pumpAndSettle();
     expect(find.text('会话设置'), findsOneWidget);
     expect(tester.takeException(), isNull);
     if (capture) await binding.takeScreenshot('silver-widget-settings');
-    Navigator.of(tester.element(find.text('会话设置'))).pop();
+    await tester.tap(find.byTooltip('关闭设置'));
     await tester.pumpAndSettle();
     workspace.cancelEdit();
     await render(Brightness.dark);
@@ -121,6 +137,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     if (capture) await binding.takeScreenshot('graphite-landscape');
+    final wideBackground = find.byKey(
+      const ValueKey('page-edit-background-page-main'),
+    );
+    await tester.longPressAt(
+      tester.getTopLeft(wideBackground) + const Offset(.25, .25),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置会话').last);
+    await tester.pumpAndSettle();
+    expect(find.text('完成').hitTestable(), findsOneWidget);
+    expect(find.text('取消').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('关闭设置').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    if (capture) await binding.takeScreenshot('graphite-landscape-editor');
+    workspace.cancelEdit();
+    await tester.pumpAndSettle();
+    await display.setWorkbenchActive(false);
     await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     await tester.pumpWidget(const SizedBox());
   });

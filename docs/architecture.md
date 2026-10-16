@@ -96,6 +96,8 @@ macOS 安装路径需验证签名、公证与本地网络授权。Windows 需验
 - `apps/desktop`：React 设备与共享管理、来源健康 / 额度、入口编辑与原生应用选择器、Tauri 托盘；关闭窗口继续运行，菜单栏可打开或退出。启动失败时保留窗口显示可操作提示。
 - `apps/android`：Flutter 工作台；`WorkbenchData` 解析授权状态，`Connection` 提供来源和有限动作。Kotlin 管理 HTTPS / WSS、发现、Keystore 加密凭据 / 快照、动作提交和结果查询。普通断线保留上次数据，来源失效或离线禁用会话打开；撤销共享会替换并清除对应缓存。
 
-Codex 数据库和 app-server 读取、Sub2API 登录 / 续期 / 聚合指标、深链与入口校验参考 Orbit 的成熟规则，已改用 Desklet 自有类型；没有 Orbit 运行依赖、额外后端、MQTT 或共享插件框架。Sub2API 配置归 Host，密码存独立钥匙串条目；账号变更清除旧值并丢弃在途旧账号响应。
+Codex 数据库和 app-server 读取、Sub2API 登录 / 续期 / 聚合指标、深链、入口校验及 macOS 应用图标取得参考 Orbit 的成熟规则，已改用 Desklet 自有类型；没有 Orbit 运行依赖、额外后端、MQTT 或共享插件框架。Sub2API 配置归 Host，密码存独立钥匙串条目；账号变更清除旧值并丢弃在途旧账号响应。
 
 Android `LayoutWorkspace` 使用不可变文档管理全页面草稿、历史和双方向网格校验，临时选中 / 铺满不参与保存。`LayoutRepository` 经串行队列在 App 私有目录写临时文件后原子替换，保留有效副本和旧配置 / 损坏原文件；未来版本禁止降级覆盖。`WorkbenchCanvas` 将文档绑定到单个 `Connection` 的授权快照，同源多个实例复用一条 WSS，按稳定 Host / 来源 / 资源筛选。页面滚动通过实例 ID 保留，非当前页由按需 PageView 构建。
+
+快捷图标由 `crates/lan/src/icons.rs` 调用 NSWorkspace 取得应用 / 系统网页图标，经 sips 缩放和 PNG 重编码后交给 Host 校验与保存；快照只共享受限像素数据。Android 在解析快照时缓存图标字节，按实例图标尺寸本地渲染，不读取电脑路径或另行请求网站。显示偏好由独立 `DisplayPreferences` 和原生 Activity 管理，页面布局不直接修改系统方向或沉浸状态。

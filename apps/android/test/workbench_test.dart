@@ -98,4 +98,49 @@ void main() {
     );
     expect(sent, isNull);
   });
+  testWidgets(
+    'shortcut renders the shared PNG at its chosen size and blank long press never opens',
+    (tester) async {
+      final c = Connection()
+        ..data = WorkbenchData(snapshot())
+        ..phase = ConnectionPhase.online;
+      addTearDown(c.dispose);
+      var editingRequests = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: rawBlockTheme(),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 320,
+                height: 160,
+                child: WorkbenchWidgetBody(
+                  connection: c,
+                  id: 'icons',
+                  type: 'shortcuts',
+                  options: const {'iconSize': 72},
+                  binding: const {},
+                  onEditRequested: () => editingRequests++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(Image)), const Size(72, 72));
+      final area = tester.getRect(find.byType(WorkbenchWidgetBody));
+      await tester.longPressAt(area.topRight + const Offset(-8, 8));
+      await tester.pumpAndSettle();
+      expect(editingRequests, 1);
+      expect(sent, isNull);
+      await tester.tap(find.byType(Image));
+      await tester.pumpAndSettle();
+      expect(sent?['target_id'], 'shortcut');
+      expect(sent?['target_version'], 'shortcut-version');
+      expect(find.text('电脑已接受打开请求'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -67,13 +67,43 @@ void main() {
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
         await tester.pumpWidget(const DeskletApp());
         await tester.pumpAndSettle();
+        // Paired workbenches start immersed. Display and connection settings
+        // are reached by long-pressing the canvas, not persistent controls.
+        expect(find.byType(AppBar), findsNothing);
+        await tester.longPressAt(
+          tester.getRect(find.byType(PageView)).topLeft + const Offset(2, 2),
+        );
+        await tester.pumpAndSettle();
+        final settings = find.byTooltip('显示设置');
+        await tester.ensureVisible(settings);
+        await tester.tap(settings);
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('连接与外观设置'),
+          100,
+          scrollable: find
+              .descendant(
+                of: find.byType(ListView).last,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.ensureVisible(find.text('连接与外观设置'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('连接与外观设置'));
+        await tester.pumpAndSettle();
         expect(find.text('工作用的电脑名字比较长，也应完整显示'), findsOneWidget);
         await tester.ensureVisible(find.text('断开电脑'));
         await tester.tap(find.text('断开电脑'));
         await tester.pumpAndSettle();
         expect(find.text('断开这台电脑？'), findsOneWidget);
         expect(tester.takeException(), isNull);
-        await tester.tap(find.text('取消'));
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('取消'),
+          ),
+        );
         await tester.pumpAndSettle();
         await tester.pumpWidget(const SizedBox());
         expect(tester.takeException(), isNull);
