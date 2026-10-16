@@ -25,3 +25,18 @@ make test-android-connection ANDROID_DEVICE=emulator-5560
 ## 仍未完成
 
 物理设备扫码、真实无摄像头设备、Android 9 与新版 Android 权限、macOS 权限 / 钥匙串拒绝恢复、Wi-Fi 多播、换 IP、VPN、多网卡、端口冲突和 IPv6 仍需实测。业务来源、页面编辑、远程命令、签名 / 公证、安装更新和 Windows 尚未交付。
+
+## RawBlock 界面验证
+
+桌面已在 1040 px 宽屏和 560 px 窄窗口检查首页、配对邀请、确认、复制和设备移除；浏览器使用测试桥接状态。检查字号、字体加载、直角、3 / 5 px 边框、至少 44 px 按钮和横向溢出。低高度邀请框使用内部滚动，键盘 Escape 可关闭。
+
+Flutter 组件测试覆盖 360 × 640、1.8 倍系统字号、800 × 360 横屏，以及已配对长电脑名称和断开弹窗。Android 模拟器还可运行首页和配对弹窗的 UI 测试并导出截图：
+
+```sh
+# 仅在独立测试模拟器运行：测试会清除这台模拟器上的连接信息。
+cd apps/android
+flutter drive --driver=test_driver/ui.dart --target=integration_test/ui_test.dart \
+  -d emulator-5560 --dart-define=DESKLET_SCREENSHOTS=true
+```
+
+截图默认保存到 Android 工程的 `build/ui-screenshots`，也可用 `DESKLET_SCREENSHOT_DIR` 环境变量指定本机目录。字体来源与许可见 [字体说明](../assets/fonts/README.md)。物理设备视觉效果与相机扫码仍需验证。

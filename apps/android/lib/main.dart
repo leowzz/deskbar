@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'connection.dart';
+import 'rawblock.dart';
 
 void main() => runApp(const DeskletApp());
 
@@ -11,29 +12,7 @@ class DeskletApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Desklet',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      brightness: Brightness.dark,
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xffbfd3b0),
-        brightness: Brightness.dark,
-        surface: const Color(0xff171919),
-      ),
-      scaffoldBackgroundColor: const Color(0xff171919),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xff171919),
-        scrolledUnderElevation: 0,
-      ),
-      cardTheme: CardThemeData(
-        color: const Color(0xff232923),
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: OutlineInputBorder(),
-        filled: true,
-      ),
-    ),
+    theme: rawBlockTheme(),
     home: const Workbench(),
   );
 }
@@ -80,6 +59,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
     final value = await showDialog<(String, String)>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('粘贴连接邀请'),
         content: SizedBox(
           width: 420,
@@ -92,6 +72,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                 const SizedBox(height: 20),
                 TextField(
                   controller: invitation,
+                  style: rawMono,
                   decoration: const InputDecoration(
                     labelText: '连接邀请',
                     hintText: 'desklet://pair…',
@@ -103,6 +84,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                 const SizedBox(height: 16),
                 TextField(
                   controller: name,
+                  style: rawMono,
                   maxLength: 64,
                   decoration: const InputDecoration(labelText: '这台设备的名称'),
                 ),
@@ -149,6 +131,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('断开这台电脑？'),
         content: const Text('此设备会清除连接信息。再次使用需要重新配对。你也可以在电脑上移除这台设备。'),
         actions: [
@@ -158,6 +141,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
+            style: rawButton(destructive: true),
             child: const Text('断开连接'),
           ),
         ],
@@ -172,24 +156,11 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
     builder: (context, _) {
       final paired = connection.hostName != null;
       final online = connection.phase == ConnectionPhase.online;
+      final text = Theme.of(context).textTheme;
       return Scaffold(
         appBar: AppBar(
-          title: const Row(
-            children: [
-              Icon(Icons.desktop_windows_outlined, size: 22),
-              SizedBox(width: 10),
-              Text('Desklet', style: TextStyle(fontWeight: FontWeight.w600)),
-            ],
-          ),
-          actions: [
-            if (paired)
-              IconButton(
-                onPressed: forget,
-                tooltip: '断开电脑',
-                icon: const Icon(Icons.link_off),
-              ),
-            const SizedBox(width: 10),
-          ],
+          title: const Text('Desklet'),
+          shape: const Border(bottom: BorderSide(width: 3)),
         ),
         body: SafeArea(
           child: Center(
@@ -201,42 +172,32 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (connection.error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        child: Material(
-                          color: const Color(0xff3a2b25),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(connection.error!),
-                          ),
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 24),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: rawError, width: 3),
                         ),
+                        child: Text(connection.error!),
                       ),
-                    if (connection.phase == ConnectionPhase.loading)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(40),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    else if (connection.busy) ...[
+                    if (connection.phase == ConnectionPhase.loading) ...[
+                      const LinearProgressIndicator(),
+                      const SizedBox(height: 24),
+                      Text('正在读取连接', style: text.headlineSmall),
+                    ] else if (connection.busy) ...[
+                      const LinearProgressIndicator(),
                       const SizedBox(height: 32),
-                      const Center(child: CircularProgressIndicator()),
-                      const SizedBox(height: 28),
                       Text(
                         connection.phase == ConnectionPhase.approval
-                            ? '请在电脑上确认连接'
+                            ? '请在电脑上\n确认连接'
                             : '正在连接电脑',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '只在你正在操作的电脑上允许连接。',
-                        textAlign: TextAlign.center,
+                        style: text.headlineMedium,
                       ),
                       const SizedBox(height: 24),
-                      Center(
+                      const Text('只在你正在操作的电脑上允许连接。'),
+                      const SizedBox(height: 24),
+                      Align(
+                        alignment: Alignment.centerLeft,
                         child: OutlinedButton(
                           onPressed: connection.cancel,
                           child: const Text('取消连接'),
@@ -245,160 +206,118 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                     ] else if (paired) ...[
                       Card(
                         child: Padding(
-                          padding: const EdgeInsets.all(22),
-                          child: Row(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.computer, size: 34),
-                              const SizedBox(width: 18),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      connection.hostName!,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleLarge,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      online
-                                          ? '已连接'
-                                          : connection.phase ==
-                                                ConnectionPhase.connecting
-                                          ? '正在连接…'
-                                          : '暂时离线',
-                                      style: TextStyle(
-                                        color: online
-                                            ? const Color(0xffbfd3b0)
-                                            : Colors.white54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              Text('连接的电脑', style: text.bodySmall),
+                              const SizedBox(height: 12),
+                              Text(
+                                connection.hostName!,
+                                style: text.titleLarge,
                               ),
-                              if (!online)
-                                IconButton(
-                                  onPressed: connection.reconnect,
-                                  tooltip: '重新连接',
-                                  icon: const Icon(Icons.refresh),
-                                ),
+                              const SizedBox(height: 16),
+                              StatusTag(
+                                online
+                                    ? '已连接'
+                                    : connection.phase ==
+                                          ConnectionPhase.connecting
+                                    ? '正在连接…'
+                                    : '暂时离线',
+                                color: online ? rawSuccess : Colors.black,
+                              ),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                children: [
+                                  if (!online)
+                                    TextButton(
+                                      onPressed: connection.reconnect,
+                                      child: const Text('重新连接'),
+                                    ),
+                                  TextButton(
+                                    onPressed: forget,
+                                    child: const Text('断开电脑'),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 36),
-                      const Icon(
-                        Icons.dashboard_outlined,
-                        size: 48,
-                        color: Color(0xff899980),
-                      ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 40),
                       Text(
-                        online ? '电脑已连接' : '等待电脑恢复连接',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
+                        online ? '电脑已连接' : '等待电脑\n恢复连接',
+                        style: text.headlineMedium,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 24),
                       Text(
                         online
                             ? '工作台还没有内容。会话、额度和快捷入口将在后续版本中加入。'
                             : '请保持电脑上的 Desklet 运行，并连接同一局域网。恢复后会自动重连。',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          height: 1.7,
-                        ),
                       ),
                     ] else ...[
-                      const SizedBox(height: 30),
-                      const Icon(
-                        Icons.devices_outlined,
-                        size: 76,
-                        color: Color(0xffbfd3b0),
-                      ),
-                      const SizedBox(height: 28),
-                      Text(
-                        '电脑旁的另一块屏幕',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        '在电脑和这里打开 Desklet，\n连接同一 Wi-Fi，即可开始。',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white60, height: 1.8),
-                      ),
+                      const SizedBox(height: 16),
+                      Text('电脑旁的\n另一块屏幕', style: text.headlineMedium),
+                      const SizedBox(height: 24),
+                      const Text('在电脑和这里打开 Desklet，连接同一 Wi-Fi，即可开始。'),
                       const SizedBox(height: 32),
-                      Center(
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            FilledButton.icon(
-                              onPressed: scan,
-                              icon: const Icon(Icons.qr_code_scanner),
-                              label: const Text('扫码连接电脑'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: () => paste(),
-                              icon: const Icon(Icons.content_paste),
-                              label: const Text('粘贴邀请'),
-                            ),
-                          ],
-                        ),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 16,
+                        children: [
+                          FilledButton(
+                            onPressed: scan,
+                            child: const Text('扫码连接电脑'),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => paste(),
+                            child: const Text('粘贴邀请'),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 36),
+                      const SizedBox(height: 40),
+                      const Divider(height: 3, thickness: 3),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
-                          const Expanded(
-                            child: Text(
-                              '附近的电脑',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
+                          Expanded(
+                            child: Text('附近的电脑', style: text.titleLarge),
                           ),
-                          TextButton.icon(
+                          const SizedBox(width: 8),
+                          TextButton(
                             onPressed: connection.searching
                                 ? null
                                 : connection.discover,
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: Text(connection.searching ? '正在搜索…' : '搜索'),
+                            child: Text(connection.searching ? '正在搜索…' : '搜索'),
                           ),
                         ],
                       ),
                       if (connection.nearby.isEmpty)
                         const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          child: Text(
-                            '可以直接扫码连接；自动搜索需要允许访问本地网络。',
-                            style: TextStyle(color: Colors.white54),
-                          ),
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Text('可以直接扫码连接；自动搜索需要允许访问本地网络。'),
                         ),
                       for (final name in connection.nearby)
-                        Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.computer),
-                            title: Text(name),
-                            subtitle: const Text('在电脑上生成邀请后连接'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => paste(),
-                          ),
+                        ListTile(
+                          title: Text(name),
+                          subtitle: const Text('在电脑上生成邀请后连接'),
+                          onTap: () => paste(),
                         ),
                     ],
                     if (!connection.busy &&
                         !paired &&
                         connection.phase == ConnectionPhase.offline)
-                      TextButton(
-                        onPressed: connection.restore,
-                        child: const Text('重试读取连接'),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: connection.restore,
+                          child: const Text('重试读取连接'),
+                        ),
                       ),
                     const SizedBox(height: 32),
-                    const Text(
-                      '连接邀请仅在短时间内有效，且需要电脑确认。',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
-                    ),
+                    Text('连接邀请仅在短时间内有效，且需要电脑确认。', style: text.bodySmall),
                   ],
                 ),
               ),
@@ -448,8 +367,6 @@ class _ScanScreenState extends State<ScanScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.no_photography_outlined, size: 48),
-              const SizedBox(height: 20),
               const Text('无法使用摄像头，可返回后粘贴完整邀请。', textAlign: TextAlign.center),
               const SizedBox(height: 20),
               OutlinedButton(

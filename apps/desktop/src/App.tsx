@@ -1,16 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Monitor,
-  Plus,
-  Smartphone,
-  ArrowUpRight,
-  Copy,
-  Check,
-  X,
-  RefreshCw,
-  Wifi,
-  AlertCircle,
-} from "lucide-react";
 import QRCode from "qrcode";
 import { call, type Invitation, type Status } from "./api";
 
@@ -90,6 +78,7 @@ export function App() {
     void run(async () => {
       setCopied(false);
       setInvitation(await call<Invitation>("create_invitation"));
+      setClock(Date.now());
     });
   }
   function close() {
@@ -111,18 +100,13 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="#">
-          <span className="brand-mark">
-            <Monitor size={21} />
-          </span>
           Desklet
         </a>
         <div className="nav-label">这台电脑</div>
         <div className="nav-item">
-          <Smartphone size={18} />
           我的设备<span>{status?.devices.length ?? "—"}</span>
         </div>
         <div className="sidebar-bottom">
-          <span className="status-dot" />
           局域网直连<p>让身旁的屏幕，成为工作台。</p>
         </div>
       </aside>
@@ -130,7 +114,11 @@ export function App() {
         <header>
           <div>
             <p className="eyebrow">我的设备</p>
-            <h1>把工作台放在身旁</h1>
+            <h1>
+              把工作台
+              <br />
+              放在身旁
+            </h1>
             <p className="subtitle">
               连接 Android 设备，在另一块屏幕上查看这台电脑。
             </p>
@@ -140,26 +128,24 @@ export function App() {
             disabled={!status || busy}
             onClick={invite}
           >
-            <Plus size={18} />
             连接设备
           </button>
         </header>
-
         {(error || loadError) && (
           <div className="notice error" role="alert">
-            <AlertCircle size={19} />
+            <strong>连接提示</strong>
             <span>{error || loadError}</span>
-            <button aria-label="重试" onClick={() => void run(async () => {})}>
-              <RefreshCw size={17} />
+            <button
+              className="text-button"
+              onClick={() => void run(async () => {})}
+            >
+              重试
             </button>
           </div>
         )}
-
         <section className="computer-card">
-          <span className="computer-icon">
-            <Monitor size={30} strokeWidth={1.5} />
-          </span>
           <div className="computer-info">
+            <p className="eyebrow">这台电脑</p>
             <h2>{status?.name ?? "这台电脑"}</h2>
             <p>
               {status
@@ -169,18 +155,16 @@ export function App() {
                   : "正在读取连接状态"}
             </p>
           </div>
-          <span className="connection-status">
-            <span className={status ? "status-dot" : "status-dot muted"} />
+          <span className={`status-tag${status ? " success" : ""}`}>
             {status ? "可连接" : "未连接"}
           </span>
         </section>
         {status?.discovery_warning && (
           <div className="notice">
-            <Wifi size={18} />
+            <strong>自动发现</strong>
             <span>{status.discovery_warning}</span>
           </div>
         )}
-
         <div className="section-title">
           <h2>已配对设备</h2>
           <span>{status?.devices.length ?? "—"} 台</span>
@@ -198,8 +182,7 @@ export function App() {
           <div className="device-list">
             {status.devices.map((device) => (
               <article className="device-card" key={device.id}>
-                <Smartphone size={26} strokeWidth={1.5} />
-                <div>
+                <div className="device-info">
                   <h3>{device.name}</h3>
                   <p>
                     {new Date(device.paired_at * 1000).toLocaleDateString(
@@ -210,8 +193,9 @@ export function App() {
                 </div>
                 {removeId === device.id ? (
                   <div className="remove-confirm">
-                    <span>移除后需要重新配对</span>
+                    <p>移除后需要重新配对</p>
                     <button
+                      className="destructive"
                       disabled={busy}
                       onClick={() =>
                         void run(async () => {
@@ -222,7 +206,12 @@ export function App() {
                     >
                       确认移除
                     </button>
-                    <button onClick={() => setRemoveId(null)}>取消</button>
+                    <button
+                      className="secondary"
+                      onClick={() => setRemoveId(null)}
+                    >
+                      取消
+                    </button>
                   </div>
                 ) : (
                   <button
@@ -237,29 +226,14 @@ export function App() {
           </div>
         ) : (
           <section className="empty-state">
-            <div className="device-illustration">
-              <Monitor size={70} strokeWidth={1} />
-              <Smartphone size={42} strokeWidth={1.2} />
-            </div>
             <h2>为电脑添一块屏幕</h2>
-            <p>
-              在 Android 上打开 Desklet，
-              <br />
-              扫描连接邀请，再回到这里确认。
-            </p>
-            <button
-              className="secondary"
-              disabled={!status || busy}
-              onClick={invite}
-            >
+            <p>在 Android 上打开 Desklet，扫描连接邀请，再回到这里确认。</p>
+            <button className="secondary" disabled={busy} onClick={invite}>
               连接第一台设备
-              <ArrowUpRight size={17} />
             </button>
           </section>
         )}
-
         <footer>
-          <Wifi size={16} />
           <span>电脑和设备需要连接同一局域网。</span>
           <button
             className="text-button"
@@ -282,8 +256,7 @@ export function App() {
           </section>
         )}
       </main>
-
-      {(invitation || pending) && (
+      {pairingOpen && (
         <dialog
           ref={dialogRef}
           onCancel={(event) => {
@@ -293,20 +266,24 @@ export function App() {
           className="modal"
           aria-labelledby="pair-title"
         >
-          <button
-            className="close-button"
-            aria-label="关闭连接邀请"
-            disabled={busy}
-            onClick={close}
-          >
-            <X size={20} />
-          </button>
+          <div className="modal-toolbar">
+            <span>连接设备</span>
+            <button
+              className="text-button"
+              aria-label="关闭连接邀请"
+              disabled={busy}
+              onClick={close}
+            >
+              关闭
+            </button>
+          </div>
           {pending ? (
             <>
-              <div className="modal-symbol">
-                <Smartphone size={32} />
-              </div>
-              <h2 id="pair-title">允许连接这台设备？</h2>
+              <h2 id="pair-title">
+                允许连接
+                <br />
+                这台设备？
+              </h2>
               <p className="request-name">{pending.name}</p>
               <p>
                 只确认你正在操作的设备。连接后，它可以读取这台电脑共享的状态；你随时可以移除它。
@@ -331,8 +308,10 @@ export function App() {
             </>
           ) : (
             <>
-              <p className="eyebrow">添加一块屏幕</p>
-              <h2 id="pair-title">在 Android 上扫码连接</h2>
+              <h2 id="pair-title">
+                在 Android 上<br />
+                扫码连接
+              </h2>
               <p>打开 Desklet，点击「扫码连接电脑」。</p>
               <div className="qr">
                 {remaining > 0 && qr ? (
@@ -346,7 +325,6 @@ export function App() {
                         disabled={busy}
                         onClick={invite}
                       >
-                        <RefreshCw size={16} />
                         重新生成
                       </button>
                     )}
@@ -371,7 +349,6 @@ export function App() {
                     .catch(() => setError("未能复制，请重试"))
                 }
               >
-                {copied ? <Check size={17} /> : <Copy size={17} />}
                 {copied ? "已复制邀请" : "复制连接邀请"}
               </button>
             </>

@@ -20,6 +20,7 @@ Desklet 把 Android 屏幕变成电脑旁的工作台。电脑安装 Agent，And
 
 | 文档 | 内容 |
 | --- | --- |
+| [视觉规范](DESIGN.md) | RawBlock 黑白、粗边框、直角和字体规范 |
 | [产品范围](docs/product.md) | 用户任务、首版能力和交付边界 |
 | [架构](docs/architecture.md) | 双端结构、模块接口、配置归属和代码提取路径 |
 | [LAN 协议草案](docs/protocol.md) | 发现、IP 变化、配对、同步和动作语义 |

@@ -39,7 +39,7 @@ check: docs-check
 	cargo check --locked -p desklet-desktop
 	pnpm --dir apps/desktop run check
 	pnpm --dir apps/desktop exec prettier --check src vite.config.ts
-	cd apps/android && dart format --output=none --set-exit-if-changed lib test integration_test
+	cd apps/android && dart format --output=none --set-exit-if-changed lib test integration_test test_driver
 	cd apps/android && flutter analyze
 	cd apps/android && flutter test
 

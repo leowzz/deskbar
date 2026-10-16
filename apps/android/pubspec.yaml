@@ -16,3 +16,13 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Archivo Black
+      fonts:
+        - asset: assets/fonts/ArchivoBlack-Regular.ttf
+    - family: Work Sans
+      fonts:
+        - asset: assets/fonts/WorkSans.ttf
+    - family: Space Mono
+      fonts:
+        - asset: assets/fonts/SpaceMono-Regular.ttf

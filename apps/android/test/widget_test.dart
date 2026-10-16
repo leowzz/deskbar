@@ -5,11 +5,13 @@ import 'package:desklet/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  String? savedHost;
   setUp(() {
+    savedHost = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('app.desklet/connection'),
-          (call) async => null,
+          (call) async => call.method == "restore" ? savedHost : null,
         );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -44,6 +46,30 @@ void main() {
         await tester.pumpAndSettle();
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.takeException(), isNull);
+      },
+    );
+    testWidgets(
+      'paired computer and disconnect dialog at ${scenario.$1}, text scale ${scenario.$2}',
+      (tester) async {
+        savedHost = '{"name":"工作用的电脑名字比较长，也应完整显示"}';
+        tester.view.physicalSize = scenario.$1;
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = scenario.$2;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpWidget(const DeskletApp());
+        await tester.pumpAndSettle();
+        expect(find.text('工作用的电脑名字比较长，也应完整显示'), findsOneWidget);
+        await tester.ensureVisible(find.text('断开电脑'));
+        await tester.tap(find.text('断开电脑'));
+        await tester.pumpAndSettle();
+        expect(find.text('断开这台电脑？'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox());
         expect(tester.takeException(), isNull);
       },
     );

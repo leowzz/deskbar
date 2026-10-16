@@ -11,6 +11,7 @@
 - [x] 创建可构建的 Tauri / React / Rust 与 Flutter / Kotlin 工程。
 - [x] 实现邀请、电脑确认、固定公钥的 HTTPS / WSS、撤权和安全凭据保存。
 - [x] 在 Android 12 模拟器验证错误公钥拒绝、配对、安全存储恢复、前台恢复重连与撤权通知。
+- [x] 桌面与 Android 应用采用 DESIGN.md 的 RawBlock 视觉规范，字体本地打包。
 - [ ] 提取业务代码、实现协议、完成真机验证和发布。
 
 ## 已实现与待验收
