@@ -19,7 +19,7 @@ class _MemoryLayouts extends LayoutRepository {
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
-    'drag title, displace neighbors and resize edges in both orientations',
+    'desktop editor docks forms and drags content in both orientations',
     (tester) async {
       final connection = Connection()
         ..phase = ConnectionPhase.online
@@ -73,6 +73,7 @@ void main() {
             home: Scaffold(
               body: SafeArea(
                 child: WorkbenchCanvas(
+                  allowEditing: true,
                   connection: connection,
                   workspace: workspace,
                   repository: _MemoryLayouts(),
@@ -95,7 +96,7 @@ void main() {
       await screenshot('editing-portrait-before');
       final before = workspace.document.toJson();
       final neighbor = find.byKey(const ValueKey('widget-edit-frame-sessions'));
-      final width = tester.getSize(neighbor).width + 4;
+      final width = tester.getSize(neighbor).width + 2;
       final gesture = await tester.startGesture(
         tester.getCenter(find.byKey(const ValueKey('widget-move-quota'))),
       );
@@ -141,23 +142,21 @@ void main() {
       final fullCanvas = tester.getRect(find.byType(PageView));
       await tester.tap(find.byKey(const ValueKey('widget-move-sessions')));
       await tester.pumpAndSettle();
-      final floating = find.byKey(const ValueKey('floating-editor-window'));
-      final titlebar = find.byKey(const ValueKey('floating-editor-titlebar'));
+      final inspector = find.byKey(const ValueKey('editor-inspector'));
       expect(tester.getRect(find.byType(PageView)), fullCanvas);
-      await screenshot('floating-editor-portrait');
-      await tester.drag(titlebar, const Offset(-1000, -1000));
-      await tester.pumpAndSettle();
-      final movedWindow = tester.getRect(floating);
+      expect(
+        tester.getRect(inspector).left,
+        greaterThanOrEqualTo(fullCanvas.right),
+      );
       await tester.drag(
         find.byKey(const PageStorageKey('widget-inspector-sessions')),
         const Offset(0, -200),
       );
       await tester.pumpAndSettle();
-      expect(tester.getRect(floating), movedWindow);
       expect(tester.getRect(find.byType(PageView)), fullCanvas);
       expect(workspace.document.toJson(), before);
       expect(tester.takeException(), isNull);
-      await screenshot('floating-editor-portrait-moved');
+      await screenshot('docked-editor-portrait');
       await tester.tap(find.byTooltip('关闭设置'));
       await tester.pumpAndSettle();
       await SystemChrome.setPreferredOrientations([
@@ -165,6 +164,8 @@ void main() {
       ]);
       await render(Brightness.dark);
       await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('widget-move-quota')));
       await tester.pumpAndSettle();
       final frame = find.byKey(const ValueKey('widget-edit-frame-quota'));
       final original = tester.getRect(frame);
@@ -186,13 +187,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('widget-move-quota')));
       await tester.pumpAndSettle();
       expect(tester.getRect(find.byType(PageView)), wideCanvas);
-      await screenshot('floating-editor-landscape');
-      await tester.drag(titlebar, const Offset(-1000, -1000));
-      await tester.pumpAndSettle();
-      expect(wideCanvas.contains(tester.getRect(floating).topLeft), isTrue);
-      expect(wideCanvas.contains(tester.getRect(floating).bottomRight), isTrue);
+      expect(
+        tester.getRect(inspector).top,
+        greaterThanOrEqualTo(wideCanvas.bottom),
+      );
       expect(tester.takeException(), isNull);
-      await screenshot('floating-editor-landscape-moved');
+      await screenshot('docked-editor-landscape');
       await tester.pumpWidget(const SizedBox());
       await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     },

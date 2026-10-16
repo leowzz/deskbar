@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { WorkbenchSettings, Sharing, UsageSettings } from "./WorkbenchSettings";
+import { WorkbenchEditor } from "./WorkbenchEditor";
 import QRCode from "qrcode";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -9,7 +10,7 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-type View = "devices" | "shortcuts" | "settings";
+type View = "devices" | "workbench" | "shortcuts" | "settings";
 type Theme = "light" | "dark";
 const themeKey = "deskbar.theme";
 
@@ -28,10 +29,12 @@ function Icon({
 }) {
   const paths = {
     desk: (
-      <>
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <path d="M8 21h8m-4-5v5" />
-      </>
+      <path
+        d="M24 18H46C65 18 78 31 78 48S65 78 46 78H24V66H46C58 66 66 59 66 48S58 30 46 30H36V54H24Z"
+        transform="scale(.25)"
+        fill="currentColor"
+        stroke="none"
+      />
     ),
     devices: (
       <>
@@ -79,6 +82,7 @@ function Icon({
 }
 
 export function App() {
+  const [openedEditor, setOpenedEditor] = useState(false);
   const [view, setView] = useState<View>("devices");
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [themeError, setThemeError] = useState("");
@@ -221,6 +225,7 @@ export function App() {
           {(
             [
               ["devices", "我的设备", "devices"],
+              ["workbench", "屏幕编辑", "tablet"],
               ["shortcuts", "快捷入口", "grid"],
               ["settings", "设置", "settings"],
             ] as const
@@ -229,7 +234,10 @@ export function App() {
               key={id}
               className={`nav-item${view === id ? " active" : ""}`}
               aria-current={view === id ? "page" : undefined}
-              onClick={() => setView(id)}
+              onClick={() => {
+                setView(id);
+                if (id === "workbench") setOpenedEditor(true);
+              }}
             >
               <Icon name={icon} />
               <span>{label}</span>
@@ -245,34 +253,36 @@ export function App() {
           <strong>{status?.name ?? "这台电脑"}</strong>
         </div>
       </aside>
-      <main>
-        <header>
-          <div>
-            <h1>
-              {view === "devices"
-                ? "我的设备"
-                : view === "shortcuts"
-                  ? "快捷入口"
-                  : "设置"}
-            </h1>
-            {view !== "settings" && (
-              <p className="subtitle">
+      <main className={view === "workbench" ? "editor-main" : undefined}>
+        {view !== "workbench" && (
+          <header>
+            <div>
+              <h1>
                 {view === "devices"
-                  ? "连接 Android 设备，将身旁的屏幕变成工作台。"
-                  : "管理设备可以在这台电脑上打开的网页和应用。"}
-              </p>
+                  ? "我的设备"
+                  : view === "shortcuts"
+                    ? "快捷入口"
+                    : "设置"}
+              </h1>
+              {(view === "devices" || view === "shortcuts") && (
+                <p className="subtitle">
+                  {view === "devices"
+                    ? "连接 Android 设备，将身旁的屏幕变成工作台。"
+                    : "管理设备可以在这台电脑上打开的网页和应用。"}
+                </p>
+              )}
+            </div>
+            {view === "devices" && (
+              <button
+                className="primary"
+                disabled={!status || busy}
+                onClick={invite}
+              >
+                连接设备
+              </button>
             )}
-          </div>
-          {view === "devices" && (
-            <button
-              className="primary"
-              disabled={!status || busy}
-              onClick={invite}
-            >
-              连接设备
-            </button>
-          )}
-        </header>
+          </header>
+        )}
         {(error || loadError) && (
           <div className="notice error" role="alert">
             <strong>连接提示</strong>
@@ -283,6 +293,11 @@ export function App() {
             >
               重试
             </button>
+          </div>
+        )}
+        {openedEditor && status && (
+          <div hidden={view !== "workbench"}>
+            <WorkbenchEditor status={status} />
           </div>
         )}
         {view === "devices" && (
@@ -391,7 +406,7 @@ export function App() {
             )}
           </>
         )}
-        {status && view !== "settings" && (
+        {status && (view === "devices" || view === "shortcuts") && (
           <WorkbenchSettings
             status={status}
             busy={busy}
@@ -456,16 +471,18 @@ export function App() {
         {view === "settings" && status && (
           <UsageSettings status={status} busy={busy} run={run} />
         )}
-        <footer>
-          <span>电脑和设备需要连接同一局域网。</span>
-          <button
-            className="text-button"
-            onClick={() => setShowAddresses(!showAddresses)}
-          >
-            {showAddresses ? "收起" : "连接帮助"}
-          </button>
-        </footer>
-        {showAddresses && (
+        {view !== "workbench" && (
+          <footer>
+            <span>电脑和设备需要连接同一局域网。</span>
+            <button
+              className="text-button"
+              onClick={() => setShowAddresses(!showAddresses)}
+            >
+              {showAddresses ? "收起" : "连接帮助"}
+            </button>
+          </footer>
+        )}
+        {showAddresses && view !== "workbench" && (
           <section className="help">
             <h3>找不到电脑？</h3>
             <p>

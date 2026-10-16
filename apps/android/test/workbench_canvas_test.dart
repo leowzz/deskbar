@@ -26,7 +26,9 @@ class MemoryLayouts extends LayoutRepository {
 Future<void> launch(
   WidgetTester tester,
   LayoutWorkspace workspace, {
-  Size size = const Size(360, 640),
+  Size size = const Size(1000, 760),
+  bool editor = true,
+  Size preview = const Size(360, 640),
   double scale = 1,
   Brightness brightness = Brightness.light,
   MemoryLayouts? repository,
@@ -41,7 +43,10 @@ Future<void> launch(
   final connection = Connection()
     ..phase = ConnectionPhase.online
     ..hostName = '工作电脑'
-    ..data = WorkbenchData(snapshot());
+    ..data = WorkbenchData({
+      ...snapshot(),
+      'layout': workspace.document.toJson(),
+    });
   addTearDown(connection.dispose);
   await tester.pumpWidget(
     MaterialApp(
@@ -55,6 +60,8 @@ Future<void> launch(
                 const SizedBox(height: 54),
               Expanded(
                 child: WorkbenchCanvas(
+                  allowEditing: editor,
+                  previewSize: editor ? preview : null,
                   connection: connection,
                   workspace: workspace,
                   repository: repository ?? MemoryLayouts(),
@@ -99,102 +106,8 @@ LayoutWorkspace editableWorkspace({bool pair = false}) => LayoutWorkspace(
 )..beginEdit();
 
 void main() {
-  for (final size in [
-    const Size(360, 640),
-    const Size(800, 360),
-    const Size(320, 480),
-  ]) {
-    testWidgets('floating form drags, scrolls and stays on screen at $size', (
-      tester,
-    ) async {
-      final workspace = LayoutWorkspace()..beginEdit();
-      addTearDown(workspace.dispose);
-      await launch(tester, workspace, size: size, scale: 1.8);
-      final canvas = tester.getRect(find.byType(PageView));
-      final original = workspace.document.toJson();
-      await tester.tap(find.byTooltip('设置会话').first);
-      await tester.pumpAndSettle();
-      final window = find.byKey(const ValueKey('floating-editor-window'));
-      final titlebar = find.byKey(const ValueKey('floating-editor-titlebar'));
-      expect(tester.getSize(titlebar).height, 48);
-      expect(tester.getRect(find.byType(PageView)), canvas);
-      final initial = tester.getRect(window);
-      await tester.drag(titlebar, const Offset(-1000, -1000));
-      await tester.pumpAndSettle();
-      final moved = tester.getRect(window);
-      expect(moved.top, lessThan(initial.top));
-      expect(moved.topLeft, canvas.topLeft + const Offset(8, 8));
-      expect(workspace.document.toJson(), original);
-      expect(workspace.canUndo, false);
-      final scroll = find.byKey(
-        const PageStorageKey('widget-inspector-main-sessions'),
-      );
-      final position = tester
-          .state<ScrollableState>(
-            find
-                .descendant(of: scroll, matching: find.byType(Scrollable))
-                .first,
-          )
-          .position;
-      await tester.drag(scroll, const Offset(0, -180));
-      await tester.pumpAndSettle();
-      expect(position.pixels, greaterThan(0));
-      expect(tester.getRect(window), moved);
-      await tester.drag(titlebar, const Offset(1000, 1000));
-      await tester.pumpAndSettle();
-      expect(
-        tester.getRect(window).bottomRight,
-        canvas.bottomRight - const Offset(8, 8),
-      );
-      expect(tester.getRect(find.byType(PageView)), canvas);
-      await tester.tap(find.byTooltip('关闭设置'));
-      await tester.pumpAndSettle();
-      expect(window, findsNothing);
-      expect(workspace.editing, isTrue);
-      expect(workspace.document.toJson(), original);
-      expect(tester.takeException(), isNull);
-    });
-  }
-
   testWidgets(
-    'floating form remains reachable with keyboard and after rotation',
-    (tester) async {
-      final workspace = LayoutWorkspace()..beginEdit();
-      addTearDown(workspace.dispose);
-      await launch(tester, workspace);
-      await tester.tap(find.byTooltip('设置会话').first);
-      await tester.pumpAndSettle();
-      final window = find.byKey(const ValueKey('floating-editor-window'));
-      final original = tester.getRect(window);
-      await tester.enterText(
-        find.byKey(const ValueKey('title-main-sessions')),
-        '调整后的组件',
-      );
-      await tester.pumpAndSettle();
-      tester.view.viewInsets = const FakeViewPadding(bottom: 240);
-      addTearDown(tester.view.resetViewInsets);
-      await tester.pumpAndSettle();
-      final canvas = tester.getRect(find.byType(PageView));
-      expect(canvas.contains(tester.getRect(window).topLeft), isTrue);
-      expect(canvas.contains(tester.getRect(window).bottomRight), isTrue);
-      expect(find.byTooltip('关闭设置').hitTestable(), findsOneWidget);
-      tester.view.resetViewInsets();
-      await tester.pumpAndSettle();
-      expect(tester.getRect(window), original);
-      tester.view.physicalSize = const Size(800, 360);
-      await tester.pumpAndSettle();
-      final wideCanvas = tester.getRect(find.byType(PageView));
-      expect(wideCanvas.contains(tester.getRect(window).topLeft), isTrue);
-      expect(wideCanvas.contains(tester.getRect(window).bottomRight), isTrue);
-      expect(workspace.findWidget('main-sessions')!.title, '调整后的组件');
-      expect(find.text('完成').hitTestable(), findsOneWidget);
-      expect(find.text('取消').hitTestable(), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'title drag previews displacement, commits once and undo restores both',
+    'whole component drag previews displacement, commits once and undo restores both',
     (tester) async {
       final workspace = editableWorkspace(pair: true);
       addTearDown(workspace.dispose);
@@ -204,7 +117,7 @@ void main() {
       final originalB = tester.getRect(b);
       final move = find.byKey(const ValueKey('widget-move-a'));
       final gesture = await tester.startGesture(tester.getCenter(move));
-      await gesture.moveBy(Offset(originalB.width + 4, 0));
+      await gesture.moveBy(Offset(originalB.width + 2, 0));
       await tester.pumpAndSettle();
       expect(workspace.document.toJson(), before);
       expect(workspace.canUndo, false);
@@ -241,7 +154,7 @@ void main() {
       final gesture = await tester.startGesture(
         tester.getCenter(find.byKey(const ValueKey('widget-move-a'))),
       );
-      await gesture.moveBy(Offset(originalB.width + 4, 0));
+      await gesture.moveBy(Offset(originalB.width + 2, 0));
       await tester.pumpAndSettle();
       await gesture.cancel();
       await tester.pumpAndSettle();
@@ -259,6 +172,8 @@ void main() {
         final workspace = editableWorkspace();
         addTearDown(workspace.dispose);
         await launch(tester, workspace);
+        await tester.tap(find.byKey(const ValueKey('widget-move-a')));
+        await tester.pumpAndSettle();
         final before = workspace
             .findWidget('a')!
             .placementFor(LayoutOrientation.portrait);
@@ -301,10 +216,9 @@ void main() {
   }
 
   for (final size in [
-    const Size(360, 640),
-    const Size(800, 360),
-    const Size(320, 480),
-    const Size(480, 280),
+    const Size(1000, 760),
+    const Size(800, 600),
+    const Size(560, 680),
   ]) {
     for (final scale in [1.0, 1.8]) {
       for (final brightness in [Brightness.light, Brightness.dark]) {
@@ -347,6 +261,7 @@ void main() {
             size: size,
             brightness: brightness,
             withChrome: true,
+            editor: false,
           );
           final session = find.text('一个比较长的真实工作任务标题，需要在大字号和窄屏下保持可读');
           final shortcut = find.text('常用应用入口名称很长也能换行');
@@ -470,81 +385,30 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('电脑未能读取会话'), findsOneWidget);
-      expect(find.textContaining('长按调整组件大小'), findsOneWidget);
+      expect(find.textContaining('请在电脑端调整组件大小'), findsOneWidget);
       expect(find.byType(GridView), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets(
-    'normal immersive canvas has only content and long press enters edit',
-    (tester) async {
-      final workspace = LayoutWorkspace();
-      addTearDown(workspace.dispose);
-      await launch(tester, workspace);
-      expect(find.byTooltip('编辑布局'), findsNothing);
-      expect(find.byTooltip('沉浸显示'), findsNothing);
-      expect(find.byIcon(Icons.fullscreen), findsNothing);
-      expect(find.byIcon(Icons.fullscreen_exit), findsNothing);
-      expect(find.text('1'), findsNothing);
-      expect(find.text('总览'), findsNothing);
-      expect(find.text('近期会话'), findsNothing);
-      expect(
-        find.byKey(const ValueKey('widget-edit-frame-main-sessions')),
-        findsNothing,
-      );
-      final background = find.byKey(
-        const ValueKey('page-edit-background-page-main'),
-      );
-      await tester.longPressAt(
-        tester.getTopLeft(background) + const Offset(.25, .25),
-      );
-      await tester.pumpAndSettle();
-      expect(workspace.editing, isTrue);
-      expect(find.text('完成').hitTestable(), findsOneWidget);
-      expect(find.text('取消').hitTestable(), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('widget-edit-frame-main-sessions')),
-        findsOneWidget,
-      );
-    },
-  );
-  for (final scale in [1.0, 1.8]) {
-    testWidgets(
-      'floating inspector keeps full canvas and finish/cancel reachable scale $scale',
-      (tester) async {
-        final workspace = LayoutWorkspace()..beginEdit();
-        addTearDown(workspace.dispose);
-        await launch(
-          tester,
-          workspace,
-          size: const Size(480, 280),
-          scale: scale,
-        );
-        final before = tester.getRect(find.byType(PageView));
-        await tester.tap(find.byTooltip('设置会话').first);
-        await tester.pumpAndSettle();
-        expect(find.text('完成').hitTestable(), findsOneWidget);
-        expect(find.text('取消').hitTestable(), findsOneWidget);
-        expect(find.byTooltip('关闭设置').hitTestable(), findsOneWidget);
-        final canvas = tester.getRect(find.byType(PageView));
-        final inspector = tester.getRect(
-          find.byKey(const ValueKey('floating-editor-window')),
-        );
-        expect(canvas.width, greaterThan(100));
-        expect(canvas.height, greaterThan(100));
-        expect(canvas, before);
-        expect(canvas.contains(inspector.topLeft), isTrue);
-        expect(canvas.contains(inspector.bottomRight), isTrue);
-        expect(find.text('显示标题'), findsNothing);
-        expect(find.text('临时铺满'), findsNothing);
-        expect(tester.takeException(), isNull);
-        await tester.tap(find.byTooltip('关闭设置'));
-        await tester.pumpAndSettle();
-        expect(tester.getRect(find.byType(PageView)).width, 480);
-        expect(find.text('完成').hitTestable(), findsOneWidget);
-      },
+  testWidgets('mobile canvas long press stays read only', (tester) async {
+    final workspace = LayoutWorkspace();
+    addTearDown(workspace.dispose);
+    await launch(tester, workspace, editor: false, size: const Size(360, 640));
+    expect(find.byKey(const ValueKey('editor-inspector')), findsNothing);
+    expect(find.text('完成'), findsNothing);
+    final background = find.byKey(
+      const ValueKey('page-edit-background-page-main'),
     );
-  }
+    await tester.longPressAt(
+      tester.getTopLeft(background) + const Offset(.25, .25),
+    );
+    await tester.pumpAndSettle();
+    expect(workspace.editing, isFalse);
+    expect(
+      find.byKey(const ValueKey('widget-edit-frame-main-sessions')),
+      findsNothing,
+    );
+  });
   testWidgets(
     'nonimmersive normal canvas has no page, editing or bottom controls',
     (tester) async {
@@ -561,6 +425,7 @@ void main() {
           theme: rawBlockTheme(),
           home: Scaffold(
             body: WorkbenchCanvas(
+              allowEditing: false,
               connection: connection,
               workspace: workspace,
               repository: MemoryLayouts(),
@@ -688,6 +553,7 @@ void main() {
           theme: rawBlockTheme(),
           home: Scaffold(
             body: WorkbenchCanvas(
+              allowEditing: true,
               connection: connection,
               workspace: workspace,
               repository: MemoryLayouts(),
@@ -704,10 +570,7 @@ void main() {
       String? selected(String label) =>
           tester.state<FormFieldState<String>>(field(label)).value;
       Future<void> open(String id) async {
-        final frame = find.byKey(ValueKey('widget-edit-frame-$id'));
-        await tester.tap(
-          find.descendant(of: frame, matching: find.byIcon(Icons.tune)).last,
-        );
+        await tester.tap(find.byKey(ValueKey('widget-move-$id')));
         await tester.pumpAndSettle();
       }
 
@@ -795,155 +658,111 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets(
-    'first inspector starts at top after source content has scrolled',
-    (tester) async {
-      final value = snapshot();
-      final original = Map<String, dynamic>.from(
-        (value['sessions'] as List).first as Map,
-      );
-      value['sessions'] = <dynamic>[
-        for (var i = 0; i < 30; i++)
-          {...original, 'session_id': 'session-$i', 'title': '任务 $i'},
-      ];
-      final connection = Connection()
-        ..data = WorkbenchData(value)
-        ..phase = ConnectionPhase.online;
-      addTearDown(connection.dispose);
-      final workspace = LayoutWorkspace(
-        document: LayoutDocument(
-          activePageId: 'sessions',
-          pages: [
-            LayoutPage(
-              id: 'sessions',
-              name: '会话',
-              widgets: [
-                LayoutWidget(
-                  id: 'list',
-                  type: 'sessions',
-                  binding: const {'hostId': 'host', 'source': 'codex.sessions'},
-                  options: {
-                    ...LayoutWorkspace.defaultOptions('sessions'),
-                    'fitRows': false,
-                    'itemHeight': 140.0,
-                  },
-                  placements: {
-                    LayoutOrientation.wide: GridPlacement(
-                      x: 0,
-                      y: 0,
-                      w: 12,
-                      h: 12,
-                    ).scaled(4),
-                    LayoutOrientation.portrait: GridPlacement(
-                      x: 0,
-                      y: 0,
-                      w: 4,
-                      h: 24,
-                    ).scaled(4),
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-      addTearDown(workspace.dispose);
-      tester.view.physicalSize = const Size(800, 360);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: rawBlockTheme(),
-          home: Scaffold(
-            body: WorkbenchCanvas(
-              connection: connection,
-              workspace: workspace,
-              repository: MemoryLayouts(),
-            ),
+  testWidgets('inspector scroll is independent from existing content scroll', (
+    tester,
+  ) async {
+    final value = snapshot();
+    final original = Map<String, dynamic>.from(
+      (value['sessions'] as List).first as Map,
+    );
+    value['sessions'] = <dynamic>[
+      for (var i = 0; i < 30; i++)
+        {...original, 'session_id': 'session-$i', 'title': '任务 $i'},
+    ];
+    final connection = Connection()
+      ..data = WorkbenchData(value)
+      ..phase = ConnectionPhase.online;
+    addTearDown(connection.dispose);
+    final workspace = LayoutWorkspace(
+      document: LayoutDocument(
+        activePageId: 'sessions',
+        pages: [
+          LayoutPage(
+            id: 'sessions',
+            name: '会话',
+            widgets: [
+              LayoutWidget(
+                id: 'list',
+                type: 'sessions',
+                binding: const {'hostId': 'host', 'source': 'codex.sessions'},
+                options: {
+                  ...LayoutWorkspace.defaultOptions('sessions'),
+                  'fitRows': false,
+                  'itemHeight': 140.0,
+                },
+                placements: {
+                  LayoutOrientation.wide: GridPlacement(
+                    x: 0,
+                    y: 0,
+                    w: 12,
+                    h: 12,
+                  ).scaled(4),
+                  LayoutOrientation.portrait: GridPlacement(
+                    x: 0,
+                    y: 0,
+                    w: 4,
+                    h: 24,
+                  ).scaled(4),
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    addTearDown(workspace.dispose);
+    tester.view.physicalSize = const Size(800, 360);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: rawBlockTheme(),
+        home: Scaffold(
+          body: WorkbenchCanvas(
+            allowEditing: true,
+            previewSize: const Size(800, 360),
+            connection: connection,
+            workspace: workspace,
+            repository: MemoryLayouts(),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
-      final grid = find.byKey(const PageStorageKey('sessions-list'));
-      ScrollableState sourceScroll() => tester.state<ScrollableState>(
-        find.descendant(of: grid, matching: find.byType(Scrollable)).first,
-      );
-      await tester.drag(grid, const Offset(0, -240));
-      await tester.pumpAndSettle();
-      expect(sourceScroll().position.pixels, greaterThan(0));
-      final background = find.byKey(
-        const ValueKey('page-edit-background-sessions'),
-      );
-      await tester.longPressAt(
-        tester.getTopLeft(background) + const Offset(.25, .25),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('设置会话').last);
-      await tester.pumpAndSettle();
-      final inspector = find.byKey(
-        const PageStorageKey('widget-inspector-list'),
-      );
-      final position = tester
-          .state<ScrollableState>(
-            find
-                .descendant(of: inspector, matching: find.byType(Scrollable))
-                .first,
-          )
-          .position;
-      expect(position.pixels, 0);
-      expect(
-        find.byKey(const ValueKey('title-list')).hitTestable(),
-        findsOneWidget,
-      );
-      expect(find.text('显示组件').hitTestable(), findsOneWidget);
-      expect(sourceScroll().position.pixels, greaterThan(0));
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'legacy one-cell component stays recoverable and default bindings stick to first host',
-    (tester) async {
-      final tiny = LayoutWidget(
-        id: 'tiny',
-        type: 'sessions',
-        placements: {
-          for (final o in LayoutOrientation.values)
-            o: const GridPlacement(x: 0, y: 0, w: 1, h: 1),
-        },
-      );
-      final workspace = LayoutWorkspace(
-        document: LayoutDocument(
-          activePageId: 'tiny-page',
-          pages: [
-            LayoutPage(id: 'tiny-page', name: '小区域', widgets: [tiny]),
-          ],
-        ),
-      );
-      addTearDown(workspace.dispose);
-      final repository = MemoryLayouts();
-      await launch(
-        tester,
-        workspace,
-        size: const Size(480, 280),
-        scale: 1.8,
-        repository: repository,
-      );
-      expect(workspace.findWidget('tiny')!.binding['hostId'], 'host');
-      expect(workspace.findWidget('tiny')!.binding['source'], 'codex.sessions');
-      expect(
-        repository.saved!.pages.first.widgets.first.binding['hostId'],
-        'host',
-      );
-      expect(tester.takeException(), isNull);
-      workspace.beginEdit();
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('设置会话').first);
-      await tester.pumpAndSettle();
-      expect(find.text('会话设置'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    final grid = find.byKey(const PageStorageKey('sessions-list'));
+    ScrollableState sourceScroll() => tester.state<ScrollableState>(
+      find.descendant(of: grid, matching: find.byType(Scrollable)).first,
+    );
+    sourceScroll().position.jumpTo(240);
+    await tester.pumpAndSettle();
+    expect(sourceScroll().position.pixels, greaterThan(0));
+    final background = find.byKey(
+      const ValueKey('page-edit-background-sessions'),
+    );
+    await tester.longPressAt(
+      tester.getTopLeft(background) + const Offset(.25, .25),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置会话').last);
+    await tester.pumpAndSettle();
+    final inspector = find.byKey(const PageStorageKey('widget-inspector-list'));
+    final position = tester
+        .state<ScrollableState>(
+          find
+              .descendant(of: inspector, matching: find.byType(Scrollable))
+              .first,
+        )
+        .position;
+    expect(position.pixels, 0);
+    expect(
+      find.byKey(const ValueKey('title-list')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.text('显示组件').hitTestable(), findsOneWidget);
+    expect(sourceScroll().position.pixels, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'all-page draft cancellation, duplicate instances and undo remain independent',
     (tester) async {

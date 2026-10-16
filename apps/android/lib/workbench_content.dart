@@ -23,11 +23,12 @@ class WorkbenchWidgetBody extends StatelessWidget {
     required this.binding,
     this.editing = false,
     this.onEditRequested,
+    this.debugLayout = false,
   });
   final Connection connection;
   final String id, type;
   final Map<String, dynamic> options, binding;
-  final bool editing;
+  final bool editing, debugLayout;
   final VoidCallback? onEditRequested;
   double number(String key, double fallback) =>
       (options[key] as num?)?.toDouble() ?? fallback;
@@ -49,7 +50,15 @@ class WorkbenchWidgetBody extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     behavior: HitTestBehavior.opaque,
     onLongPress: editing ? null : onEditRequested,
-    child: _body(context),
+    child: LayoutBuilder(
+      builder: (context, box) => LayoutDebugOverlay(
+        enabled: debugLayout,
+        label:
+            '区域 ${box.maxWidth.toStringAsFixed(1)} × ${box.maxHeight.toStringAsFixed(1)} dp',
+        top: true,
+        child: _body(context),
+      ),
+    ),
   );
 
   Widget _body(BuildContext context) {
@@ -131,7 +140,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
         final style = Theme.of(context).textTheme.bodySmall!;
         final notice = [
           if (!fresh) _sourceStatusLabel(data, 'codex.sessions'),
-          if (!allowed && sessions.isNotEmpty && !editing) '请在电脑端开启「允许在电脑上打开」。',
+          if (!allowed && sessions.isNotEmpty) '请在电脑端开启「允许在电脑上打开」。',
         ].join(' · ');
         const padding = 4.0;
         final painter = TextPainter(
@@ -147,7 +156,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
           return _smallMessage(
             context,
             '${sessions.length} 个会话',
-            '${notice.isEmpty ? '' : '$notice。'}长按调整组件大小。',
+            '${notice.isEmpty ? '' : '$notice。'}请在电脑端调整组件大小。',
           );
         }
         return Padding(
@@ -187,111 +196,119 @@ class WorkbenchWidgetBody extends StatelessWidget {
                       final height = options['fitRows'] != false
                           ? (grid.maxHeight - gap * (rows - 1)) / rows
                           : target;
-                      return Semantics(
+                      return LayoutDebugOverlay(
+                        enabled: debugLayout,
                         label:
-                            '${sessions.length} 个近期会话，共 ${data.sessionTotal} 个',
-                        child: GridView.builder(
-                          key: PageStorageKey('sessions-$id'),
-                          padding: EdgeInsets.zero,
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: columns,
-                                crossAxisSpacing: gap,
-                                mainAxisSpacing: gap,
-                                mainAxisExtent: height,
-                              ),
-                          itemCount: sessions.length,
-                          itemBuilder: (context, index) {
-                            final session = sessions[index];
-                            final c = deskbarColors(context);
-                            final statusColor = session.status == 'running'
-                                ? c.success
-                                : [
-                                    'failed',
-                                    'interrupted',
-                                  ].contains(session.status)
-                                ? c.warning
-                                : c.muted;
-                            return Semantics(
-                              button: !editing,
-                              label: '${session.title}，${session.statusLabel}',
-                              child: Material(
-                                key: ValueKey('session-card-$id-${session.id}'),
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                                child: InkWell(
-                                  onTap: canOpen
-                                      ? () => open(
-                                          context,
-                                          'open_session',
-                                          session.id,
-                                          session.version,
-                                        )
-                                      : null,
-                                  child: Tooltip(
-                                    message: session.title,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            session.statusLabel,
-                                            style: style.copyWith(
-                                              color: statusColor,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Flexible(
-                                            fit: FlexFit.loose,
-                                            child: Text(
-                                              session.title,
-                                              maxLines: compact ? 1 : 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.titleMedium,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          if (compact &&
-                                              session.project.isNotEmpty)
+                            '$columns 列 · 卡片 ${((grid.maxWidth - gap * (columns - 1)) / columns).toStringAsFixed(1)} × ${height.toStringAsFixed(1)} dp · 间距 $gap dp',
+                        child: Semantics(
+                          label:
+                              '${sessions.length} 个近期会话，共 ${data.sessionTotal} 个',
+                          child: GridView.builder(
+                            key: PageStorageKey('sessions-$id'),
+                            padding: EdgeInsets.zero,
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: columns,
+                                  crossAxisSpacing: gap,
+                                  mainAxisSpacing: gap,
+                                  mainAxisExtent: height,
+                                ),
+                            itemCount: sessions.length,
+                            itemBuilder: (context, index) {
+                              final session = sessions[index];
+                              final c = deskbarColors(context);
+                              final statusColor = session.status == 'running'
+                                  ? c.success
+                                  : [
+                                      'failed',
+                                      'interrupted',
+                                    ].contains(session.status)
+                                  ? c.warning
+                                  : c.muted;
+                              return Semantics(
+                                button: !editing,
+                                label:
+                                    '${session.title}，${session.statusLabel}',
+                                child: Material(
+                                  key: ValueKey(
+                                    'session-card-$id-${session.id}',
+                                  ),
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: InkWell(
+                                    onTap: canOpen
+                                        ? () => open(
+                                            context,
+                                            'open_session',
+                                            session.id,
+                                            session.version,
+                                          )
+                                        : null,
+                                    child: Tooltip(
+                                      message: session.title,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
                                             Text(
-                                              session.project,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: style,
+                                              session.statusLabel,
+                                              style: style.copyWith(
+                                                color: statusColor,
+                                              ),
                                             ),
-                                          if (!compact)
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    session.project,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
+                                            const SizedBox(height: 2),
+                                            Flexible(
+                                              fit: FlexFit.loose,
+                                              child: Text(
+                                                session.title,
+                                                maxLines: compact ? 1 : 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.titleMedium,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            if (compact &&
+                                                session.project.isNotEmpty)
+                                              Text(
+                                                session.project,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: style,
+                                              ),
+                                            if (!compact)
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      session.project,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: style,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    workbenchTime(
+                                                      session.updatedAt,
+                                                    ),
                                                     style: style,
                                                   ),
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  workbenchTime(
-                                                    session.updatedAt,
-                                                  ),
-                                                  style: style,
-                                                ),
-                                              ],
-                                            ),
-                                        ],
+                                                ],
+                                              ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       );
                     },
@@ -312,7 +329,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
     if (entries.isEmpty) {
       return _Message(
         resource != null && resource != ''
-            ? '绑定的入口不在共享范围，长按调整来源。'
+            ? '绑定的入口不在共享范围，请在电脑端调整来源。'
             : '请在电脑端添加入口并开启共享。',
       );
     }
@@ -333,7 +350,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
     ).textTheme.labelLarge!.copyWith(fontWeight: FontWeight.w400);
     final notice = !online
         ? '电脑离线 · 暂时无法打开'
-        : !allowed && !editing
+        : !allowed
         ? '请在电脑端开启「允许在电脑上打开」。'
         : '';
     return Padding(
@@ -361,7 +378,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
           if (box.maxWidth < tileWidth ||
               box.maxHeight - noticeHeight < tileHeight) {
             return _Message(
-              '${notice.isEmpty ? '' : '$notice。'}入口区域太小，长按调整大小。',
+              '${notice.isEmpty ? '' : '$notice。'}入口区域太小，请在电脑端调整大小。',
             );
           }
           final columns = math.max(
@@ -381,80 +398,85 @@ class WorkbenchWidgetBody extends StatelessWidget {
                 const SizedBox(height: 4),
               ],
               Expanded(
-                child: GridView.builder(
-                  key: PageStorageKey('shortcuts-$id'),
-                  padding: EdgeInsets.zero,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    crossAxisSpacing: gapX,
-                    mainAxisSpacing: gapY,
-                    mainAxisExtent: tileHeight,
-                  ),
-                  itemCount: entries.length,
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    final c = deskbarColors(context);
-                    Widget fallback() => Container(
-                      width: iconSize,
-                      height: iconSize,
-                      decoration: BoxDecoration(
-                        color: c.raised,
-                        borderRadius: BorderRadius.circular(iconSize * .2),
-                      ),
-                      child: Icon(
-                        entry.kind == 'app'
-                            ? Icons.apps_outlined
-                            : Icons.language_outlined,
-                        size: iconSize * .65,
-                        color: c.muted,
-                      ),
-                    );
-                    return Tooltip(
-                      message: entry.name,
-                      child: Semantics(
-                        label: entry.name,
-                        button: !editing,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(4),
-                          onTap: canOpen
-                              ? () => open(
-                                  context,
-                                  'open_shortcut',
-                                  entry.id,
-                                  entry.version,
-                                )
-                              : null,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (entry.iconBytes != null)
-                                Image.memory(
-                                  entry.iconBytes!,
-                                  width: iconSize,
-                                  height: iconSize,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.medium,
-                                  errorBuilder: (context, error, stack) =>
-                                      fallback(),
-                                )
-                              else
-                                fallback(),
-                              if (labels) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  entry.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: labelStyle,
-                                ),
+                child: LayoutDebugOverlay(
+                  enabled: debugLayout,
+                  label:
+                      '$columns 列 · 单元 ${((box.maxWidth - gapX * (columns - 1)) / columns).toStringAsFixed(1)} × ${tileHeight.toStringAsFixed(1)} dp · 图标 $iconSize dp · 间距 $gapX / $gapY dp',
+                  child: GridView.builder(
+                    key: PageStorageKey('shortcuts-$id'),
+                    padding: EdgeInsets.zero,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      crossAxisSpacing: gapX,
+                      mainAxisSpacing: gapY,
+                      mainAxisExtent: tileHeight,
+                    ),
+                    itemCount: entries.length,
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      final c = deskbarColors(context);
+                      Widget fallback() => Container(
+                        width: iconSize,
+                        height: iconSize,
+                        decoration: BoxDecoration(
+                          color: c.raised,
+                          borderRadius: BorderRadius.circular(iconSize * .2),
+                        ),
+                        child: Icon(
+                          entry.kind == 'app'
+                              ? Icons.apps_outlined
+                              : Icons.language_outlined,
+                          size: iconSize * .65,
+                          color: c.muted,
+                        ),
+                      );
+                      return Tooltip(
+                        message: entry.name,
+                        child: Semantics(
+                          label: entry.name,
+                          button: !editing,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: canOpen
+                                ? () => open(
+                                    context,
+                                    'open_shortcut',
+                                    entry.id,
+                                    entry.version,
+                                  )
+                                : null,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (entry.iconBytes != null)
+                                  Image.memory(
+                                    entry.iconBytes!,
+                                    width: iconSize,
+                                    height: iconSize,
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.medium,
+                                    errorBuilder: (context, error, stack) =>
+                                        fallback(),
+                                  )
+                                else
+                                  fallback(),
+                                if (labels) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    entry.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: labelStyle,
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
@@ -691,4 +713,58 @@ class WorkbenchContent extends StatelessWidget {
       ],
     ],
   );
+}
+
+/// Labels are painted over measured content; toggling does not change layout.
+class LayoutDebugOverlay extends StatelessWidget {
+  const LayoutDebugOverlay({
+    super.key,
+    required this.enabled,
+    required this.label,
+    required this.child,
+    this.top = false,
+  });
+  final bool enabled, top;
+  final String label;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => !enabled
+      ? child
+      : Stack(
+          fit: StackFit.expand,
+          children: [
+            child,
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xff527bc2)),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: top ? 0 : null,
+              bottom: top ? null : 0,
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: const Color(0xdd303e52),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
 }

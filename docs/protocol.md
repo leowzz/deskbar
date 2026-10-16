@@ -145,3 +145,9 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 - `POST /v1/commands` 接收 `command_id`（UUID）、`host_id`、`host_epoch`、`action`、`target_id`、`target_version`、`expires_at`；未知字段拒绝。不接受路径、URL 或 shell。Host 验证设备、epoch、最长十秒有效期、当前权限、资源版本及来源健康。网页仅允许完整 http / https URL（不含登录凭据）；应用需为存在的绝对路径，macOS 限 .app。
 - 初次有效请求返回 `accepted` 并启动有界 OS 打开，`GET /v1/commands/{id}` 返回本设备的结果。打开命令五秒超时记 unknown；OS 接受记 succeeded，不保证窗口前置。Android 使用八秒有效期，提交一次后只查询同一 ID，传输失败不重新 POST。
 - 当前 epoch 内最多保留 4096 个设备与命令 ID 组合，不淘汰后重执行；满额拒绝新动作并提示重启。重复内容返回原结果，冲突拒绝；不同设备不能查询彼此结果。重启后旧 epoch 请求拒绝，找不到记录返回 unknown，不能推断未执行。设备撤销后所有受保护接口返回 401。
+
+## 电脑管理布局与设备显示报告
+
+`Snapshot` 新增 `layout`（当前 schemaVersion 3 文档，未配置时为 null 并使用双端共享初始布局）和 `layout_revision`（每设备独立版本）。示例见 [layout.example.json](../protocol/layout.example.json)。布局只含稳定 ID、来源、参数及横竖屏网格位置，不携带路径或凭据；按设备隔离，电脑本地 `save_layout` 校验预期版本后原子保存并触发完整快照推送。移动端无布局写入接口，不迁移旧 Android 布局。
+
+认证 WSS 接受设备的 JSON 显示报告：`width` / `height` 为工作台内容可用 dp，`text_scale` 为文字倍率，`dark` 为主题，`page_id` 为当前页，`layout_revision` 为已应用版本。最大 2048 字节；宽高限制 1–8192，字号倍率 0.5–4，未知字段拒绝。报告按凭据归属设备，仅存内存并由 Host 添加 `seen_at`，不提升权限或修改配置。设备每五秒及参数变化上报；超过十五秒无报告视为离线。电脑以已应用版本区分保存和接收，不将保存成功宣称为设备已更新。

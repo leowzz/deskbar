@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'layout_workspace.dart';
 
 class SourceState {
   SourceState(Map<String, dynamic> v)
@@ -90,7 +91,11 @@ Uint8List? _shortcutIcon(dynamic encoded) {
 
 class WorkbenchData {
   WorkbenchData(Map<String, dynamic> v)
-    : hostId = v['host_id'] as String,
+    : layout = v['layout'] == null
+          ? LayoutDocument.initial()
+          : LayoutDocument.fromJson(v['layout'] as Map<String, dynamic>),
+      layoutRevision = (v['layout_revision'] as int?) ?? 0,
+      hostId = v['host_id'] as String,
       epoch = v['epoch'] as String,
       revision = v['revision'] as int,
       offset =
@@ -114,6 +119,8 @@ class WorkbenchData {
           .toList(),
       capabilities = List<String>.from((v['capabilities'] as List?) ?? []),
       sessionTotal = (v['session_total'] as int?) ?? 0;
+  final LayoutDocument layout;
+  final int layoutRevision;
   final String hostId, epoch;
   final int revision, offset, sessionTotal;
   final List<SourceState> sources;

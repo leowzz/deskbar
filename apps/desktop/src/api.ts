@@ -1,10 +1,22 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
+export interface DeviceDisplay {
+  width: number;
+  height: number;
+  text_scale: number;
+  dark: boolean;
+  page_id: string;
+  layout_revision: number;
+  seen_at: number;
+}
+
 export interface Device {
   id: string;
   name: string;
   paired_at: number;
   permissions: Permissions;
+  layout_revision: number;
+  display: DeviceDisplay | null;
 }
 export interface Status {
   name: string;

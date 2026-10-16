@@ -1,10 +1,10 @@
 # DeskBar 架构
 
-状态：连接、Codex / Sub2API 来源、设备许可、有限打开动作和 Android 多页组件编辑已实现。2026-10-16。
+状态：连接、Codex / Sub2API 来源、设备许可、有限打开动作和 电脑端多页组件编辑与同步已实现。2026-10-16。
 
 ## 双端直连
 
-桌面 Agent 同时承载本机状态、设备授权、LAN 监听和有限动作执行。Android 承载工作台、来源选择、页面与组件偏好。
+桌面 Agent 同时承载本机状态、设备授权、LAN 监听和有限动作执行。电脑保存逐设备页面与组件配置；Android 承载工作台展示、操作与基础设置。
 
 ```mermaid
 flowchart LR
@@ -14,7 +14,7 @@ flowchart LR
   Gateway -->|WSS 快照与结果| Android
   Host -->|授权与资源校验后| Executor[本机执行器]
   Executor -->|执行结果| Host
-  Pages[Android 本机页面配置] --> Android
+  Pages[电脑逐设备页面配置] --> Host
 ```
 
 HostRuntime 与 LAN Gateway 嵌入桌面进程；关闭设置窗口后可继续在托盘运行。没有独立部署的 Core 或 Broker。
@@ -47,7 +47,7 @@ Tauri 负责装配运行时、设置、托盘、登录启动和更新；HostRunt
 
 **Host 持有：** Codex / API 用量来源配置及凭据、本机应用路径与 URL、快捷入口定义、共享字段和各设备许可。每次执行重新校验，删除入口或撤销许可立即生效。
 
-**Android 持有：** 已配对 Host、来源选择、会话分组、入口显示顺序、页面列表、各实例参数与摆放、配色、常亮与显示偏好。绑定保存稳定 ID，不保存执行路径或依赖 IP 的引用。
+**Android 持有：** 已配对 Host、授权快照与布局缓存、当前浏览页、配色与显示偏好。页面列表、各实例参数、来源绑定与摆放由 Host 逐设备保存。绑定保存稳定 ID，不保存执行路径或依赖 IP 的引用。
 
 Host 的连接状态、Source 的新鲜度和页面的可见性相互独立。多个组件使用同一 Source 时合并订阅；隐藏组件不能关闭其他设备仍在使用的来源。
 
@@ -98,6 +98,6 @@ macOS 安装路径需验证签名、公证与本地网络授权。Windows 需验
 
 Codex 数据库和 app-server 读取、Sub2API 登录 / 续期 / 聚合指标、深链、入口校验及 macOS 应用图标取得参考 Orbit 的成熟规则，已改用 DeskBar 自有类型；没有 Orbit 运行依赖、额外后端、MQTT 或共享插件框架。Sub2API 配置归 Host，密码存独立钥匙串条目；账号变更清除旧值并丢弃在途旧账号响应。
 
-Android `LayoutWorkspace` 使用不可变文档管理全页面草稿、历史和双方向网格校验，临时选中 / 铺满不参与保存。`LayoutRepository` 经串行队列在 App 私有目录写临时文件后原子替换，保留有效副本和旧配置 / 损坏原文件；未来版本禁止降级覆盖。`WorkbenchCanvas` 将文档绑定到单个 `Connection` 的授权快照，同源多个实例复用一条 WSS，按稳定 Host / 来源 / 资源筛选。页面滚动通过实例 ID 保留，非当前页由按需 PageView 构建。
+`LayoutWorkspace` 与组件渲染器被 Android 和电脑 Flutter Web 编辑器共用。React 以同源 iframe 嵌入本地编辑器，只传递所选设备的授权快照，保存通过 Tauri 调用 Host；iframe 不持有设备凭据，不能提交远程打开动作。编辑器构建集成在桌面 dev / build 中，不依赖外部服务。Host 校验布局边界、重叠、来源和预期版本后原子保存，随后 WSS 下发。Android 从授权快照恢复布局，不读写旧布局文件；显示偏好仍在本机独立保存。显示宽高、主题、字号和已应用版本经现存 WSS 上报，保存在 Host 内存，用于预览与同步状态。
 
 快捷图标由 `crates/lan/src/icons.rs` 调用 NSWorkspace 取得应用 / 系统网页图标，经 sips 缩放和 PNG 重编码后交给 Host 校验与保存；快照只共享受限像素数据。Android 在解析快照时缓存图标字节，按实例图标尺寸本地渲染，不读取电脑路径或另行请求网站。显示偏好由独立 `DisplayPreferences` 和原生 Activity 管理，页面布局不直接修改系统方向或沉浸状态。

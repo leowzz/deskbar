@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +28,16 @@ class WorkbenchCanvas extends StatefulWidget {
     this.displayPreferences,
     this.onEditingChanged,
     this.onConnectionSettings,
+    this.allowEditing = false,
+    this.previewSize,
+    this.previewFit = true,
+    this.previewTextScale = 1,
+    this.debugLayout = false,
   });
+  final bool allowEditing, debugLayout;
+  final bool previewFit;
+  final double previewTextScale;
+  final Size? previewSize;
   final Connection connection;
   final LayoutWorkspace? workspace;
   final LayoutRepository? repository;
@@ -50,7 +60,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   bool reportedEditing = false;
   Size viewport = Size.zero;
   bool bindingQueued = false;
-  Timer? _persist;
+  Timer? _persist, _displayTimer;
+  String? _remoteKey, _lastReport;
   bool loading = true, saving = false, _syncing = false, readOnly = false;
   String? warning, _activeId;
   DateTime _lastWheel = DateTime.fromMillisecondsSinceEpoch(0);
@@ -65,7 +76,14 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     display.addListener(_displayChanged);
     widget.connection.addListener(_connectionChanged);
     _activeId = workspace.activePage.id;
-    if (widget.workspace != null) {
+    if (!widget.allowEditing) {
+      loading = false;
+      _syncRemoteLayout();
+      _displayTimer = Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _reportDisplay(force: true),
+      );
+    } else if (widget.workspace != null) {
       loading = false;
       _scheduleBinding();
     } else {
@@ -92,6 +110,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   @override
   void dispose() {
     _persist?.cancel();
+    _displayTimer?.cancel();
     workspace.removeListener(_changed);
     widget.connection.removeListener(_connectionChanged);
     if (widget.workspace == null) workspace.dispose();
@@ -107,12 +126,15 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
 
   void _connectionChanged() {
     if (!mounted) return;
+    _syncRemoteLayout();
     setState(() {});
     _scheduleBinding();
   }
 
   void _scheduleBinding() {
-    if (bindingQueued ||
+    if (!widget.allowEditing ||
+        widget.previewSize != null ||
+        bindingQueued ||
         loading ||
         workspace.editing ||
         saving ||
@@ -201,7 +223,12 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       }
       _syncing = false;
     });
-    if (activeChanged && !workspace.editing && !readOnly && !loading) {
+    if (widget.allowEditing &&
+        widget.previewSize == null &&
+        activeChanged &&
+        !workspace.editing &&
+        !readOnly &&
+        !loading) {
       _persist?.cancel();
       _persist = Timer(
         const Duration(milliseconds: 250),
@@ -227,7 +254,46 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     if (!success) _toast(workspace.error ?? '未能完成修改');
   }
 
+  void _syncRemoteLayout() {
+    if (widget.allowEditing) return;
+    final data = widget.connection.data;
+    if (data == null) return;
+    final key = '${data.hostId}/${data.epoch}/${data.layoutRevision}';
+    if (key == _remoteKey) return;
+    final current = workspace.activePage.id;
+    final sameHost = _remoteKey?.startsWith('${data.hostId}/') ?? false;
+    _remoteKey = key;
+    final next = data.layout;
+    workspace.replaceDocument(
+      sameHost && next.pages.any((p) => p.id == current)
+          ? next.copyWith(activePageId: current)
+          : next,
+    );
+  }
+
+  void _reportDisplay({bool force = false}) {
+    if (!mounted || widget.allowEditing || viewport.isEmpty) return;
+    final data = widget.connection.data;
+    if (data == null) return;
+    final report = <String, dynamic>{
+      'width': viewport.width,
+      'height': viewport.height,
+      'text_scale': MediaQuery.textScalerOf(context).scale(14) / 14,
+      'dark': Theme.of(context).brightness == Brightness.dark,
+      'page_id': workspace.activePage.id,
+      'layout_revision': data.layoutRevision,
+    };
+    final encoded = jsonEncode(report);
+    if (!force && encoded == _lastReport) return;
+    _lastReport = encoded;
+    unawaited(widget.connection.reportDisplay(report));
+  }
+
   void _begin() {
+    if (!widget.allowEditing) {
+      widget.onConnectionSettings?.call();
+      return;
+    }
     if (readOnly || loading || saving) {
       _toast(readOnly ? '请升级工作台后再编辑布局。' : '正在读取布局，请稍候。');
       return;
@@ -269,8 +335,17 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   void _closePanel() => setState(() {
     panel = null;
     inspectedId = null;
+    workspace.selectWidget(null);
   });
-  void _openPanel(String name) => setState(() => panel = name);
+  void _openPanel(String name) {
+    _begin();
+    if (!workspace.editing) return;
+    setState(() {
+      panel = name;
+      inspectedId = null;
+      workspace.selectWidget(null);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -330,48 +405,53 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                   ),
                 ),
               ),
-            if (workspace.editing) _editToolbar(),
+            if (widget.allowEditing) _editToolbar(),
+            if (widget.allowEditing) const SizedBox(height: 12),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, box) {
                   final nextOrientation =
-                      MediaQuery.orientationOf(context) == Orientation.landscape
+                      (widget.previewSize?.aspectRatio ??
+                              MediaQuery.sizeOf(context).aspectRatio) >
+                          1
                       ? LayoutOrientation.wide
                       : LayoutOrientation.portrait;
                   if (orientation != nextOrientation) placementPreview = null;
                   orientation = nextOrientation;
                   final canvas = loading
                       ? const Center(child: CircularProgressIndicator())
-                      : _canvas();
-                  if (!workspace.editing || panel == null) return canvas;
-                  if (panel == 'widget') {
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        canvas,
-                        _FloatingEditorWindow(
-                          builder: (onDrag) => _editorPanel(onDrag: onDrag),
-                        ),
-                      ],
-                    );
-                  }
-                  final inspector = _editorPanel();
-                  if (box.maxWidth > box.maxHeight) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      : widget.previewSize == null
+                      ? _canvas()
+                      : _desktopPreview();
+                  if (!widget.allowEditing) return canvas;
+                  final inspector = panel == null
+                      ? const Center(child: Text('选择组件'))
+                      : _editorPanel();
+                  // Dock against the device orientation, not the host window.
+                  // Reserve its space before selection to keep drag geometry stable.
+                  if (orientation == LayoutOrientation.wide) {
+                    return Column(
                       children: [
                         Expanded(child: canvas),
+                        const SizedBox(height: 12),
                         SizedBox(
-                          width: math.min(320, box.maxWidth * .44),
+                          key: const ValueKey('editor-inspector'),
+                          height: math.min(260, box.maxHeight * .45),
                           child: inspector,
                         ),
                       ],
                     );
                   }
-                  return Column(
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(child: canvas),
-                      SizedBox(height: box.maxHeight * .54, child: inspector),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        key: const ValueKey('editor-inspector'),
+                        width: math.min(300, box.maxWidth * .5),
+                        child: inspector,
+                      ),
                     ],
                   );
                 },
@@ -383,14 +463,43 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     );
   }
 
+  Widget _desktopPreview() {
+    final c = deskbarColors(context);
+    final screen = SizedBox.fromSize(
+      size: widget.previewSize,
+      child: ColoredBox(
+        color: c.canvas,
+        child: MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(widget.previewTextScale)),
+          child: _canvas(),
+        ),
+      ),
+    );
+    return ColoredBox(
+      color: c.sidebar,
+      child: widget.previewFit
+          ? Center(
+              child: FittedBox(fit: BoxFit.contain, child: screen),
+            )
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SingleChildScrollView(child: screen),
+            ),
+    );
+  }
+
   Widget _editToolbar() => Material(
-    color: deskbarColors(context).sidebar,
+    color: deskbarColors(context).canvas,
     child: SizedBox(
       height: 48,
       child: Row(
         children: [
           TextButton(
-            onPressed: saving ? null : workspace.cancelEdit,
+            onPressed: saving || !workspace.editing
+                ? null
+                : workspace.cancelEdit,
             child: const Text('取消'),
           ),
           Expanded(
@@ -401,7 +510,10 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                   PopupMenuButton<String>(
                     tooltip: '切换编辑页面',
                     enabled: !saving,
-                    onSelected: _navigate,
+                    onSelected: (id) {
+                      _begin();
+                      _navigate(id);
+                    },
                     itemBuilder: (context) => [
                       for (final p in workspace.pages)
                         PopupMenuItem(value: p.id, child: Text(p.name)),
@@ -455,20 +567,18 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                     tooltip: '整理本页',
                     onPressed: saving
                         ? null
-                        : () => _result(workspace.arrangePage(orientation)),
+                        : () {
+                            _begin();
+                            _result(workspace.arrangePage(orientation));
+                          },
                     icon: const Icon(Icons.auto_awesome_mosaic_outlined),
-                  ),
-                  IconButton(
-                    tooltip: '显示设置',
-                    onPressed: saving ? null : () => _openPanel('display'),
-                    icon: const Icon(Icons.settings_display_outlined),
                   ),
                 ],
               ),
             ),
           ),
           FilledButton(
-            onPressed: saving ? null : _finish,
+            onPressed: saving || !workspace.editing ? null : _finish,
             child: Text(saving ? '保存中…' : '完成'),
           ),
         ],
@@ -479,6 +589,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     builder: (context, box) {
       if (viewport != box.biggest) placementPreview = null;
       viewport = box.biggest;
+      if (!widget.allowEditing) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _reportDisplay());
+      }
       return Listener(
         onPointerSignal: (event) {
           if (event is PointerScrollEvent &&
@@ -515,7 +628,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   Widget _page(LayoutPage page) {
     final visible = page.widgets.where((w) => w.visible).toList();
     return Padding(
-      padding: EdgeInsets.all(workspace.editing ? 4 : 2),
+      padding: const EdgeInsets.all(2),
       child: LayoutBuilder(
         builder: (context, box) => Stack(
           children: [
@@ -524,9 +637,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 key: ValueKey('page-edit-background-${page.id}'),
                 behavior: HitTestBehavior.opaque,
                 onLongPress: workspace.editing ? null : _begin,
-                onTap: workspace.editing
-                    ? () => workspace.selectWidget(null)
-                    : null,
+                onTap: widget.allowEditing ? _closePanel : null,
                 child: workspace.editing
                     ? CustomPaint(
                         painter: _GridPainter(
@@ -563,6 +674,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 onError: _toast,
                 onSettings: () => _inspect(w.id),
                 onEditRequested: _begin,
+                exactPreview: widget.previewSize != null,
+                editable: widget.allowEditing,
+                debugLayout: widget.debugLayout,
                 preview: placementPreview?[w.id],
                 onPreview: (preview) =>
                     setState(() => placementPreview = preview),
@@ -573,14 +687,14 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     );
   }
 
-  Widget _editorPanel({GestureDragUpdateCallback? onDrag}) {
+  Widget _editorPanel() {
     final title = switch (panel) {
       'widget' =>
         '${widgetTypeName(workspace.findWidget(inspectedId)?.type ?? '')}设置',
       'components' => '显示的组件',
       'pages' => '管理页面',
       'add' => '添加组件',
-      _ => '显示设置',
+      _ => '组件属性',
     };
     final body = switch (panel) {
       'widget' => _widgetInspector(),
@@ -595,16 +709,12 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             ),
         ],
       ),
-      _ => _displayBody(),
+      _ => const SizedBox(),
     };
     final heading = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          if (onDrag != null) ...[
-            const Icon(Icons.drag_handle, size: 18),
-            const SizedBox(width: 8),
-          ],
           Expanded(
             child: Text(
               title,
@@ -625,23 +735,10 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: onDrag == null
-                      ? heading
-                      : MouseRegion(
-                          cursor: SystemMouseCursors.move,
-                          child: GestureDetector(
-                            key: const ValueKey('floating-editor-titlebar'),
-                            behavior: HitTestBehavior.opaque,
-                            dragStartBehavior: DragStartBehavior.down,
-                            onPanUpdate: saving ? null : onDrag,
-                            child: heading,
-                          ),
-                        ),
-                ),
+                Expanded(child: heading),
                 IconButton(
                   tooltip: '关闭设置',
-                  onPressed: _closePanel,
+                  onPressed: saving ? null : _closePanel,
                   icon: const Icon(Icons.close),
                 ),
               ],
@@ -660,39 +757,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       ),
     );
   }
-
-  Widget _displayBody() => ListenableBuilder(
-    listenable: display,
-    builder: (context, _) => ListView(
-      padding: const EdgeInsets.all(8),
-      children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('沉浸显示'),
-          value: display.immersive,
-          onChanged: display.setImmersive,
-        ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('锁定旋转'),
-          subtitle: const Text('保持当前方向'),
-          value: display.rotationLocked,
-          onChanged: display.setRotationLocked,
-        ),
-        if (display.error != null)
-          Text(
-            display.error!,
-            style: TextStyle(color: deskbarColors(context).warning),
-          ),
-        if (widget.onConnectionSettings != null)
-          TextButton.icon(
-            onPressed: widget.onConnectionSettings,
-            icon: const Icon(Icons.computer_outlined),
-            label: const Text('连接与外观设置'),
-          ),
-      ],
-    ),
-  );
 
   Future<String?> _askName(String title, String initial) async {
     final controller = TextEditingController(text: initial);
@@ -904,6 +968,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     ],
   );
   Future<void> _inspect(String id) async {
+    _begin();
+    if (!workspace.editing) return;
     workspace.selectWidget(id);
     setState(() {
       panel = 'widget';
@@ -917,11 +983,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     if (id == null || w == null) {
       return const Center(child: Text('组件已移除，可撤销恢复。'));
     }
-    return SingleChildScrollView(
-      key: PageStorageKey('widget-inspector-$id'),
-      primary: false,
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-      child: Column(
+    final groups = <Widget>[
+      Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _WidgetNameField(
@@ -937,6 +1000,11 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             onChanged: (v) => _result(workspace.setWidgetVisible(id, v)),
           ),
           _bindingControls(w),
+        ],
+      ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           if (w.type == 'sessions') ...[
             _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
             _optionSlider(w, 'itemHeight', '卡片目标高度', 64, 400, 96),
@@ -994,6 +1062,11 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 },
               ),
             ),
+        ],
+      ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             key: ValueKey('move-$id'),
@@ -1023,6 +1096,27 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           ),
         ],
       ),
+    ];
+    return LayoutBuilder(
+      builder: (context, box) {
+        final columns = orientation == LayoutOrientation.wide
+            ? math.max(1, (box.maxWidth / 260).floor()).clamp(1, 3)
+            : 1;
+        final columnWidth = (box.maxWidth - 24 - (columns - 1) * 16) / columns;
+        return SingleChildScrollView(
+          key: PageStorageKey('widget-inspector-$id'),
+          primary: false,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              for (final group in groups)
+                SizedBox(width: columnWidth, child: group),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1181,66 +1275,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   );
 }
 
-class _FloatingEditorWindow extends StatefulWidget {
-  const _FloatingEditorWindow({required this.builder});
-  final Widget Function(GestureDragUpdateCallback onDrag) builder;
-
-  @override
-  State<_FloatingEditorWindow> createState() => _FloatingEditorWindowState();
-}
-
-class _FloatingEditorWindowState extends State<_FloatingEditorWindow> {
-  Offset? position;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) {
-      const margin = 8.0;
-      final verticalMargin = box.maxHeight >= 64 ? margin : 0.0;
-      final width = math.min(360.0, math.max(0.0, box.maxWidth - margin * 2));
-      final height = math.min(
-        math.max(0.0, box.maxHeight - verticalMargin * 2),
-        math.min(460.0, math.max(48.0, box.maxHeight * .72)),
-      );
-      final maxX = math.max(margin, box.maxWidth - width - margin);
-      final maxY = math.max(
-        verticalMargin,
-        box.maxHeight - height - verticalMargin,
-      );
-      Offset bounded(Offset value) => Offset(
-        value.dx.clamp(margin, maxX),
-        value.dy.clamp(verticalMargin, maxY),
-      );
-      // Clamp the displayed position after rotation or keyboard resizing without
-      // losing the user's preferred position when the viewport grows again.
-      final offset = bounded(position ?? Offset(maxX, maxY));
-      return Stack(
-        children: [
-          Positioned(
-            left: offset.dx,
-            top: offset.dy,
-            width: width,
-            height: height,
-            child: Material(
-              key: const ValueKey('floating-editor-window'),
-              elevation: 12,
-              color: deskbarColors(context).surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: deskbarColors(context).edge),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: widget.builder((details) {
-                setState(() => position = bounded(offset + details.delta));
-              }),
-            ),
-          ),
-        ],
-      );
-    },
-  );
-}
-
 /// Keep the same editor and focus while external undo/redo updates its value.
 class _WidgetNameField extends StatefulWidget {
   const _WidgetNameField({
@@ -1303,6 +1337,9 @@ class _PlacedWidget extends StatefulWidget {
     required this.onEditRequested,
     required this.preview,
     required this.onPreview,
+    this.exactPreview = false,
+    this.editable = false,
+    this.debugLayout = false,
   });
   final LayoutWidget widget;
   final LayoutOrientation orientation;
@@ -1312,6 +1349,7 @@ class _PlacedWidget extends StatefulWidget {
   final ValueChanged<String> onError;
   final VoidCallback onSettings;
   final VoidCallback onEditRequested;
+  final bool exactPreview, debugLayout, editable;
   final GridPlacement? preview;
   final ValueChanged<Map<String, GridPlacement>?> onPreview;
   @override
@@ -1328,7 +1366,7 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
   bool get editing => widget.workspace.editing;
 
   void _start() {
-    widget.workspace.selectWidget(widget.widget.id);
+    widget.onSettings();
     gestureDocument = widget.workspace.document;
     original = widget.widget.placementFor(widget.orientation);
     candidate = null;
@@ -1466,7 +1504,7 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
         widget.widget.placementFor(widget.orientation);
     final cw = widget.size.width / widget.orientation.columns,
         ch = widget.size.height / widget.orientation.rows;
-    final gap = editing ? 4.0 : 2.0;
+    const gap = 2.0;
     final selected =
         editing && widget.workspace.selectedWidgetId == widget.widget.id;
     final body = WorkbenchWidgetBody(
@@ -1475,7 +1513,8 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
       type: widget.widget.type,
       options: widget.widget.options,
       binding: widget.widget.binding,
-      editing: editing,
+      editing: widget.editable || widget.exactPreview,
+      debugLayout: widget.debugLayout,
       onEditRequested: widget.onEditRequested,
     );
     return AnimatedPositioned(
@@ -1487,185 +1526,109 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
       top: r.y * ch + gap / 2,
       width: math.max(0, r.w * cw - gap),
       height: math.max(0, r.h * ch - gap),
-      child: editing
-          ? GestureDetector(
-              onTap: () => widget.workspace.selectWidget(widget.widget.id),
+      child: widget.editable
+          ? Tooltip(
+              message: '设置${widgetTypeName(widget.widget.type)}',
               child: DecoratedBox(
                 key: ValueKey('widget-edit-frame-${widget.widget.id}'),
+                position: DecorationPosition.foreground,
                 decoration: BoxDecoration(
-                  color: c.surface,
-                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: !valid
                         ? c.danger
                         : selected
                         ? c.focus
-                        : c.line,
-                    width: selected || !valid ? 2 : 1,
+                        : Colors.transparent,
+                    width: 2,
                   ),
                 ),
-                child: LayoutBuilder(
-                  builder: (context, box) {
-                    final name = widgetTypeName(widget.widget.type);
-                    if (box.maxWidth < 64 || box.maxHeight < 48) {
-                      return Tooltip(
-                        message: '设置$name',
-                        child: InkWell(
-                          onTap: widget.onSettings,
-                          child: Center(
-                            child: Icon(
-                              Icons.tune,
-                              size: math.max(
-                                1,
-                                math.min(
-                                  18,
-                                  math.min(box.maxWidth, box.maxHeight),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    final header = SizedBox(
-                      height: 48,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Tooltip(
-                              message: '设置$name',
-                              child: _dragArea(
-                                _LayoutDrag.move,
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.drag_indicator,
-                                        size: 18,
-                                      ),
-                                      if (box.maxWidth >= 128) ...[
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            widget.widget.title.isEmpty
-                                                ? name
-                                                : widget.widget.title,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                '拖动移动$name',
-                              ),
-                            ),
-                          ),
-                          if (box.maxWidth >= 192)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 16),
-                              child: IconButton(
-                                tooltip: '设置$name',
-                                onPressed: widget.onSettings,
-                                icon: const Icon(Icons.tune, size: 18),
-                              ),
-                            ),
-                        ],
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _dragArea(
+                      _LayoutDrag.move,
+                      IgnorePointer(child: body),
+                      '移动${widgetTypeName(widget.widget.type)}',
+                    ),
+                    if (selected) ...[
+                      _resizeHandle(
+                        _LayoutDrag.left,
+                        left: 0,
+                        top: 0,
+                        bottom: 16,
+                        width: 12,
                       ),
-                    );
-                    Widget grip(bool vertical) => Center(
-                      child: Container(
-                        width: vertical ? 3 : 24,
-                        height: vertical ? 24 : 3,
-                        decoration: BoxDecoration(
-                          color: selected ? c.selectedText : c.edge,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+                      _resizeHandle(
+                        _LayoutDrag.right,
+                        right: 0,
+                        top: 0,
+                        bottom: 16,
+                        width: 12,
                       ),
-                    );
-                    return ClipRect(
-                      child: Stack(
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              header,
-                              if (box.maxHeight >= 80)
-                                Expanded(child: IgnorePointer(child: body)),
-                            ],
-                          ),
-                          Positioned(
-                            left: 0,
-                            top: 0,
-                            bottom: 16,
-                            width: 16,
-                            child: _dragArea(
-                              _LayoutDrag.left,
-                              grip(true),
-                              '拖动左边缘缩放$name',
-                            ),
-                          ),
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            bottom: 16,
-                            width: 16,
-                            child: _dragArea(
-                              _LayoutDrag.right,
-                              grip(true),
-                              '拖动右边缘缩放$name',
-                            ),
-                          ),
-                          Positioned(
-                            left: 24,
-                            right: 24,
-                            bottom: 0,
-                            height: 16,
-                            child: _dragArea(
-                              _LayoutDrag.bottom,
-                              grip(false),
-                              '拖动下边缘缩放$name',
-                            ),
-                          ),
-                          Positioned(
-                            left: 0,
-                            bottom: 0,
-                            width: 24,
-                            height: 16,
-                            child: _dragArea(
-                              _LayoutDrag.bottomLeft,
-                              const SizedBox(),
-                              '拖动左下角缩放$name',
-                            ),
-                          ),
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            width: 24,
-                            height: 16,
-                            child: _dragArea(
-                              _LayoutDrag.bottomRight,
-                              const SizedBox(),
-                              '拖动右下角缩放$name',
-                            ),
-                          ),
-                        ],
+                      _resizeHandle(
+                        _LayoutDrag.bottom,
+                        left: 16,
+                        right: 16,
+                        bottom: 0,
+                        height: 12,
                       ),
-                    );
-                  },
+                      _resizeHandle(
+                        _LayoutDrag.bottomLeft,
+                        left: 0,
+                        bottom: 0,
+                        width: 16,
+                        height: 16,
+                      ),
+                      _resizeHandle(
+                        _LayoutDrag.bottomRight,
+                        right: 0,
+                        bottom: 0,
+                        width: 16,
+                        height: 16,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             )
+          : widget.exactPreview
+          ? IgnorePointer(child: body)
           : body,
     );
   }
+
+  Widget _resizeHandle(
+    _LayoutDrag kind, {
+    double? left,
+    double? top,
+    double? right,
+    double? bottom,
+    double? width,
+    double? height,
+  }) => Positioned(
+    left: left,
+    top: top,
+    right: right,
+    bottom: bottom,
+    width: width,
+    height: height,
+    child: _dragArea(
+      kind,
+      Center(
+        child: Container(
+          width: kind == _LayoutDrag.bottom ? 24 : 4,
+          height: kind == _LayoutDrag.left || kind == _LayoutDrag.right
+              ? 24
+              : 4,
+          decoration: BoxDecoration(
+            color: deskbarColors(context).focus,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+      '缩放${widgetTypeName(widget.widget.type)}',
+    ),
+  );
 }
 
 class _GridPainter extends CustomPainter {

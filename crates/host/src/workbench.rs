@@ -338,8 +338,14 @@ impl Host {
     }
     pub fn authorized_snapshot(&self, token: &str) -> Option<crate::Snapshot> {
         let id = self.device_id(token)?;
-        let permissions = &self.devices.iter().find(|d| d.id == id)?.permissions;
+        self.device_snapshot(&id)
+    }
+    pub fn device_snapshot(&self, id: &str) -> Option<crate::Snapshot> {
+        let device = self.devices.iter().find(|d| d.id == id)?;
+        let permissions = &device.permissions;
         let mut snapshot = self.snapshot();
+        snapshot.layout = device.layout.clone();
+        snapshot.layout_revision = device.layout_revision;
         snapshot.sources.retain(|s| match s.source_id.as_str() {
             "codex.sessions" => permissions.sessions,
             "codex.quota" => permissions.quota,

@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "dev": "pnpm editor:build && vite --host 127.0.0.1",
+    "build": "pnpm editor:build && tsc --noEmit && vite build",
     "check": "tsc --noEmit",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "editor:build": "bash ../../scripts/build_editor.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

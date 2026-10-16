@@ -96,7 +96,6 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
   final connection = Connection();
   final display = DisplayPreferences();
   bool pasteOpen = false;
-  bool editing = false;
   String? _displayError;
   @override
   void initState() {
@@ -262,12 +261,12 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           child: ListenableBuilder(
-            listenable: connection,
+            listenable: Listenable.merge([connection, display]),
             builder: (context, _) => Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('连接与外观设置', style: Theme.of(context).textTheme.titleLarge),
+                Text('设置', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 16),
                 Text(
                   connection.hostName ?? '尚未连接电脑',
@@ -299,6 +298,16 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                   ),
                   onTap: widget.onTheme,
                 ),
+                SwitchListTile(
+                  title: const Text('全屏显示'),
+                  value: display.immersive,
+                  onChanged: display.setImmersive,
+                ),
+                SwitchListTile(
+                  title: const Text('锁定旋转'),
+                  value: display.rotationLocked,
+                  onChanged: display.setRotationLocked,
+                ),
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context);
@@ -325,7 +334,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
       final compact = MediaQuery.sizeOf(context).height < 400;
       final immersive = paired && display.immersive;
       return Scaffold(
-        appBar: immersive || (paired && editing)
+        appBar: immersive
             ? null
             : AppBar(
                 title: Text(
@@ -355,7 +364,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
           child: paired && !connection.busy
               ? Column(
                   children: [
-                    if (!immersive && !editing && !compact)
+                    if (!immersive && !compact)
                       Container(
                         padding: const EdgeInsets.only(left: 16),
                         decoration: BoxDecoration(
@@ -403,7 +412,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
-                    if (connection.error != null && !immersive && !editing)
+                    if (connection.error != null && !immersive)
                       Container(
                         width: double.infinity,
                         color: c.warningBg,
@@ -417,15 +426,29 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                         ),
                       ),
                     Expanded(
-                      child: WorkbenchCanvas(
-                        connection: connection,
-                        displayPreferences: display,
-                        onConnectionSettings: _connectionSettings,
-                        onEditingChanged: (value) {
-                          if (mounted && editing != value) {
-                            setState(() => editing = value);
-                          }
-                        },
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: WorkbenchCanvas(
+                              connection: connection,
+                              displayPreferences: display,
+                              onConnectionSettings: _connectionSettings,
+                            ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: Material(
+                              color: c.surface.withValues(alpha: .88),
+                              borderRadius: BorderRadius.circular(24),
+                              child: IconButton(
+                                tooltip: '设置',
+                                onPressed: _connectionSettings,
+                                icon: const Icon(Icons.settings_outlined),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

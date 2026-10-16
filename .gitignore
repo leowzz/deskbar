@@ -37,3 +37,6 @@ __pycache__/
 
 # Generated Tauri permission schemas
 apps/desktop/src-tauri/gen/
+
+# Shared Flutter desktop editor bundle
+apps/desktop/public/editor/

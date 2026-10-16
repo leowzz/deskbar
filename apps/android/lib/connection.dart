@@ -218,6 +218,17 @@ class Connection extends ChangeNotifier {
     }
   }
 
+  Future<void> reportDisplay(Map<String, dynamic> report) async {
+    if (phase != ConnectionPhase.online) return;
+    try {
+      await _channel.invokeMethod<void>('display', report);
+    } on PlatformException {
+      // Rendering remains available; the next heartbeat retries the report.
+    } on MissingPluginException {
+      // The desktop preview and widget tests have no Android transport.
+    }
+  }
+
   Future<void> setActive(bool active) async {
     _active = active;
     if (active) {

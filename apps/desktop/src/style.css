@@ -1080,3 +1080,50 @@ footer .text-button {
   gap: 8px;
   margin-top: 10px;
 }
+
+/* The shared renderer keeps device dp independent from desktop window size. */
+.editor-main {
+  max-width: none;
+}
+.workbench-editor {
+  min-width: 0;
+}
+.editor-device-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.editor-device-row label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.editor-device-row select {
+  max-width: 260px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+.editor-device-row > span {
+  font-size: 13px;
+}
+.workbench-editor iframe {
+  display: block;
+  width: 100%;
+  height: max(540px, calc(100vh - 120px));
+  border: 0;
+  border-radius: 0;
+  background: var(--canvas);
+}
+
+@media (min-width: 480px) and (max-width: 640px) {
+  .sidebar nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

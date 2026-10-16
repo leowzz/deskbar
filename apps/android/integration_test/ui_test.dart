@@ -79,6 +79,7 @@ void main() {
           home: Scaffold(
             body: SafeArea(
               child: WorkbenchCanvas(
+                allowEditing: false,
                 connection: connection,
                 workspace: workspace,
                 displayPreferences: display,
@@ -132,19 +133,9 @@ void main() {
       tester.getTopLeft(background) + const Offset(.25, .25),
     );
     await tester.pumpAndSettle();
-    final pageBefore = workspace.activePage.id;
-    await tester.drag(find.byType(PageView), const Offset(-300, 0));
-    await tester.pumpAndSettle();
-    expect(workspace.activePage.id, pageBefore);
-    if (capture) await binding.takeScreenshot('silver-editor');
-    await tester.tap(find.byTooltip('设置会话').last);
-    await tester.pumpAndSettle();
-    expect(find.text('会话设置'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    if (capture) await binding.takeScreenshot('silver-widget-settings');
-    await tester.tap(find.byTooltip('关闭设置'));
-    await tester.pumpAndSettle();
-    workspace.cancelEdit();
+    expect(workspace.editing, isFalse);
+    expect(find.text('完成'), findsNothing);
+    expect(find.byKey(const ValueKey('editor-inspector')), findsNothing);
     await render(Brightness.dark);
     expect(tester.takeException(), isNull);
     if (capture) await binding.takeScreenshot('graphite-sessions');
@@ -164,15 +155,9 @@ void main() {
       tester.getTopLeft(wideBackground) + const Offset(.25, .25),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('设置会话').last);
-    await tester.pumpAndSettle();
-    expect(find.text('完成').hitTestable(), findsOneWidget);
-    expect(find.text('取消').hitTestable(), findsOneWidget);
-    expect(find.byTooltip('关闭设置').hitTestable(), findsOneWidget);
+    expect(workspace.editing, isFalse);
+    expect(find.byKey(const ValueKey('editor-inspector')), findsNothing);
     expect(tester.takeException(), isNull);
-    if (capture) await binding.takeScreenshot('graphite-landscape-editor');
-    workspace.cancelEdit();
-    await tester.pumpAndSettle();
     await display.setWorkbenchActive(false);
     await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     await tester.pumpWidget(const SizedBox());

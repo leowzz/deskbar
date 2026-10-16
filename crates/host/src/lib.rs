@@ -1,4 +1,5 @@
 //! Host identity, device approval, authorized state and independent source adapters.
+pub mod layout;
 pub mod sources;
 pub mod usage;
 pub mod workbench;
@@ -43,6 +44,12 @@ pub struct Device {
     pub paired_at: u64,
     #[serde(default)]
     pub permissions: Permissions,
+    #[serde(default)]
+    pub layout: Option<layout::LayoutDocument>,
+    #[serde(default)]
+    pub layout_revision: u64,
+    #[serde(skip_deserializing)]
+    pub display: Option<layout::DisplayState>,
     #[serde(skip_serializing, default)]
     pub token_hash: String,
 }
@@ -56,6 +63,10 @@ struct StoredDevice {
     token_hash: String,
     #[serde(default)]
     permissions: Permissions,
+    #[serde(default)]
+    layout: Option<layout::LayoutDocument>,
+    #[serde(default)]
+    layout_revision: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -128,6 +139,8 @@ pub struct Snapshot {
     #[serde(default)]
     pub shortcuts: Vec<Shortcut>,
     pub capabilities: Vec<String>,
+    pub layout: Option<layout::LayoutDocument>,
+    pub layout_revision: u64,
 }
 
 impl Host {
@@ -170,6 +183,9 @@ impl Host {
                     paired_at: d.paired_at,
                     token_hash: d.token_hash,
                     permissions: d.permissions,
+                    layout: d.layout,
+                    layout_revision: d.layout_revision,
+                    display: None,
                 })
                 .collect(),
             workbench: Workbench::default(),
@@ -199,6 +215,8 @@ impl Host {
                     paired_at: d.paired_at,
                     token_hash: d.token_hash.clone(),
                     permissions: d.permissions.clone(),
+                    layout: d.layout.clone(),
+                    layout_revision: d.layout_revision,
                 })
                 .collect(),
         };
@@ -304,6 +322,9 @@ impl Host {
             paired_at: time,
             token_hash: digest(&p.token),
             permissions: Permissions::default(),
+            layout: None,
+            layout_revision: 0,
+            display: None,
         });
         self.save(&devices)?;
         self.devices = devices;
@@ -364,6 +385,8 @@ impl Host {
             api_usage: self.workbench.api_usage.clone(),
             shortcuts: self.shortcuts.iter().map(ShortcutConfig::public).collect(),
             capabilities: vec![],
+            layout: None,
+            layout_revision: 0,
         }
     }
 }

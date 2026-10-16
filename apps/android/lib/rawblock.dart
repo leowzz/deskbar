@@ -120,6 +120,7 @@ ThemeData rawBlockTheme([Brightness brightness = Brightness.light]) {
       : DeskBarColors.silver;
   final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
   final text = TextStyle(
+    fontFamily: 'Noto Sans SC',
     color: c.text,
     fontSize: 15,
     height: 1.5,
@@ -140,6 +141,7 @@ ThemeData rawBlockTheme([Brightness brightness = Brightness.light]) {
   );
   return ThemeData(
     useMaterial3: true,
+    fontFamily: 'Noto Sans SC',
     brightness: brightness,
     extensions: [c],
     colorScheme: ColorScheme(

@@ -14,19 +14,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'workbench_fixture.dart';
 
 class _MemoryRepository extends LayoutRepository {
-  _MemoryRepository(this.document, {this.readOnly = false});
+  _MemoryRepository(this.document);
   LayoutDocument document;
-  final bool readOnly;
   int saves = 0;
   @override
-  Future<LayoutLoadResult> load() async => LayoutLoadResult(
-    document: document,
-    readOnly: readOnly,
-    warning: readOnly ? '布局来自较新版本，请升级工作台后再编辑；原配置已保留' : null,
-  );
+  Future<LayoutLoadResult> load() async => LayoutLoadResult(document: document);
   @override
   Future<void> save(LayoutDocument document) async {
-    if (readOnly) throw const FormatException('较新版本布局');
     saves++;
     this.document = document;
   }
@@ -100,12 +94,13 @@ void main() {
     LayoutWorkspace? workspace,
     _MemoryRepository? repository,
     bool manySessions = false,
+    bool editor = false,
   }) async {
     tester.view.physicalSize = const Size(800, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final data = snapshot();
+    final data = {...snapshot(), 'layout': document.toJson()};
     if (manySessions) {
       final original = Map<String, dynamic>.from(
         (data['sessions'] as List).single as Map,
@@ -124,6 +119,7 @@ void main() {
         theme: rawBlockTheme(),
         home: Scaffold(
           body: WorkbenchCanvas(
+            allowEditing: editor,
             connection: connection,
             workspace: workspace,
             repository: repository ?? _MemoryRepository(document),
@@ -179,7 +175,7 @@ void main() {
     final document = _pages();
     final workspace = LayoutWorkspace(document: document)..beginEdit();
     addTearDown(workspace.dispose);
-    await mount(tester, document, workspace: workspace);
+    await mount(tester, document, workspace: workspace, editor: true);
     final card = find.text('一个比较长的真实工作任务标题，需要在大字号和窄屏下保持可读');
     // Editing deliberately ignores the content hit target. Touch its visual
     // position to exercise the containing widget's selection gesture instead.
@@ -227,9 +223,7 @@ void main() {
     },
   );
 
-  testWidgets('all hidden components keep long-press editing accessible', (
-    tester,
-  ) async {
+  testWidgets('all hidden mobile components remain read only', (tester) async {
     final document = _pages(hidden: true);
     final workspace = LayoutWorkspace(document: document);
     addTearDown(workspace.dispose);
@@ -237,25 +231,8 @@ void main() {
     expect(find.byTooltip('编辑布局'), findsNothing);
     await tester.longPressAt(tester.getCenter(find.byType(PageView)));
     await tester.pumpAndSettle();
-    expect(workspace.editing, true);
-    expect(find.text('完成'), findsOneWidget);
-  });
-
-  testWidgets('future schema remains read only through long press', (
-    tester,
-  ) async {
-    final document = _pages();
-    final repository = _MemoryRepository(document, readOnly: true);
-    await mount(tester, document, repository: repository);
-    expect(find.text('布局来自较新版本，请升级工作台后再编辑；原配置已保留'), findsOneWidget);
-    final background = find.byKey(const ValueKey('page-edit-background-first'));
-    await tester.longPressAt(
-      tester.getTopLeft(background) + const Offset(.25, .25),
-    );
-    await tester.pumpAndSettle();
+    expect(workspace.editing, false);
     expect(find.text('完成'), findsNothing);
-    expect(find.text('请升级工作台后再编辑布局。'), findsOneWidget);
-    expect(repository.saves, 0);
   });
 
   testWidgets('long press on session never executes the remote action', (

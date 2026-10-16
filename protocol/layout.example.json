@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 3,
+  "activePageId": "main",
+  "pages": [
+    {
+      "id": "main",
+      "name": "工作台",
+      "widgets": [
+        {
+          "id": "sessions-1",
+          "title": "近期会话",
+          "type": "sessions",
+          "visible": true,
+          "binding": {
+            "source": "codex.sessions"
+          },
+          "options": {
+            "maxSessions": 20,
+            "itemWidth": 280.0,
+            "itemHeight": 96.0,
+            "gap": 12.0,
+            "fitRows": true,
+            "density": "compact"
+          },
+          "placements": {
+            "wide": {
+              "x": 0,
+              "y": 0,
+              "w": 48,
+              "h": 48
+            },
+            "portrait": {
+              "x": 0,
+              "y": 0,
+              "w": 16,
+              "h": 96
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -76,6 +76,11 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                 }
                 result.success(null)
             }
+            "display" -> {
+                val input = JSONObject(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>())
+                socket?.send(input.toString())
+                result.success(null)
+            }
             "command" -> {
                 val ticket = generation.get()
                 val input = JSONObject(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()).put("command_id", UUID.randomUUID().toString())

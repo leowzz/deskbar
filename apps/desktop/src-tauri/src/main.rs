@@ -18,6 +18,31 @@ fn agent_status(state: State<AgentState>) -> Result<AgentStatus, String> {
     Ok(state.agent()?.status())
 }
 #[tauri::command]
+fn device_workbench(
+    state: State<AgentState>,
+    id: String,
+) -> Result<deskbar_host::Snapshot, String> {
+    state
+        .agent()?
+        .host
+        .lock()
+        .unwrap()
+        .device_snapshot(&id)
+        .ok_or_else(|| "设备已移除".into())
+}
+#[tauri::command]
+fn save_layout(
+    state: State<AgentState>,
+    id: String,
+    expected_revision: u64,
+    layout: deskbar_host::layout::LayoutDocument,
+) -> Result<u64, String> {
+    state
+        .agent()?
+        .save_layout(&id, expected_revision, layout)
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
 fn create_invitation(state: State<AgentState>) -> Result<PairingInvitation, String> {
     state.agent()?.invite().map_err(|e| e.to_string())
 }
@@ -166,22 +191,8 @@ fn main() {
             let show = MenuItem::with_id(app, "show", "打开 DeskBar 连接助手", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出 DeskBar 连接助手", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
-            // Small monochrome screen, generated in memory; no icon asset pipeline.
-            let mut rgba = vec![0u8; 22 * 22 * 4];
-            for y in 0..22 {
-                for x in 0..22 {
-                    if ((3..=18).contains(&x)
-                        && (3..=15).contains(&y)
-                        && (x <= 4 || x >= 17 || y <= 4 || y >= 14))
-                        || ((9..=12).contains(&x) && (16..=18).contains(&y))
-                        || ((6..=15).contains(&x) && y == 19)
-                    {
-                        rgba[(y * 22 + x) * 4 + 3] = 255;
-                    }
-                }
-            }
             TrayIconBuilder::new()
-                .icon(tauri::image::Image::new_owned(rgba, 22, 22))
+                .icon(tauri::include_image!("icons/tray.png"))
                 .icon_as_template(true)
                 .tooltip("DeskBar 连接助手")
                 .menu(&menu)
@@ -206,6 +217,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             agent_status,
+            device_workbench,
+            save_layout,
             create_invitation,
             cancel_pairing,
             approve_device,

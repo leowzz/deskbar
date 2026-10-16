@@ -180,15 +180,16 @@ void main() {
       MaterialApp(
         theme: rawBlockTheme(),
         home: Scaffold(
-          body: WorkbenchCanvas(connection: connection, workspace: workspace),
+          body: WorkbenchCanvas(
+            allowEditing: true,
+            connection: connection,
+            workspace: workspace,
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    final frame = find.byKey(const ValueKey('widget-edit-frame-session-0'));
-    await tester.tap(
-      find.descendant(of: frame, matching: find.byIcon(Icons.tune)).last,
-    );
+    await tester.tap(find.byKey(const ValueKey('widget-move-session-0')));
     await tester.pumpAndSettle();
     final limit = find.descendant(
       of: find.byKey(const ValueKey('session-limit-session-0')),

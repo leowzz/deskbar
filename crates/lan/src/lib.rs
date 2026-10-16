@@ -232,6 +232,20 @@ impl Agent {
         self.refresh.notify_one();
         self.usage_refresh.notify_one();
     }
+    pub fn save_layout(
+        &self,
+        id: &str,
+        expected_revision: u64,
+        layout: deskbar_host::layout::LayoutDocument,
+    ) -> Result<u64> {
+        let revision = self
+            .host
+            .lock()
+            .unwrap()
+            .save_layout(id, expected_revision, layout)?;
+        self.changed.send_modify(|r| *r += 1);
+        Ok(revision)
+    }
     pub fn set_permissions(&self, id: &str, permissions: Permissions) -> Result<()> {
         self.host.lock().unwrap().set_permissions(id, permissions)?;
         self.changed.send_modify(|r| *r += 1);
@@ -446,7 +460,7 @@ async fn events(State(agent): State<Agent>, headers: HeaderMap, ws: WebSocketUpg
     };
     // Subscribe before reading the initial snapshot so no update is lost.
     let mut changes = agent.changed.subscribe();
-    ws.on_upgrade(move |mut socket| async move {
+    ws.max_message_size(2048).max_frame_size(2048).on_upgrade(move |mut socket| async move {
         let mut heartbeat = tokio::time::interval(Duration::from_secs(10));
         loop {
             let json = {
@@ -465,6 +479,11 @@ async fn events(State(agent): State<Agent>, headers: HeaderMap, ws: WebSocketUpg
                 message = socket.recv() => { match message {
                     Some(Ok(Message::Ping(bytes))) => { if socket.send(Message::Pong(bytes)).await.is_err() { break; } },
                     Some(Ok(Message::Pong(_))) => {},
+                    Some(Ok(Message::Text(text))) if text.len() <= 2048 => {
+                        if let Ok(report) = serde_json::from_str::<deskbar_host::layout::DisplayReport>(&text) {
+                            let _ = agent.host.lock().unwrap().report_display(&token, report);
+                        }
+                    },
                     _ => break,
                 } },
             }
@@ -606,6 +625,18 @@ mod tests {
         let host = Host::load(dir.path().into(), "电脑".into()).unwrap();
         let identity = Identity::from_key(KeyPair::generate().unwrap().serialize_pem()).unwrap();
         let cert = reqwest::Certificate::from_pem(identity.cert_pem.as_bytes()).unwrap();
+        use rustls::pki_types::pem::PemObject;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let mut roots = rustls::RootCertStore::empty();
+        roots
+            .add(
+                rustls::pki_types::CertificateDer::from_pem_slice(identity.cert_pem.as_bytes())
+                    .unwrap(),
+            )
+            .unwrap();
+        let tls = rustls::ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
         let agent = Agent::with_identity(host, identity, 0).await.unwrap();
         let client = reqwest::Client::builder()
             .add_root_certificate(cert)
@@ -652,7 +683,67 @@ mod tests {
             .unwrap();
         assert_eq!(snapshot.host_id, agent.status().host_id);
         assert!(snapshot.capabilities.is_empty());
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as WsMessage};
+        let mut request = format!("wss://deskbar.local:{}/v1/events", agent.port)
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("authorization", format!("Bearer {token}").parse().unwrap());
+        let tcp = tokio::net::TcpStream::connect(("127.0.0.1", agent.port))
+            .await
+            .unwrap();
+        let (mut socket, _) = tokio_tungstenite::client_async_tls_with_config(
+            request,
+            tcp,
+            None,
+            Some(tokio_tungstenite::Connector::Rustls(Arc::new(tls))),
+        )
+        .await
+        .unwrap();
+        let display = serde_json::json!({"width":1280.0,"height":720.0,"text_scale":1.0,"dark":false,"page_id":"main","layout_revision":0});
+        socket
+            .send(WsMessage::Text(display.to_string().into()))
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                socket.next().await.unwrap().unwrap();
+                if agent.status().devices[0].display.is_some() {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        let layout =
+            serde_json::from_str(include_str!("../../../protocol/layout.example.json")).unwrap();
+        agent.save_layout(id, 0, layout).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let message = socket.next().await.unwrap().unwrap();
+                let next: deskbar_host::Snapshot =
+                    serde_json::from_str(message.to_text().unwrap()).unwrap();
+                if next.layout_revision == 1 {
+                    assert_eq!(next.layout.unwrap().pages[0].name, "工作台");
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
         agent.revoke(id).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let message = socket.next().await.unwrap().unwrap();
+                if message.to_text().unwrap().contains("revoked") {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
         assert_eq!(
             client
                 .get(format!("{base}/v1/snapshot"))
