@@ -6,6 +6,7 @@ import 'display_preferences.dart';
 import 'workbench_canvas.dart';
 import 'package:flutter/services.dart';
 import 'rawblock.dart';
+import 'top_notice.dart';
 
 void main() => runApp(const DeskletApp());
 
@@ -19,7 +20,7 @@ class _DeskletAppState extends State<DeskletApp> {
   static const preferences = MethodChannel('app.desklet/layout');
   ThemeMode mode = ThemeMode.light;
   bool changedTheme = false;
-  final messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final navigatorKey = GlobalKey<NavigatorState>();
   @override
   void initState() {
     super.initState();
@@ -49,9 +50,10 @@ class _DeskletAppState extends State<DeskletApp> {
       });
     } catch (_) {
       if (mounted) {
-        messengerKey.currentState?.showSnackBar(
-          const SnackBar(content: Text('主题已切换，但未能保存。重启后会恢复原设置。')),
-        );
+        final context = navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          showTopNotice(context, '主题已切换，但未能保存。重启后会恢复原设置。');
+        }
       }
     }
   }
@@ -59,7 +61,7 @@ class _DeskletAppState extends State<DeskletApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Desklet 工作台',
-    scaffoldMessengerKey: messengerKey,
+    navigatorKey: navigatorKey,
     debugShowCheckedModeBanner: false,
     theme: rawBlockTheme(),
     darkTheme: rawBlockTheme(Brightness.dark),
@@ -124,9 +126,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
     _displayError = message;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        showTopNotice(context, message);
       }
     });
   }

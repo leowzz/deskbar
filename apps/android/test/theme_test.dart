@@ -84,4 +84,35 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets(
+    'theme save failures replace the top notice and reset its timer',
+    (tester) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('app.desklet/layout'), (
+            call,
+          ) async {
+            if (call.method == 'saveTheme') {
+              throw PlatformException(code: 'SAVE', message: '保存失败');
+            }
+            return null;
+          });
+      await tester.pumpWidget(const DeskletApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('切换暗色主题'));
+      await tester.pumpAndSettle();
+      final notice = find.text('主题已切换，但未能保存。重启后会恢复原设置。');
+      expect(notice, findsOneWidget);
+      expect(tester.getTopLeft(notice).dy, lessThan(80));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.tap(find.byTooltip('切换浅色主题'));
+      await tester.pumpAndSettle();
+      expect(notice, findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      expect(notice, findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(notice, findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

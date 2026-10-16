@@ -2,6 +2,7 @@ import 'package:desklet/connection.dart';
 import 'package:desklet/display_preferences.dart';
 import 'package:desklet/layout_workspace.dart';
 import 'package:desklet/rawblock.dart';
+import 'package:desklet/top_notice.dart';
 import 'package:desklet/workbench_canvas.dart';
 import 'package:desklet/workbench_data.dart';
 import '../test/workbench_fixture.dart';
@@ -91,10 +92,28 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    Future<void> checkTopNotice(String name) async {
+      const message = '未能打开，请先查看电脑后重试';
+      final canvas = tester.getRect(find.byType(WorkbenchCanvas));
+      showTopNotice(tester.element(find.byType(WorkbenchCanvas)), message);
+      await tester.pumpAndSettle();
+      // Allow the Android image surface to present this frame before capture.
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.getTopLeft(find.text(message)).dy, lessThan(100));
+      expect(tester.getRect(find.byType(WorkbenchCanvas)), canvas);
+      expect(tester.takeException(), isNull);
+      if (capture) await binding.takeScreenshot(name);
+      expect(find.text(message), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.text(message), findsNothing);
+    }
+
     await render(Brightness.light);
     expect(find.text('43%'), findsOneWidget);
     expect(tester.takeException(), isNull);
     if (capture) await binding.takeScreenshot('silver-workbench');
+    await checkTopNotice('silver-top-notice');
     expect(find.byTooltip('编辑布局'), findsNothing);
     expect(find.byIcon(Icons.fullscreen), findsNothing);
     expect(find.text('1'), findsNothing);
@@ -137,6 +156,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     if (capture) await binding.takeScreenshot('graphite-landscape');
+    await checkTopNotice('graphite-landscape-top-notice');
     final wideBackground = find.byKey(
       const ValueKey('page-edit-background-page-main'),
     );

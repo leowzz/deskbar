@@ -8,6 +8,7 @@ import 'display_preferences.dart';
 import 'layout_repository.dart';
 import 'layout_workspace.dart';
 import 'rawblock.dart';
+import 'top_notice.dart';
 import 'workbench_content.dart';
 
 String widgetTypeName(String type) => switch (type) {
@@ -217,10 +218,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showTopNotice(context, message);
   }
 
   void _result(bool success) {

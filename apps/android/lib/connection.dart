@@ -187,7 +187,7 @@ class Connection extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String> open(String action, String id, String version) async {
+  Future<String?> open(String action, String id, String version) async {
     if (opening) return '请等待上一次操作完成';
     final snapshot = data;
     if (!_active || phase != ConnectionPhase.online || snapshot == null) {
@@ -208,6 +208,7 @@ class Connection extends ChangeNotifier {
       });
       if (attempt != _attempt) return '操作已结束，请查看电脑';
       final result = jsonDecode(value!) as Map<String, dynamic>;
+      if (result['status'] == 'succeeded') return null;
       return result['message'] as String;
     } on PlatformException catch (e) {
       return e.message ?? '结果未知，请先查看电脑；不会自动重试';

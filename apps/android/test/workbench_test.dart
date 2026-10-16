@@ -11,18 +11,20 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   Map<dynamic, dynamic>? sent;
+  late Map<String, String> response;
+  PlatformException? commandError;
   setUp(() {
     sent = null;
+    response = {'status': 'succeeded', 'message': '电脑已接受打开请求'};
+    commandError = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('app.desklet/connection'),
           (call) async {
             if (call.method == 'command') {
               sent = call.arguments as Map;
-              return jsonEncode({
-                'status': 'succeeded',
-                'message': '电脑已接受打开请求',
-              });
+              if (commandError != null) throw commandError!;
+              return jsonEncode(response);
             }
             return null;
           },
@@ -66,8 +68,70 @@ void main() {
       expect(sent?['target_id'], 'session');
       expect(sent?['target_version'], 'version');
       expect(sent?.containsKey('target'), isFalse);
-      expect(find.text('电脑已接受打开请求'), findsOneWidget);
+      expect(find.text('电脑已接受打开请求'), findsNothing);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+  for (final scenario in [
+    ('failed', const Size(360, 640), Brightness.light),
+    ('rejected', const Size(800, 360), Brightness.dark),
+    ('unknown', const Size(320, 480), Brightness.dark),
+    ('transport', const Size(360, 640), Brightness.light),
+  ]) {
+    testWidgets('${scenario.$1} open shows a temporary notice at the top', (
+      tester,
+    ) async {
+      tester.view.physicalSize = scenario.$2;
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(top: 24, left: 18, right: 18);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const message = '未能打开，请先查看电脑后重试';
+      response = {'status': scenario.$1, 'message': message};
+      if (scenario.$1 == 'transport') {
+        commandError = PlatformException(code: 'COMMAND', message: message);
+      }
+      final c = Connection()
+        ..data = WorkbenchData(snapshot())
+        ..phase = ConnectionPhase.online;
+      addTearDown(c.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: rawBlockTheme(scenario.$3),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                height: 180,
+                child: WorkbenchWidgetBody(
+                  connection: c,
+                  id: 'icons',
+                  type: 'shortcuts',
+                  options: const {'iconSize': 48},
+                  binding: const {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final body = tester.getRect(find.byType(WorkbenchWidgetBody));
+      await tester.tap(find.byType(Image));
+      await tester.pumpAndSettle();
+      final notice = tester.getRect(find.text(message));
+      expect(notice.top, greaterThanOrEqualTo(24));
+      expect(notice.top, lessThan(80));
+      expect(notice.left, greaterThanOrEqualTo(18));
+      expect(notice.right, lessThanOrEqualTo(scenario.$2.width - 18));
+      expect(tester.getRect(find.byType(WorkbenchWidgetBody)), body);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.text(message), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });
   }
@@ -139,7 +203,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent?['target_id'], 'shortcut');
       expect(sent?['target_version'], 'shortcut-version');
-      expect(find.text('电脑已接受打开请求'), findsOneWidget);
+      expect(find.text('电脑已接受打开请求'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

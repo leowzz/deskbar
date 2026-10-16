@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'connection.dart';
 import 'rawblock.dart';
+import 'top_notice.dart';
 import 'workbench_data.dart';
 
 String workbenchTime(int seconds) {
@@ -38,11 +39,8 @@ class WorkbenchWidgetBody extends StatelessWidget {
   ) async {
     if (editing) return;
     final message = await connection.open(action, target, version);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 5)),
-      );
+    if (context.mounted && message != null) {
+      showTopNotice(context, message);
     }
   }
 
