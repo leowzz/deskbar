@@ -38,9 +38,8 @@ function Icon({
     ),
     devices: (
       <>
-        <rect x="3" y="4" width="12" height="13" rx="2" />
-        <path d="M7 21h4m-2-4v4" />
-        <rect x="17" y="8" width="5" height="12" rx="1.5" />
+        <path d="M12 16H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2M8 16v4m-3 0h6" />
+        <rect x="15" y="10" width="7" height="11" rx="1.5" />
       </>
     ),
     grid: (
@@ -53,7 +52,7 @@ function Icon({
     ),
     settings: (
       <>
-        <path d="M4 7h16M4 17h16" />
+        <path d="M4 7h2m6 0h8M4 17h8m6 0h2" />
         <circle cx="9" cy="7" r="3" />
         <circle cx="15" cy="17" r="3" />
       </>
