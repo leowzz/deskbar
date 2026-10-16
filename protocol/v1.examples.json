@@ -1,0 +1,31 @@
+{
+  "discovery_query": {
+    "product": "desklet",
+    "version": 1,
+    "type": "query",
+    "nonce": "example-random-nonce"
+  },
+  "discovery_offer": {
+    "product": "desklet",
+    "version": 1,
+    "type": "offer",
+    "nonce": "example-random-nonce",
+    "host_id": "example-host",
+    "name": "我的电脑",
+    "port": 42831,
+    "pin": "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  },
+  "snapshot": {
+    "protocol_version": 1,
+    "host_id": "example-host",
+    "name": "我的电脑",
+    "epoch": "example-process",
+    "revision": 1,
+    "server_time": 1792123200,
+    "sources": [],
+    "capabilities": []
+  },
+  "revocation": {
+    "type": "revoked"
+  }
+}

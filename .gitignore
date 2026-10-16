@@ -1,0 +1,39 @@
+.DS_Store
+.idea/
+.vscode/
+
+# Local credentials and settings
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+local.properties
+
+# Desktop and Rust outputs
+node_modules/
+.pnpm-store/
+target/
+dist/
+
+# Flutter and Android outputs
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.gradle/
+.kotlin/
+build/
+captures/
+
+# Local tooling
+__pycache__/
+*.pyc
+.venv/
+.codegraph/
+
+# Generated Tauri permission schemas
+apps/desktop/src-tauri/gen/

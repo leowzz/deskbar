@@ -1,0 +1,27 @@
+# 跨端验证
+
+## 日常检查
+
+先运行 `make setup`，再运行 `make check`：文档链接、Rust 格式和单元 / 真实 TLS 测试、Tauri 编译检查、桌面类型与格式、Flutter 分析与组件测试。桌面构建用 `make desktop-build`，开发 APK 用 `make android-build`。
+
+## Android 原生连接测试
+
+启动独立 Android 模拟器（API 28+），指定其序列号：
+
+```sh
+make test-android-connection ANDROID_DEVICE=emulator-5560
+```
+
+脚本建立临时电脑身份和私有邀请文件，再在模拟器运行 Flutter integration_test，结束后清理夹具。测试夹具仅通过显式的 ignored Rust 测试启动，自动确认一台测试设备，十五秒后撤权；不会链接进桌面程序。脚本拒绝物理设备序列号，避免覆盖用户设备上的配对。
+
+当前覆盖：错误 SPKI 拒绝、完整邀请配对、审批后才能读取快照、原生 WSS、Keystore 加密保存后的读取、暂停 / 恢复重连、电脑撤权与凭据清除。连接使用模拟器访问宿主机的 `10.0.2.2`，不把这种路径当作 Wi-Fi 自动发现或摄像头扫码验证。
+
+## 2026-10-16 验证记录
+
+- macOS：桌面前端生产构建、Tauri 原生编译与开发程序启动；桌面浏览器在宽屏与 560 像素窗口检查设备管理、邀请、确认与移除，交互使用测试桥接数据。
+- Android：Flutter 分析、组件测试、debug APK 构建；Android 12 / API 31 arm64 模拟器的上述原生连接测试通过。
+- Rust：邀请过期、错误秘密、一次邀请不能被其他设备复用、相同请求重试、审批、摘要保存、撤权、重启保留身份 / 更换 epoch、重复进程锁、真实 TLS 认证测试通过。
+
+## 仍未完成
+
+物理设备扫码、真实无摄像头设备、Android 9 与新版 Android 权限、macOS 权限 / 钥匙串拒绝恢复、Wi-Fi 多播、换 IP、VPN、多网卡、端口冲突和 IPv6 仍需实测。业务来源、页面编辑、远程命令、签名 / 公证、安装更新和 Windows 尚未交付。

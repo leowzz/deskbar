@@ -1,0 +1,8 @@
+{
+  "name": "desklet", "private": true, "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "pnpm --dir apps/desktop tauri dev",
+    "build": "pnpm --dir apps/desktop build",
+    "check": "pnpm --dir apps/desktop check"
+  }
+}

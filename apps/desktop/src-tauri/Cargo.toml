@@ -1,0 +1,13 @@
+[package]
+name = "desklet-desktop"
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+desklet-lan = { path = "../../../crates/lan" }
+tokio.workspace = true
+hostname = "0.4"
