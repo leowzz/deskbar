@@ -4,11 +4,20 @@ use desklet_host::{
     now,
     usage::{Error, Source, UsageConfig},
 };
+use sha2::{Digest, Sha256};
 use std::{sync::atomic::Ordering, time::Duration};
 
-fn credentials(host: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new("app.desklet.agent.sub2api", host)
-        .context("无法访问用量账号，请检查系统钥匙串权限")
+fn credential_account(host: &str, config: &UsageConfig) -> String {
+    let identity =
+        serde_json::to_vec(&(&config.base_url, &config.email)).expect("strings serialize");
+    format!("{host}:{:x}", Sha256::digest(identity))
+}
+fn credentials(host: &str, config: &UsageConfig) -> Result<keyring::Entry> {
+    keyring::Entry::new(
+        "app.desklet.agent.sub2api",
+        &credential_account(host, config),
+    )
+    .context("无法访问用量账号，请检查系统钥匙串权限")
 }
 fn read_password(entry: &keyring::Entry) -> Result<Option<String>> {
     match entry.get_password() {
@@ -50,7 +59,8 @@ impl Agent {
         config.validate()?;
         ensure!(password.len() <= 4096, "密码过长");
         let mut host = self.host.lock().unwrap();
-        let entry = credentials(&host.id)?;
+        let previous_config = host.usage_config.clone();
+        let entry = credentials(&host.id, &config)?;
         let old = read_password(&entry)?;
         if password.is_empty() {
             ensure!(
@@ -65,9 +75,20 @@ impl Agent {
                 .set_password(&password)
                 .map_err(|_| anyhow::anyhow!("无法保存用量账号，请允许系统钥匙串访问后重试"))?;
         }
-        if let Err(e) = host.set_usage_config(Some(config)) {
+        if let Err(e) = host.set_usage_config(Some(config.clone())) {
             restore(&entry, old.as_deref());
             return Err(e);
+        }
+        // The old config always points at its own secret, including if the
+        // process exits between writing a new secret and committing the YAML.
+        // A crash after committing may leave an unused secret, never a secret
+        // attached to the wrong endpoint. Remove it on the normal success path.
+        if let Some(previous) = previous_config {
+            if credential_account(&host.id, &previous) != credential_account(&host.id, &config) {
+                if let Ok(entry) = credentials(&host.id, &previous) {
+                    let _ = entry.delete_credential();
+                }
+            }
         }
         self.usage_generation.fetch_add(1, Ordering::SeqCst);
         drop(host);
@@ -77,7 +98,10 @@ impl Agent {
     }
     pub fn remove_usage_source(&self) -> Result<()> {
         let mut host = self.host.lock().unwrap();
-        let entry = credentials(&host.id)?;
+        let Some(config) = host.usage_config.as_ref() else {
+            return Ok(());
+        };
+        let entry = credentials(&host.id, config)?;
         let old = read_password(&entry)?;
         if old.is_some() {
             entry
@@ -117,7 +141,7 @@ impl Agent {
                     let loading = agent.clone();
                     let loaded = tokio::task::spawn_blocking(move || {
                         loading.usage_source_snapshot(generation, &config, |id| {
-                            read_password(&credentials(id)?)
+                            read_password(&credentials(id, &config)?)
                         })
                     })
                     .await;
@@ -191,6 +215,34 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secret_identity_survives_config_commit_interruptions() {
+        let old = UsageConfig {
+            base_url: "https://old.example.com".into(),
+            email: "a@example.com".into(),
+            timezone: "Asia/Shanghai".into(),
+        };
+        let mut next = old.clone();
+        let old_key = credential_account("host", &old);
+        next.base_url = "https://new.example.com".into();
+        let new_key = credential_account("host", &next);
+        assert_ne!(old_key, new_key);
+        // Simulate new keychain write before the YAML switches accounts.
+        let secrets = std::collections::HashMap::from([
+            (old_key.clone(), "old-password"),
+            (new_key, "new-password"),
+        ]);
+        assert_eq!(secrets[&credential_account("host", &old)], "old-password");
+        assert_eq!(secrets[&credential_account("host", &next)], "new-password");
+        next = old.clone();
+        next.email = "b@example.com".into();
+        assert_ne!(credential_account("host", &next), old_key);
+        next = old.clone();
+        next.timezone = "UTC".into();
+        assert_eq!(credential_account("host", &next), old_key);
+        assert_ne!(credential_account("other-host", &old), old_key);
+    }
 
     #[tokio::test]
     async fn account_and_secret_are_read_as_one_generation() {
