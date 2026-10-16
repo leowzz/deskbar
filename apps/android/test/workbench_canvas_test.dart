@@ -34,6 +34,7 @@ Future<void> launch(
   Brightness brightness = Brightness.light,
   MemoryLayouts? repository,
   bool withChrome = false,
+  Connection? liveConnection,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -41,14 +42,16 @@ Future<void> launch(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-  final connection = Connection()
-    ..phase = ConnectionPhase.online
-    ..hostName = '工作电脑'
-    ..data = WorkbenchData({
-      ...snapshot(),
-      'layout': workspace.document.toJson(),
-    });
-  addTearDown(connection.dispose);
+  final connection =
+      liveConnection ??
+      (Connection()
+        ..phase = ConnectionPhase.online
+        ..hostName = '工作电脑'
+        ..data = WorkbenchData({
+          ...snapshot(),
+          'layout': workspace.document.toJson(),
+        }));
+  if (liveConnection == null) addTearDown(connection.dispose);
   await tester.pumpWidget(
     MaterialApp(
       theme: rawBlockTheme(brightness),
@@ -386,6 +389,109 @@ void main() {
       );
     }
   }
+  testWidgets(
+    'session rows stay consistent with the device layout at larger text scale',
+    (tester) async {
+      const size = Size(866.285714, 411.428571);
+      final base = LayoutDocument.initial();
+      final page = base.activePage;
+      final sessions = page.widgets
+          .firstWhere((widget) => widget.id == 'main-sessions')
+          .copyWith(
+            options: const {
+              'density': 'normal',
+              'fitRows': false,
+              'gap': 0,
+              'itemHeight': 96.0,
+              'itemWidth': 200.0,
+              'maxSessions': 20,
+              'showTitle': true,
+            },
+            placements: const {
+              LayoutOrientation.wide: GridPlacement(x: 0, y: 0, w: 32, h: 38),
+              LayoutOrientation.portrait: GridPlacement(
+                x: 0,
+                y: 20,
+                w: 16,
+                h: 52,
+              ),
+            },
+          );
+      final usage = page.widgets
+          .firstWhere((widget) => widget.id == 'main-usage')
+          .copyWith(
+            placements: const {
+              LayoutOrientation.wide: GridPlacement(x: 32, y: 1, w: 16, h: 13),
+              LayoutOrientation.portrait: GridPlacement(
+                x: 0,
+                y: 0,
+                w: 16,
+                h: 20,
+              ),
+            },
+          );
+      final shortcuts = page.widgets
+          .firstWhere((widget) => widget.id == 'main-shortcuts')
+          .copyWith(
+            options: const {
+              'alignment': 'center',
+              'columns': 'auto',
+              'gapX': 16,
+              'gapY': 16,
+              'iconSize': 'max',
+              'labels': false,
+              'rows': 'auto',
+              'showTitle': false,
+            },
+            placements: const {
+              LayoutOrientation.wide: GridPlacement(x: 0, y: 38, w: 48, h: 10),
+              LayoutOrientation.portrait: GridPlacement(
+                x: 0,
+                y: 72,
+                w: 16,
+                h: 24,
+              ),
+            },
+          );
+      final document = base.copyWith(
+        pages: [
+          page.copyWith(widgets: [sessions, usage, shortcuts]),
+        ],
+      );
+      final value = snapshot();
+      final original = Map<String, dynamic>.from(
+        (value['sessions'] as List).single as Map,
+      );
+      value['sessions'] = [
+        for (var i = 0; i < 6; i++)
+          {...original, 'session_id': 'session-$i', 'title': '会话 $i'},
+      ];
+      value['session_total'] = 6;
+      final connection = Connection()
+        ..phase = ConnectionPhase.online
+        ..data = WorkbenchData({...value, 'layout': document.toJson()});
+      addTearDown(connection.dispose);
+      final workspace = LayoutWorkspace(document: document);
+      addTearDown(workspace.dispose);
+      await launch(
+        tester,
+        workspace,
+        size: size,
+        scale: 1.5,
+        editor: false,
+        liveConnection: connection,
+      );
+
+      final grid = find.byKey(const PageStorageKey('sessions-main-sessions'));
+      expect(find.text('会话 4'), findsOneWidget);
+      expect(find.text('会话 5'), findsOneWidget);
+      expect(
+        tester.getRect(find.text('会话 5')).bottom,
+        lessThanOrEqualTo(tester.getRect(grid).bottom + .01),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final online in [true, false]) {
     testWidgets(
       'compact 136dp body paints one complete card including project online=$online',

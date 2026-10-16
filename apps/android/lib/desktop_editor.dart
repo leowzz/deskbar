@@ -15,6 +15,8 @@ external void registerEditor(JSFunction callback);
 @JS('sendDeskbarEditor')
 external void sendEditor(JSString message);
 
+enum _PreviewOrientationMode { device, wide, portrait }
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const DesktopEditor());
@@ -34,11 +36,20 @@ class _DesktopEditorState extends State<DesktopEditor> {
   int requestId = 0, revision = 0;
   bool ready = false, debug = true, dark = false;
   bool lastEditing = false, previewFit = true;
-  LayoutOrientation previewOrientation = LayoutOrientation.wide;
-  bool orientationChosen = false;
+  _PreviewOrientationMode previewMode = _PreviewOrientationMode.device;
   double deviceWidth = 1280, deviceHeight = 720, textScale = 1;
   String? error;
   Map<String, dynamic>? latest;
+
+  LayoutOrientation get deviceOrientation => deviceWidth >= deviceHeight
+      ? LayoutOrientation.wide
+      : LayoutOrientation.portrait;
+
+  LayoutOrientation get previewOrientation => switch (previewMode) {
+    _PreviewOrientationMode.device => deviceOrientation,
+    _PreviewOrientationMode.wide => LayoutOrientation.wide,
+    _PreviewOrientationMode.portrait => LayoutOrientation.portrait,
+  };
 
   double get previewWidth => previewOrientation == LayoutOrientation.wide
       ? _deviceLongSide
@@ -127,11 +138,6 @@ class _DesktopEditorState extends State<DesktopEditor> {
       if (width is num && height is num && width > 0 && height > 0) {
         deviceWidth = width.toDouble();
         deviceHeight = height.toDouble();
-        if (!orientationChosen) {
-          previewOrientation = deviceWidth >= deviceHeight
-              ? LayoutOrientation.wide
-              : LayoutOrientation.portrait;
-        }
       }
       final scale = display['text_scale'];
       textScale = scale is num && scale > 0 ? scale.toDouble() : 1;
@@ -189,22 +195,25 @@ class _DesktopEditorState extends State<DesktopEditor> {
                     spacing: 12,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      DropdownButton<LayoutOrientation>(
-                        value: previewOrientation,
+                      DropdownButton<_PreviewOrientationMode>(
+                        value: previewMode,
                         items: const [
                           DropdownMenuItem(
-                            value: LayoutOrientation.wide,
+                            value: _PreviewOrientationMode.device,
+                            child: Text('跟随设备'),
+                          ),
+                          DropdownMenuItem(
+                            value: _PreviewOrientationMode.wide,
                             child: Text('横屏'),
                           ),
                           DropdownMenuItem(
-                            value: LayoutOrientation.portrait,
+                            value: _PreviewOrientationMode.portrait,
                             child: Text('竖屏'),
                           ),
                         ],
                         onChanged: (v) => setState(() {
                           if (v == null) return;
-                          previewOrientation = v;
-                          orientationChosen = true;
+                          previewMode = v;
                         }),
                       ),
                       FilterChip(

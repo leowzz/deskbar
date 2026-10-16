@@ -297,10 +297,6 @@ class WorkbenchWidgetBody extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final compact = options['density'] == 'compact';
-        final scale = math.max(
-          1.0,
-          MediaQuery.textScalerOf(context).scale(14) / 14,
-        );
         final style = Theme.of(context).textTheme.bodySmall!;
         final notice = [
           if (!fresh) _sourceStatusLabel(data, 'codex.sessions'),
@@ -314,7 +310,11 @@ class WorkbenchWidgetBody extends StatelessWidget {
         )..layout(maxWidth: math.max(1, box.maxWidth - padding * 2));
         final noticeHeight = notice.isEmpty ? 0.0 : painter.height + 4;
         painter.dispose();
-        final minimum = sessionMinimumHeight(compact: compact, scale: scale);
+        // Session rows are part of the device layout contract. Text scaling
+        // must not change the number of rows that fit on a screen; the card
+        // content already uses ellipsis/flexible text to adapt inside the
+        // configured item height.
+        final minimum = sessionMinimumHeight(compact: compact);
         final available = box.maxHeight - padding * 2 - noticeHeight;
         if (sessions.isNotEmpty && available < minimum) {
           return _smallMessage(
