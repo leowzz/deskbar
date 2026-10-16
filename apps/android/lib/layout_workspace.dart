@@ -905,7 +905,13 @@ class LayoutWorkspace extends ChangeNotifier {
       'rows': 'auto',
       'alignment': 'spaceEvenly',
     },
-    'usage' => {'showTitle': true, 'content': 'quota'},
+    'usage' => {
+      'showTitle': true,
+      'content': 'quota',
+      'density': 'fill',
+      'alignment': 'spaceEvenly',
+      'showDetails': true,
+    },
     _ => {'showTitle': true},
   };
 
@@ -1113,7 +1119,7 @@ void _validateOptions(String type, Map<String, dynamic> options) {
       throw const FormatException('会话数量需为 1 到 40 的整数');
     }
   }
-  for (final key in ['showTitle', 'fitRows', 'labels']) {
+  for (final key in ['showTitle', 'fitRows', 'labels', 'showDetails']) {
     if (options.containsKey(key) && options[key] is! bool) {
       throw const FormatException('组件开关参数无效');
     }
@@ -1146,13 +1152,17 @@ void _validateOptions(String type, Map<String, dynamic> options) {
             value <= 12);
     if (!valid) throw const FormatException('行数需为自动或 1 到 12 的整数');
   }
-  if (options.containsKey('alignment') &&
-      !const {
-        'left',
-        'center',
-        'spaceEvenly',
-        'right',
-      }.contains(options['alignment'])) {
-    throw const FormatException('对齐方式无效');
+  if (options.containsKey('alignment')) {
+    final allowed = type == 'usage'
+        ? const {'top', 'center', 'spaceEvenly', 'bottom'}
+        : const {'left', 'center', 'spaceEvenly', 'right'};
+    if (!allowed.contains(options['alignment'])) {
+      throw const FormatException('对齐方式无效');
+    }
+  }
+  if (type == 'usage' &&
+      options.containsKey('density') &&
+      !const {'compact', 'standard', 'fill'}.contains(options['density'])) {
+    throw const FormatException('用量布局密度无效');
   }
 }

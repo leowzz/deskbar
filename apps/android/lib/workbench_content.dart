@@ -50,6 +50,39 @@ String _shortcutAlignmentLabel(String alignment) => switch (alignment) {
   _ => '均匀分布',
 };
 
+String _usageDensity(Map<String, dynamic> options) {
+  const values = {'compact', 'standard', 'fill'};
+  final value = options['density'];
+  return value is String && values.contains(value) ? value : 'fill';
+}
+
+String _usageDensityLabel(String density) => switch (density) {
+  'compact' => '紧凑',
+  'standard' => '标准',
+  _ => '自适应填充',
+};
+
+String _usageAlignment(Map<String, dynamic> options) {
+  const values = {'top', 'center', 'spaceEvenly', 'bottom'};
+  final value = options['alignment'];
+  return value is String && values.contains(value) ? value : 'spaceEvenly';
+}
+
+String _usageAlignmentLabel(String alignment) => switch (alignment) {
+  'top' => '顶部对齐',
+  'center' => '居中对齐',
+  'bottom' => '底部对齐',
+  _ => '均匀分布',
+};
+
+MainAxisAlignment _usageMainAxisAlignment(String alignment) =>
+    switch (alignment) {
+      'top' => MainAxisAlignment.start,
+      'center' => MainAxisAlignment.center,
+      'bottom' => MainAxisAlignment.end,
+      _ => MainAxisAlignment.spaceEvenly,
+    };
+
 MainAxisAlignment _shortcutMainAxisAlignment(String alignment) =>
     switch (alignment) {
       'left' => MainAxisAlignment.start,
@@ -343,7 +376,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                                     ].contains(session.status)
                                   ? c.warning
                                   : c.muted;
-                              return Semantics(
+                              final card = Semantics(
                                 button: !editing,
                                 label:
                                     '${session.title}，${session.statusLabel}',
@@ -424,6 +457,13 @@ class WorkbenchWidgetBody extends StatelessWidget {
                                     ),
                                   ),
                                 ),
+                              );
+                              return LayoutDebugOverlay(
+                                enabled: debugLayout,
+                                label:
+                                    '卡片 ${((grid.maxWidth - gap * (columns - 1)) / columns).toStringAsFixed(1)} × ${height.toStringAsFixed(1)} dp',
+                                top: true,
+                                child: card,
                               );
                             },
                           ),
@@ -530,50 +570,57 @@ class WorkbenchWidgetBody extends StatelessWidget {
                 color: c.muted,
               ),
             );
-            return SizedBox(
-              width: layout.tileWidth,
-              height: layout.tileHeight,
-              child: Tooltip(
-                message: entry.name,
-                child: Semantics(
-                  label: entry.name,
-                  button: !editing,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: canOpen
-                        ? () => open(
-                            context,
-                            'open_shortcut',
-                            entry.id,
-                            entry.version,
-                          )
-                        : null,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (entry.iconBytes != null)
-                          Image.memory(
-                            entry.iconBytes!,
-                            width: layout.iconSize,
-                            height: layout.iconSize,
-                            fit: BoxFit.contain,
-                            gaplessPlayback: true,
-                            filterQuality: FilterQuality.medium,
-                            errorBuilder: (context, error, stack) => fallback(),
-                          )
-                        else
-                          fallback(),
-                        if (labels) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            entry.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: labelStyle,
-                          ),
+            return LayoutDebugOverlay(
+              enabled: debugLayout,
+              label:
+                  '单元 ${layout.tileWidth.toStringAsFixed(1)} × ${layout.tileHeight.toStringAsFixed(1)} dp · 图标 ${layout.iconSize.toStringAsFixed(1)} dp',
+              top: true,
+              child: SizedBox(
+                width: layout.tileWidth,
+                height: layout.tileHeight,
+                child: Tooltip(
+                  message: entry.name,
+                  child: Semantics(
+                    label: entry.name,
+                    button: !editing,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: canOpen
+                          ? () => open(
+                              context,
+                              'open_shortcut',
+                              entry.id,
+                              entry.version,
+                            )
+                          : null,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (entry.iconBytes != null)
+                            Image.memory(
+                              entry.iconBytes!,
+                              width: layout.iconSize,
+                              height: layout.iconSize,
+                              fit: BoxFit.contain,
+                              gaplessPlayback: true,
+                              filterQuality: FilterQuality.medium,
+                              errorBuilder: (context, error, stack) =>
+                                  fallback(),
+                            )
+                          else
+                            fallback(),
+                          if (labels) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              entry.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: labelStyle,
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -638,6 +685,9 @@ class WorkbenchWidgetBody extends StatelessWidget {
   Widget _usage(BuildContext context, WorkbenchData data) {
     final api = options['content'] == 'api';
     final sourceId = api ? 'sub2api.usage' : 'codex.quota';
+    final density = _usageDensity(options);
+    final alignment = _usageAlignment(options);
+    final showDetails = options['showDetails'] != false;
     final resource = binding['resourceId'];
     final quotas = data.quotas
         .where((q) => resource == null || resource == '' || q.id == resource)
@@ -725,8 +775,11 @@ class WorkbenchWidgetBody extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, box) {
-        final small = box.maxHeight < 200;
-        final tiny = box.maxHeight < 100;
+        const edge = 8.0;
+        final contentWidth = math.max(1.0, box.maxWidth - edge);
+        final contentHeight = math.max(1.0, box.maxHeight - edge);
+        final tiny = contentHeight < 100;
+        final compact = density == 'compact' || tiny;
         final q = quotas.isEmpty ? null : quotas.first;
         final u = usages.isEmpty ? null : usages.first;
         final reset = !api && q!.resetsAt <= data.now;
@@ -740,56 +793,149 @@ class WorkbenchWidgetBody extends StatelessWidget {
             : reset
             ? '等待刷新'
             : '${q!.remaining.round()}%';
-        return InkWell(
-          onTap: editing ? null : detail,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(4),
-            child: Column(
+        final numberScale = switch (density) {
+          'compact' => .82,
+          'standard' => 1.0,
+          _ => (contentHeight / (api ? 220 : 200)).clamp(.9, 1.7),
+        };
+        final numberFontSize = ((api ? 44.0 : 48.0) * numberScale).clamp(
+          30.0,
+          84.0,
+        );
+        final title = api
+            ? expiredWindow
+                  ? '上次实际成本 · 等待刷新'
+                  : fresh
+                  ? '实际成本'
+                  : '上次实际成本'
+            : reset
+            ? '已到重置时间'
+            : fresh
+            ? '剩余额度'
+            : '上次剩余额度';
+        final textTheme = Theme.of(context).textTheme;
+        final titleStyle = textTheme.bodySmall?.copyWith(
+          height: tiny ? 1.2 : 1.35,
+        );
+        final detailStyle = textTheme.bodySmall;
+        Widget usageItem(String label, Widget child) => LayoutDebugOverlay(
+          enabled: debugLayout,
+          label: 'item $label',
+          top: true,
+          child: child,
+        );
+        Widget apiMetric(String label, String value) => Expanded(
+          child: usageItem(
+            label,
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(label, style: detailStyle),
                 Text(
-                  api
-                      ? expiredWindow
-                            ? '上次实际成本 · 等待刷新'
-                            : fresh
-                            ? '实际成本'
-                            : '上次实际成本'
-                      : reset
-                      ? '已到重置时间'
-                      : fresh
-                      ? '剩余额度'
-                      : '上次剩余额度',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(height: tiny ? 1.2 : 1.5),
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.titleMedium,
                 ),
-                Text(
-                  numberText,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontSize: tiny
-                        ? 30
-                        : small
-                        ? 32
-                        : 44,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                if (!fresh) _status(context, data, sourceId),
-                if (!api && !reset && !small) ...[
-                  const SizedBox(height: 12),
-                  LinearProgressIndicator(
-                    value: (q!.remaining / 100).clamp(0, 1),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (!small)
-                  Text(
-                    api
-                        ? 'Token ${_quantity(u!.tokenCount)} · TPM ${_quantity(u.tpm)}'
-                        : '${workbenchTime(q!.resetsAt)} 重置',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
               ],
+            ),
+          ),
+        );
+        final children = <Widget>[
+          usageItem('主指标标题', Text(title, style: titleStyle)),
+          const SizedBox(height: 2),
+          usageItem(
+            '主指标数值',
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                numberText,
+                key: ValueKey('usage-number-$id'),
+                maxLines: 1,
+                style: textTheme.headlineMedium?.copyWith(
+                  fontSize: numberFontSize,
+                  height: 1.05,
+                ),
+              ),
+            ),
+          ),
+          if (!fresh) ...[
+            const SizedBox(height: 4),
+            _status(context, data, sourceId),
+          ],
+          if (!api && !reset && !compact) ...[
+            const SizedBox(height: 8),
+            usageItem(
+              '额度进度',
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  minHeight: density == 'fill' ? 8 : 6,
+                  value: (q!.remaining / 100).clamp(0, 1),
+                ),
+              ),
+            ),
+          ],
+          if (!compact && showDetails) ...[
+            const SizedBox(height: 8),
+            if (api)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  apiMetric('Token', _quantity(u!.tokenCount)),
+                  const SizedBox(width: 12),
+                  apiMetric('TPM', _quantity(u.tpm)),
+                ],
+              )
+            else
+              usageItem(
+                '重置时间',
+                Text('${workbenchTime(q!.resetsAt)} 重置', style: detailStyle),
+              ),
+            if (api) ...[
+              const SizedBox(height: 2),
+              usageItem(
+                '统计窗口',
+                Text(
+                  '统计窗口 ${workbenchTime(u!.windowStart)} — ${workbenchTime(u.windowEnd)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: detailStyle,
+                ),
+              ),
+            ],
+          ],
+        ];
+        final fillHeight = density == 'fill' && !tiny;
+        final content = Padding(
+          padding: const EdgeInsets.all(edge / 2),
+          child: SizedBox(
+            width: contentWidth,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: fillHeight ? contentHeight : 0,
+              ),
+              child: Column(
+                mainAxisAlignment: fillHeight
+                    ? _usageMainAxisAlignment(alignment)
+                    : MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+        );
+        return LayoutDebugOverlay(
+          enabled: debugLayout,
+          label:
+              '内容区 ${contentWidth.toStringAsFixed(1)} × ${contentHeight.toStringAsFixed(1)} dp · ${_usageDensityLabel(density)} · ${_usageAlignmentLabel(alignment)}',
+          top: true,
+          child: InkWell(
+            onTap: editing ? null : detail,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              child: content,
             ),
           ),
         );
@@ -880,14 +1026,21 @@ class LayoutDebugOverlay extends StatelessWidget {
   Widget build(BuildContext context) => !enabled
       ? child
       : Stack(
-          fit: StackFit.expand,
+          // Keep the child's intrinsic height when an item sits in a
+          // scrolling column; StackFit.expand would pass an infinite height
+          // constraint through to Text during layout.
+          fit: StackFit.passthrough,
           children: [
             child,
             Positioned.fill(
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xff527bc2)),
+                    color: const Color(0x14527bc2),
+                    border: Border.all(
+                      color: const Color(0xaa527bc2),
+                      width: 1,
+                    ),
                   ),
                 ),
               ),
@@ -899,15 +1052,23 @@ class LayoutDebugOverlay extends StatelessWidget {
               bottom: top ? null : 0,
               child: IgnorePointer(
                 child: ColoredBox(
-                  color: const Color(0xdd303e52),
+                  color: const Color(0xb8303e52),
                   child: Padding(
                     padding: const EdgeInsets.all(3),
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        height: 1.3,
+                    child: ExcludeSemantics(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            height: 1.3,
+                          ),
+                        ),
                       ),
                     ),
                   ),

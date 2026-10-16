@@ -509,6 +509,7 @@ void main() {
       expect(tester.getSize(find.byType(WorkbenchWidgetBody)), before);
       expect(find.textContaining('区域 1274.0 × 714.0 dp'), findsOneWidget);
       expect(find.textContaining('4 列 · 卡片 307.5 × 107.7 dp'), findsOneWidget);
+      expect(find.textContaining('卡片 307.5 × 107.7 dp'), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       connection.dispose();

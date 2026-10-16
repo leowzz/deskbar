@@ -265,6 +265,18 @@ void main() {
     final widthPlus = find.byKey(const ValueKey('number-increment-卡片目标宽度'));
     final heightMinus = find.byKey(const ValueKey('number-decrement-卡片目标高度'));
     expect(tester.widget<IconButton>(widthMinus).onPressed, isNotNull);
+    expect(
+      (tester.widget<IconButton>(widthPlus).icon as Icon).icon,
+      Icons.keyboard_arrow_up,
+    );
+    expect(
+      (tester.widget<IconButton>(widthMinus).icon as Icon).icon,
+      Icons.keyboard_arrow_down,
+    );
+    expect(
+      tester.getCenter(widthPlus).dy,
+      lessThan(tester.getCenter(widthMinus).dy),
+    );
     await tester.tap(widthMinus);
     await tester.pumpAndSettle();
     expect(workspace.findWidget('main-sessions')!.options['itemWidth'], 279.0);
@@ -653,6 +665,9 @@ void main() {
       expect(aOffset, greaterThan(0));
       await open('quota');
       expect(selected('用量内容'), 'quota');
+      expect(selected('内容布局'), 'fill');
+      expect(selected('内容对齐'), 'spaceEvenly');
+      expect(find.text('显示详细数据'), findsOneWidget);
       expect(selected('已授权来源'), 'codex.quota');
       expect(selected('显示范围'), 'weekly');
       expect(inspectorScroll().position.pixels, 0);
@@ -685,8 +700,18 @@ void main() {
       expect(selected('会话信息'), 'normal');
       await open('api');
       expect(selected('用量内容'), 'api');
+      expect(selected('内容布局'), 'fill');
+      expect(selected('内容对齐'), 'spaceEvenly');
       expect(selected('已授权来源'), 'sub2api.usage');
       expect(selected('显示范围'), 'api-account');
+      final sourceRect = tester.getRect(field('已授权来源'));
+      final rangeRect = tester.getRect(field('显示范围'));
+      final contentRect = tester.getRect(field('用量内容'));
+      final densityRect = tester.getRect(field('内容布局'));
+      final alignmentRect = tester.getRect(field('内容对齐'));
+      expect(rangeRect.top, greaterThanOrEqualTo(sourceRect.bottom + 8));
+      expect(densityRect.top, greaterThanOrEqualTo(contentRect.bottom + 8));
+      expect(alignmentRect.top, greaterThanOrEqualTo(densityRect.bottom + 8));
       expect(inspectorScroll().position.pixels, 0);
       await open('quota');
       expect(selected('用量内容'), 'quota');
@@ -913,6 +938,7 @@ void main() {
                   type: 'usage',
                   options: const {'content': 'api'},
                   binding: const {},
+                  debugLayout: true,
                 ),
               ),
             ),
@@ -922,6 +948,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('USD 12.34'), findsOneWidget);
       expect(find.text('上次实际成本 · 等待刷新'), findsOneWidget);
+      expect(find.text('item 主指标标题'), findsOneWidget);
+      expect(find.text('item 主指标数值'), findsOneWidget);
+      expect(find.text('item Token'), findsOneWidget);
+      expect(find.text('item TPM'), findsOneWidget);
+      expect(find.text('item 统计窗口'), findsOneWidget);
       await tester.tap(find.text('USD 12.34'));
       await tester.pumpAndSettle();
       expect(find.text('API 用量详情'), findsOneWidget);

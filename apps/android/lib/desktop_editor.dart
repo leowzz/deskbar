@@ -32,7 +32,7 @@ class _DesktopEditorState extends State<DesktopEditor> {
   late final repository = _DesktopRepository(_save);
   final Map<int, Completer<void>> requests = {};
   int requestId = 0, revision = 0;
-  bool ready = false, debug = false, dark = false;
+  bool ready = false, debug = true, dark = false;
   bool lastEditing = false, previewFit = true;
   LayoutOrientation previewOrientation = LayoutOrientation.wide;
   bool orientationChosen = false;

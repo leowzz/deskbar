@@ -333,6 +333,31 @@ void main() {
     },
   );
 
+  test('usage display options support filling and detail controls', () {
+    final workspace = emptyWorkspace();
+    final id = workspace.addWidget('usage')!;
+    final defaults = workspace.findWidget(id)!.options;
+    expect(defaults['density'], 'fill');
+    expect(defaults['alignment'], 'spaceEvenly');
+    expect(defaults['showDetails'], true);
+    expect(
+      workspace.updateWidget(
+        id,
+        options: {
+          'density': 'standard',
+          'alignment': 'bottom',
+          'showDetails': false,
+        },
+      ),
+      true,
+    );
+    expect(workspace.findWidget(id)!.options['density'], 'standard');
+    workspace.document.validate();
+    expect(workspace.updateWidget(id, options: {'density': 'expanded'}), false);
+    expect(workspace.updateWidget(id, options: {'alignment': 'right'}), false);
+    expect(workspace.updateWidget(id, options: {'showDetails': 'yes'}), false);
+  });
+
   test('mixed random edits always leave the complete draft valid', () {
     final workspace = emptyWorkspace();
     final random = Random(42);

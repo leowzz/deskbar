@@ -32,6 +32,13 @@ String _shortcutAlignmentValue(dynamic value) =>
     ? value as String
     : 'spaceEvenly';
 
+List<Widget> _inspectorFields(List<Widget> fields, {double gap = 12}) => [
+  for (var i = 0; i < fields.length; i++) ...[
+    fields[i],
+    if (i + 1 < fields.length) SizedBox(height: gap),
+  ],
+];
+
 class WorkbenchCanvas extends StatefulWidget {
   const WorkbenchCanvas({
     super.key,
@@ -1402,7 +1409,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     final groups = <Widget>[
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        children: _inspectorFields([
           _WidgetNameField(
             key: ValueKey('name-editor-$id'),
             id: id,
@@ -1417,11 +1424,11 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             onChanged: (v) => _result(workspace.setWidgetVisible(id, v)),
           ),
           _bindingControls(w),
-        ],
+        ]),
       ),
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        children: _inspectorFields([
           if (w.type == 'sessions') ...[
             _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
             _optionSlider(
@@ -1602,7 +1609,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                   workspace.updateWidget(id, options: {'labels': v}),
             ),
           ],
-          if (w.type == 'usage')
+          if (w.type == 'usage') ...[
             DropdownButtonFormField<String>(
               key: ValueKey('content-$id-${w.options['content']}'),
               initialValue: w.options['content'] == 'api' ? 'api' : 'quota',
@@ -1636,11 +1643,107 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 },
               ),
             ),
-        ],
+            DropdownButtonFormField<String>(
+              key: ValueKey('usage-density-$id-${w.options['density']}'),
+              initialValue: switch (w.options['density']) {
+                'compact' => 'compact',
+                'standard' => 'standard',
+                _ => 'fill',
+              },
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '内容布局'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'fill',
+                  child: Text(
+                    '自适应填充',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'standard',
+                  child: Text(
+                    '标准',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'compact',
+                  child: Text(
+                    '紧凑',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (v) =>
+                  workspace.updateWidget(id, options: {'density': v ?? 'fill'}),
+            ),
+            DropdownButtonFormField<String>(
+              key: ValueKey('usage-alignment-$id-${w.options['alignment']}'),
+              initialValue: switch (w.options['alignment']) {
+                'top' => 'top',
+                'center' => 'center',
+                'bottom' => 'bottom',
+                _ => 'spaceEvenly',
+              },
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '内容对齐'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'top',
+                  child: Text(
+                    '顶部对齐',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'center',
+                  child: Text(
+                    '居中对齐',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'spaceEvenly',
+                  child: Text(
+                    '均匀分布',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'bottom',
+                  child: Text(
+                    '底部对齐',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (v) => workspace.updateWidget(
+                id,
+                options: {'alignment': v ?? 'spaceEvenly'},
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('显示详细数据'),
+              subtitle: const Text('显示 Token、TPM、统计窗口或额度重置时间。'),
+              value: w.options['showDetails'] != false,
+              onChanged: (v) =>
+                  workspace.updateWidget(id, options: {'showDetails': v}),
+            ),
+          ],
+        ]),
       ),
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        children: _inspectorFields([
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             key: ValueKey('move-$id'),
@@ -1676,7 +1779,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             icon: const Icon(Icons.delete_outline),
             label: const Text('删除组件'),
           ),
-        ],
+        ], gap: 12),
       ),
     ];
     return LayoutBuilder(
@@ -1827,6 +1930,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             }
           },
         ),
+        const SizedBox(height: 12),
         if (w.type == 'sessions')
           KeyedSubtree(
             key: ValueKey('session-limit-${w.id}'),
@@ -1843,7 +1947,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             ),
           )
         else if (valid) ...[
-          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             key: ValueKey('resource-${w.id}-$source-$selectedResource'),
             initialValue: selectedResource == null || selectedResource.isEmpty
@@ -2038,7 +2141,7 @@ class _DesktopNumberFieldState extends State<_DesktopNumberField> {
         labelText: widget.label,
         isDense: true,
         suffixIconConstraints: const BoxConstraints(
-          minWidth: 76,
+          minWidth: 64,
           maxWidth: 108,
           minHeight: 40,
         ),
@@ -2047,38 +2150,29 @@ class _DesktopNumberFieldState extends State<_DesktopNumberField> {
           children: [
             if (widget.suffix.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(right: 2),
+                padding: const EdgeInsets.only(right: 4),
                 child: Text(widget.suffix),
               ),
-            IconButton(
-              key: ValueKey('number-decrement-${widget.label}'),
-              tooltip: canDecrease ? '减 1' : '已是最小值',
-              onPressed: canDecrease ? () => _step(-1) : null,
-              style: IconButton.styleFrom(
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: EdgeInsets.zero,
+            SizedBox(
+              width: 28,
+              height: 36,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _stepButton(
+                    key: ValueKey('number-increment-${widget.label}'),
+                    tooltip: canIncrease ? '增加 1' : '已是最大值',
+                    onPressed: canIncrease ? () => _step(1) : null,
+                    icon: Icons.keyboard_arrow_up,
+                  ),
+                  _stepButton(
+                    key: ValueKey('number-decrement-${widget.label}'),
+                    tooltip: canDecrease ? '减少 1' : '已是最小值',
+                    onPressed: canDecrease ? () => _step(-1) : null,
+                    icon: Icons.keyboard_arrow_down,
+                  ),
+                ],
               ),
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints.tightFor(width: 28, height: 32),
-              iconSize: 17,
-              icon: const Icon(Icons.remove),
-            ),
-            IconButton(
-              key: ValueKey('number-increment-${widget.label}'),
-              tooltip: canIncrease ? '加 1' : '已是最大值',
-              onPressed: canIncrease ? () => _step(1) : null,
-              style: IconButton.styleFrom(
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: EdgeInsets.zero,
-              ),
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints.tightFor(width: 28, height: 32),
-              iconSize: 17,
-              icon: const Icon(Icons.add),
             ),
           ],
         ),
@@ -2087,6 +2181,27 @@ class _DesktopNumberFieldState extends State<_DesktopNumberField> {
       onTapOutside: (_) => focus.unfocus(),
     );
   }
+
+  Widget _stepButton({
+    required Key key,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    required IconData icon,
+  }) => IconButton(
+    key: key,
+    tooltip: tooltip,
+    onPressed: onPressed,
+    style: IconButton.styleFrom(
+      minimumSize: Size.zero,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: EdgeInsets.zero,
+    ),
+    padding: EdgeInsets.zero,
+    visualDensity: VisualDensity.compact,
+    constraints: const BoxConstraints.tightFor(width: 28, height: 17),
+    iconSize: 18,
+    icon: Icon(icon),
+  );
 }
 
 /// Keep the same editor and focus while external undo/redo updates its value.
