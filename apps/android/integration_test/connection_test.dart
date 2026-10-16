@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:desklet/connection.dart';
+import 'package:desklet/layout_repository.dart';
+import 'package:desklet/layout_workspace.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -16,6 +18,34 @@ void main() {
         reason: 'Start the Rust Android fixture first',
       );
       const native = MethodChannel('app.desklet/connection');
+      const preferences = MethodChannel('app.desklet/layout');
+      final oldTheme = await preferences.invokeMethod<String>('loadTheme');
+      await preferences.invokeMethod<void>('saveTheme', {'theme': 'dark'});
+      expect(await preferences.invokeMethod<String>('loadTheme'), 'dark');
+      await expectLater(
+        preferences.invokeMethod<void>('saveTheme', {'theme': 'invalid'}),
+        throwsA(isA<PlatformException>()),
+      );
+      await preferences.invokeMethod<void>('saveTheme', {
+        'theme': oldTheme ?? 'light',
+      });
+      final repository = LayoutRepository();
+      final original = (await repository.load()).document;
+      final workspace = LayoutWorkspace(document: original)..beginEdit();
+      final page = workspace.addPage(name: '原生保存测试')!;
+      final first = workspace.addWidget('sessions')!;
+      final second = workspace.addWidget('sessions')!;
+      workspace.updateWidget(first, options: {'itemWidth': 360});
+      await repository.save(workspace.document);
+      final restoredLayout = (await LayoutRepository().load()).document;
+      expect(restoredLayout.activePageId, page);
+      expect(restoredLayout.activePage.widgets.map((w) => w.id), [
+        first,
+        second,
+      ]);
+      expect(restoredLayout.activePage.widgets.first.options['itemWidth'], 360);
+      await repository.save(original);
+      workspace.dispose();
       await native.invokeMethod<void>('forget');
       final connection = Connection();
       await connection.start();
@@ -50,10 +80,12 @@ void main() {
       expect(connection.data!.sessions.single.title, '验证工作台连接');
       expect(connection.data!.quotas.single.remaining, 42);
       expect(connection.data!.shortcuts.single.name, '测试入口');
+      expect(connection.data!.apiUsage.single.actualCostMicros, 1250000);
       final cached =
           jsonDecode((await native.invokeMethod<String>('restore'))!) as Map;
       expect(cached.containsKey('token'), isFalse);
       expect((cached['snapshot'] as Map)['sessions'], isNotEmpty);
+      expect((cached['snapshot'] as Map)['api_usage'], isNotEmpty);
       final data = connection.data!;
       try {
         await native.invokeMethod<String>('command', {
@@ -76,9 +108,11 @@ void main() {
       expect(connection.data!.sessions, isEmpty);
       expect(connection.data!.quotas, isEmpty);
       expect(connection.data!.shortcuts, isEmpty);
+      expect(connection.data!.apiUsage, isEmpty);
       final cleared =
           jsonDecode((await native.invokeMethod<String>('restore'))!) as Map;
       expect((cleared['snapshot'] as Map)['sessions'], isEmpty);
+      expect((cleared['snapshot'] as Map)['api_usage'], isEmpty);
       expect(connection.hostName, isNotNull);
       await until(() => connection.phase == ConnectionPhase.unpaired);
       expect(connection.data, isNull);

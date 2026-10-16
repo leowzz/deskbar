@@ -35,6 +35,13 @@ async fn android_connection_fixture() {
     host.workbench
         .observed("codex.sessions", Ok(()), now(), 180);
     host.workbench.observed("codex.quota", Ok(()), now(), 180);
+    host.workbench.api_usage = vec![desklet_host::usage::parse_usage(
+        &serde_json::json!({"today_actual_cost":1.25,"today_tokens":1234,"tpm":42}),
+        "Asia/Shanghai",
+        now(),
+    )
+    .unwrap()];
+    host.workbench.observed("sub2api.usage", Ok(()), now(), 180);
     host.save_shortcut(ShortcutConfig {
         id: "00000000-0000-4000-8000-000000000002".into(),
         name: "测试入口".into(),

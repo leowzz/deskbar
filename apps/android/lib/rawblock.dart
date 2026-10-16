@@ -1,248 +1,342 @@
 import 'package:flutter/material.dart';
 
-const rawSuccess = Color(0xff008000);
-const rawWarning = Color(0xffffa500);
-const rawError = Color(0xffff0000);
-const rawMono = TextStyle(fontFamily: 'Space Mono', fontSize: 15, height: 1.5);
+// Kept as a source-compatible entry point; the product now uses DESIGN tokens.
+const rawSuccess = Color(0xff39765a);
+const rawWarning = Color(0xff956320);
+const rawError = Color(0xffa84545);
+const rawMono = TextStyle(fontSize: 15, height: 1.5);
 
-ButtonStyle rawButton({bool primary = false, bool destructive = false}) {
-  Color background(Set<WidgetState> states) {
-    if (states.contains(WidgetState.disabled)) return const Color(0xfff0f0f0);
-    if (states.contains(WidgetState.pressed)) return Colors.black;
-    if (states.contains(WidgetState.hovered)) {
-      return destructive
-          ? Colors.black
-          : primary
-          ? Colors.white
-          : Colors.black;
-    }
-    return destructive
-        ? rawError
-        : primary
-        ? Colors.black
-        : Colors.white;
-  }
-
-  return ButtonStyle(
-    minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
-    padding: const WidgetStatePropertyAll(
-      EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-    ),
-    shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
-    elevation: const WidgetStatePropertyAll(0),
-    shadowColor: const WidgetStatePropertyAll(Colors.transparent),
-    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-    backgroundColor: WidgetStateProperty.resolveWith(background),
-    foregroundColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.disabled)
-          ? const Color(0xff777777)
-          : destructive && states.contains(WidgetState.hovered)
-          ? rawError
-          : background(states) == Colors.black || background(states) == rawError
-          ? Colors.white
-          : Colors.black,
-    ),
-    side: WidgetStateProperty.resolveWith(
-      (states) => BorderSide(
-        color: states.contains(WidgetState.disabled)
-            ? const Color(0xffcccccc)
-            : Colors.black,
-        width:
-            states.contains(WidgetState.pressed) ||
-                states.contains(WidgetState.focused)
-            ? 5
-            : 3,
-      ),
-    ),
-    textStyle: WidgetStatePropertyAll(
-      TextStyle(
-        fontFamily: 'Work Sans',
-        fontSize: destructive ? 19 : 14,
-        fontWeight: destructive ? FontWeight.w700 : FontWeight.w600,
-        letterSpacing: 2,
-      ),
-    ),
+@immutable
+class DeskletColors extends ThemeExtension<DeskletColors> {
+  const DeskletColors({
+    required this.canvas,
+    required this.surface,
+    required this.sidebar,
+    required this.raised,
+    required this.text,
+    required this.muted,
+    required this.line,
+    required this.edge,
+    required this.accent,
+    required this.onAccent,
+    required this.selection,
+    required this.selectedText,
+    required this.success,
+    required this.successBg,
+    required this.warning,
+    required this.warningBg,
+    required this.danger,
+    required this.dangerBg,
+    required this.control,
+    required this.chart,
+    required this.focus,
+  });
+  final Color canvas,
+      surface,
+      sidebar,
+      raised,
+      text,
+      muted,
+      line,
+      edge,
+      accent,
+      onAccent,
+      selection,
+      selectedText,
+      success,
+      successBg,
+      warning,
+      warningBg,
+      danger,
+      dangerBg,
+      control,
+      chart,
+      focus;
+  static const silver = DeskletColors(
+    canvas: Color(0xfff6f7f9),
+    surface: Color(0xffffffff),
+    sidebar: Color(0xffeef0f3),
+    raised: Color(0xfff0f2f5),
+    text: Color(0xff22262d),
+    muted: Color(0xff626c7b),
+    line: Color(0xffe1e5eb),
+    edge: Color(0xffcbd0d8),
+    accent: Color(0xff303e52),
+    onAccent: Color(0xffffffff),
+    selection: Color(0xffe4eaf3),
+    selectedText: Color(0xff314a71),
+    success: Color(0xff39765a),
+    successBg: Color(0xffe9f3ec),
+    warning: Color(0xff956320),
+    warningBg: Color(0xfffaf0da),
+    danger: Color(0xffa84545),
+    dangerBg: Color(0xfffaebeb),
+    control: Color(0xffa0a9b6),
+    chart: Color(0xff607fa7),
+    focus: Color(0xff527bc2),
   );
+  static const graphite = DeskletColors(
+    canvas: Color(0xff191a1c),
+    surface: Color(0xff222426),
+    sidebar: Color(0xff151618),
+    raised: Color(0xff2c2e31),
+    text: Color(0xffeeefef),
+    muted: Color(0xffa1a6ad),
+    line: Color(0xff35383d),
+    edge: Color(0xff3b3d41),
+    accent: Color(0xffd7dce2),
+    onAccent: Color(0xff22262c),
+    selection: Color(0xff30363f),
+    selectedText: Color(0xffd1dbe9),
+    success: Color(0xffa2c4b0),
+    successBg: Color(0xff293a31),
+    warning: Color(0xffd8b87a),
+    warningBg: Color(0xff403725),
+    danger: Color(0xffe7a4a4),
+    dangerBg: Color(0xff422c30),
+    control: Color(0xff69717c),
+    chart: Color(0xffa9bacd),
+    focus: Color(0xffadc6eb),
+  );
+  @override
+  DeskletColors copyWith() => this;
+  @override
+  DeskletColors lerp(covariant DeskletColors? other, double t) =>
+      t < .5 ? this : other ?? this;
 }
 
-ThemeData rawBlockTheme() {
-  const headline = TextStyle(
-    fontFamily: 'Archivo Black',
-    fontWeight: FontWeight.w900,
-    color: Colors.black,
+DeskletColors deskletColors(BuildContext context) =>
+    Theme.of(context).extension<DeskletColors>() ?? DeskletColors.silver;
+ButtonStyle rawButton({bool primary = false, bool destructive = false}) =>
+    FilledButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      backgroundColor: destructive ? rawError : null,
+      foregroundColor: destructive ? Colors.white : null,
+    );
+
+ThemeData rawBlockTheme([Brightness brightness = Brightness.light]) {
+  final c = brightness == Brightness.dark
+      ? DeskletColors.graphite
+      : DeskletColors.silver;
+  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
+  final text = TextStyle(
+    color: c.text,
+    fontSize: 15,
+    height: 1.5,
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
-  const body = TextStyle(
-    fontFamily: 'Work Sans',
-    fontSize: 16,
-    height: 1.6,
-    color: Colors.black,
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(6),
+    borderSide: BorderSide(color: c.line),
   );
-  const border = OutlineInputBorder(
-    borderRadius: BorderRadius.zero,
-    borderSide: BorderSide(width: 3),
+  WidgetStateProperty<BorderSide?> focusBorder([
+    BorderSide idle = BorderSide.none,
+  ]) => WidgetStateProperty.resolveWith(
+    (states) =>
+        states.contains(WidgetState.focused) &&
+            !states.contains(WidgetState.disabled)
+        ? BorderSide(color: c.focus, width: 2)
+        : idle,
   );
   return ThemeData(
-    brightness: Brightness.light,
     useMaterial3: true,
-    fontFamily: 'Work Sans',
-    fontFamilyFallback: const ['Noto Sans CJK SC', 'sans-serif'],
-    colorScheme: const ColorScheme.light(
-      primary: Colors.black,
-      onPrimary: Colors.white,
-      secondary: Colors.black,
-      onSecondary: Colors.white,
-      surface: Colors.white,
-      onSurface: Colors.black,
-      error: rawError,
-      onError: Colors.white,
-      outline: Colors.black,
+    brightness: brightness,
+    extensions: [c],
+    colorScheme: ColorScheme(
+      brightness: brightness,
+      primary: c.accent,
+      onPrimary: c.onAccent,
+      secondary: c.selectedText,
+      onSecondary: c.surface,
+      error: c.danger,
+      onError: c.surface,
+      surface: c.surface,
+      onSurface: c.text,
+      surfaceContainerHighest: c.raised,
+      outline: c.line,
+      outlineVariant: c.edge,
     ),
-    scaffoldBackgroundColor: Colors.white,
-    dividerColor: Colors.black,
+    scaffoldBackgroundColor: c.canvas,
+    dividerColor: c.line,
+    focusColor: c.focus.withValues(alpha: .18),
+    disabledColor: c.muted,
+    iconTheme: IconThemeData(size: 20, color: c.muted),
     textTheme: TextTheme(
-      headlineLarge: headline.copyWith(fontSize: 64, height: 1),
-      headlineMedium: headline.copyWith(fontSize: 48, height: 1.05),
-      headlineSmall: headline.copyWith(fontSize: 32, height: 1.1),
-      titleLarge: body.copyWith(
-        fontSize: 22,
+      headlineLarge: text.copyWith(
+        fontSize: 48,
+        fontWeight: FontWeight.w600,
+        height: 1.15,
+      ),
+      headlineMedium: text.copyWith(
+        fontSize: 40,
+        fontWeight: FontWeight.w600,
+        height: 1.15,
+      ),
+      headlineSmall: text.copyWith(
+        fontSize: 24,
         fontWeight: FontWeight.w600,
         height: 1.3,
       ),
-      bodyLarge: body,
-      bodyMedium: body,
-      bodySmall: body.copyWith(fontSize: 14, height: 1.5),
-      labelLarge: body.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+      titleLarge: text.copyWith(fontSize: 20, fontWeight: FontWeight.w600),
+      titleMedium: text.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+      bodyLarge: text.copyWith(fontSize: 16),
+      bodyMedium: text,
+      bodySmall: text.copyWith(fontSize: 12, color: c.muted),
+      labelLarge: text.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+      labelMedium: text.copyWith(fontSize: 12),
     ),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black,
+    appBarTheme: AppBarTheme(
+      backgroundColor: c.sidebar,
+      foregroundColor: c.text,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
-      titleTextStyle: TextStyle(
-        fontFamily: 'Archivo Black',
-        fontSize: 28,
-        color: Colors.black,
-      ),
+      shape: Border(bottom: BorderSide(color: c.line)),
+      titleTextStyle: text.copyWith(fontSize: 22, fontWeight: FontWeight.w600),
     ),
-    cardTheme: const CardThemeData(
-      color: Colors.white,
+    cardTheme: CardThemeData(
+      color: c.surface,
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(side: BorderSide(width: 3)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: c.line),
+      ),
     ),
-    dialogTheme: const DialogThemeData(
-      backgroundColor: Colors.white,
+    dialogTheme: DialogThemeData(
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.transparent,
-      elevation: 0,
-      shape: RoundedRectangleBorder(side: BorderSide(width: 3)),
-      titleTextStyle: TextStyle(
-        fontFamily: 'Archivo Black',
-        fontWeight: FontWeight.w900,
-        fontSize: 32,
-        height: 1.1,
-        color: Colors.black,
-      ),
-      contentTextStyle: body,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      titleTextStyle: text.copyWith(fontSize: 22, fontWeight: FontWeight.w600),
+      contentTextStyle: text,
     ),
-    filledButtonTheme: FilledButtonThemeData(style: rawButton(primary: true)),
-    outlinedButtonTheme: OutlinedButtonThemeData(style: rawButton()),
-    textButtonTheme: TextButtonThemeData(
-      style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        ),
-        shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
-        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-        foregroundColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.disabled)
-              ? const Color(0xff777777)
-              : states.contains(WidgetState.hovered)
-              ? const Color(0xff0000ff)
-              : Colors.black,
-        ),
-        textStyle: const WidgetStatePropertyAll(
-          TextStyle(
-            fontFamily: 'Work Sans',
-            fontSize: 14,
-            decoration: TextDecoration.underline,
-          ),
-        ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: c.surface,
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        shape: shape,
+        backgroundColor: c.accent,
+        foregroundColor: c.onAccent,
+        textStyle: text.copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+      ).copyWith(side: focusBorder()),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        shape: shape,
+        foregroundColor: c.text,
+        side: BorderSide(color: c.line),
+      ).copyWith(side: focusBorder(BorderSide(color: c.line))),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        shape: shape,
+        foregroundColor: c.selectedText,
+      ).copyWith(side: focusBorder()),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        foregroundColor: c.muted,
+        shape: shape,
+      ).copyWith(side: focusBorder()),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xfff0f0f0),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      labelStyle: const TextStyle(
-        fontFamily: 'Archivo Black',
-        fontSize: 14,
-        color: Colors.black,
-      ),
-      hintStyle: rawMono.copyWith(color: const Color(0xff555555)),
+      fillColor: c.raised,
       border: border,
       enabledBorder: border,
-      focusedBorder: border.copyWith(borderSide: const BorderSide(width: 5)),
-      errorBorder: border.copyWith(
-        borderSide: const BorderSide(width: 3, color: rawError),
+      focusedBorder: border.copyWith(
+        borderSide: BorderSide(color: c.focus, width: 2),
       ),
-      focusedErrorBorder: border.copyWith(
-        borderSide: const BorderSide(width: 5, color: rawError),
+      errorBorder: border.copyWith(borderSide: BorderSide(color: c.danger)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      labelStyle: text.copyWith(color: c.muted),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.onAccent : c.surface,
       ),
-      disabledBorder: border.copyWith(
-        borderSide: const BorderSide(width: 3, color: Color(0xffcccccc)),
+      trackColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.accent : c.control,
       ),
+      trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
-    textSelectionTheme: const TextSelectionThemeData(
-      cursorColor: Colors.black,
-      selectionColor: Color(0xffcccccc),
-      selectionHandleColor: Colors.black,
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: c.chart,
+      linearTrackColor: c.raised,
+      linearMinHeight: 6,
+      borderRadius: BorderRadius.circular(4),
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: Colors.black,
-      linearTrackColor: Color(0xffcccccc),
-      linearMinHeight: 4,
+    sliderTheme: SliderThemeData(
+      activeTrackColor: c.accent,
+      thumbColor: c.accent,
+      inactiveTrackColor: c.raised,
     ),
-    tooltipTheme: const TooltipThemeData(
-      decoration: BoxDecoration(color: Colors.black),
-      textStyle: TextStyle(
-        fontFamily: 'Space Mono',
-        fontSize: 13,
-        color: Colors.white,
+    textSelectionTheme: TextSelectionThemeData(
+      cursorColor: c.focus,
+      selectionColor: c.selection,
+      selectionHandleColor: c.focus,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: c.accent,
+      contentTextStyle: text.copyWith(color: c.onAccent),
+      behavior: SnackBarBehavior.floating,
+    ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: c.accent,
+        borderRadius: BorderRadius.circular(6),
       ),
+      textStyle: text.copyWith(color: c.onAccent, fontSize: 12),
     ),
-    listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(vertical: 12),
-      textColor: Colors.black,
-      shape: Border(bottom: BorderSide(width: 3)),
+    popupMenuTheme: PopupMenuThemeData(
+      color: c.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+    listTileTheme: ListTileThemeData(
+      textColor: c.text,
+      iconColor: c.muted,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     ),
   );
 }
 
 class StatusTag extends StatelessWidget {
-  const StatusTag(this.label, {super.key, this.color = Colors.black});
+  const StatusTag(this.label, {super.key, this.color});
   final String label;
-  final Color color;
+  final Color? color;
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.centerLeft,
-    child: DecoratedBox(
-      decoration: BoxDecoration(border: Border.all(color: color, width: 2)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+  Widget build(BuildContext context) {
+    final c = deskletColors(context);
+    final foreground = color ?? c.muted;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: foreground == c.success ? c.successBg : c.raised,
+          borderRadius: BorderRadius.circular(6),
+        ),
         child: Text(
           label,
           style: TextStyle(
-            color: color,
-            fontSize: 14,
+            color: foreground,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

@@ -1,6 +1,6 @@
 # Desklet 架构
 
-状态：连接、Codex 来源、设备许可和有限打开动作已实现；页面编辑仍为后续目标。2026-10-16。
+状态：连接、Codex / Sub2API 来源、设备许可、有限打开动作和 Android 多页组件编辑已实现。2026-10-16。
 
 ## 双端直连
 
@@ -96,4 +96,6 @@ macOS 安装路径需验证签名、公证与本地网络授权。Windows 需验
 - `apps/desktop`：React 设备与共享管理、来源健康 / 额度、入口编辑与原生应用选择器、Tauri 托盘；关闭窗口继续运行，菜单栏可打开或退出。启动失败时保留窗口显示可操作提示。
 - `apps/android`：Flutter 工作台；`WorkbenchData` 解析授权状态，`Connection` 提供来源和有限动作。Kotlin 管理 HTTPS / WSS、发现、Keystore 加密凭据 / 快照、动作提交和结果查询。普通断线保留上次数据，来源失效或离线禁用会话打开；撤销共享会替换并清除对应缓存。
 
-Codex 数据库和 app-server 读取、深链与入口校验参考 Orbit 的成熟规则，已改用 Desklet 自有类型；没有 Orbit 运行依赖、额外后端、MQTT 或共享插件框架。尚未迁入 Sub2API、页面 / 组件编辑。
+Codex 数据库和 app-server 读取、Sub2API 登录 / 续期 / 聚合指标、深链与入口校验参考 Orbit 的成熟规则，已改用 Desklet 自有类型；没有 Orbit 运行依赖、额外后端、MQTT 或共享插件框架。Sub2API 配置归 Host，密码存独立钥匙串条目；账号变更清除旧值并丢弃在途旧账号响应。
+
+Android `LayoutWorkspace` 使用不可变文档管理全页面草稿、历史和双方向网格校验，临时选中 / 铺满不参与保存。`LayoutRepository` 经串行队列在 App 私有目录写临时文件后原子替换，保留有效副本和旧配置 / 损坏原文件；未来版本禁止降级覆盖。`WorkbenchCanvas` 将文档绑定到单个 `Connection` 的授权快照，同源多个实例复用一条 WSS，按稳定 Host / 来源 / 资源筛选。页面滚动通过实例 ID 保留，非当前页由按需 PageView 构建。

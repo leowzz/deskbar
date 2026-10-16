@@ -1,8 +1,8 @@
 # Desklet 视觉规范
 
-确认日期：2026-10-16。**01「铂银」作为默认浅色主题，02「墨黑」作为暗色主题。** 本文件是双端后续视觉实现的依据，替换之前的 RawBlock 与外部网站设计参考。
+确认日期：2026-10-16。**01「铂银」作为默认浅色主题，02「墨黑」作为暗色主题。** 本文件是双端视觉实现的依据，替换之前的 RawBlock 与外部网站设计参考。
 
-设计已确认，正式 App 的主题接入仍待实现。本次固化规范与原型，不代表电脑端或 Android 已切换到新样式。
+双端 App 已接入主题、本机偏好保存与统一组件样式。桌面通过浏览器交互与构建检查；Android 的界面、原生存储及设备验证范围见 [跨端验证](tests/README.md)。实现与签名发布、完整物理设备验收分别记录。
 
 ## 主题与默认规则
 
@@ -126,8 +126,8 @@
 - [配色原型](docs/prototypes/color-study.prototype.html)：01 铂银与 02 墨黑是本规范来源，可查看电脑端、横屏和手机效果；另外两套仅为历史探索。
 - [原型说明](docs/prototypes/README.md)：预览方式与历史方案。
 - [产品范围](docs/product.md)、[工作台设计](docs/workbench.md)、[协议草案](docs/protocol.md)：功能与行为依据。
-- 电脑端待接入：[style.css](apps/desktop/src/style.css)、[App.tsx](apps/desktop/src/App.tsx)、[WorkbenchSettings.tsx](apps/desktop/src/WorkbenchSettings.tsx)。
-- Android 待接入：[rawblock.dart](apps/android/lib/rawblock.dart)、[main.dart](apps/android/lib/main.dart)、[workbench_content.dart](apps/android/lib/workbench_content.dart)。现有文件名不代表继续沿用旧视觉规范。
+- 电脑端实现：[style.css](apps/desktop/src/style.css)、[App.tsx](apps/desktop/src/App.tsx)、[WorkbenchSettings.tsx](apps/desktop/src/WorkbenchSettings.tsx)。主题偏好保存在本机，并同步窗口主题与背景。
+- Android 实现：[rawblock.dart](apps/android/lib/rawblock.dart)、[main.dart](apps/android/lib/main.dart)、[workbench_content.dart](apps/android/lib/workbench_content.dart)、[workbench_canvas.dart](apps/android/lib/workbench_canvas.dart)。`rawblock.dart` 保留文件名与兼容入口，内容已改为本规范主题。
 
 原型的比较页外框、方案选择工具、模拟手机边框和窗口投影属于展示环境，不搬进正式 App。
 
@@ -139,4 +139,4 @@
 - 常用与窄窗口、横竖屏、系统大字号下文字可读、卡片对齐，无越界；触控目标和安全区通过真机验证。
 - 切换主题不丢失页面配置、不改变设备权限、不触发连接或远程动作。
 
-当前确认了颜色与视觉规则，并有浏览器原型检查。主题持久化、正式 App 接入与双端真机验收仍待完成，完成后同步更新开发计划。
+颜色、主题持久化和 App 接入已实现，检查与构建记录见开发计划及跨端验证。完整物理设备验收、权限拒绝恢复和签名发布仍待完成。

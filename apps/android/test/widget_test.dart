@@ -10,6 +10,11 @@ void main() {
     savedHost = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
+          const MethodChannel('app.desklet/layout'),
+          (call) async => call.method == 'loadTheme' ? 'light' : null,
+        );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
           const MethodChannel('app.desklet/connection'),
           (call) async => call.method == "restore" ? savedHost : null,
         );
@@ -23,6 +28,7 @@ void main() {
     (const Size(360, 640), 1.0),
     (const Size(360, 640), 1.8),
     (const Size(800, 360), 1.4),
+    (const Size(480, 280), 1.8),
   ]) {
     testWidgets(
       'camera-free pairing at ${scenario.$1}, text scale ${scenario.$2}',
