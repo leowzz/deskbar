@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub struct Permissions {
     pub sessions: bool,
     pub quota: bool,
+    #[serde(default)]
+    pub api_usage: bool,
     pub shortcuts: bool,
     pub open: bool,
 }
@@ -34,6 +36,17 @@ pub struct Quota {
     pub remaining_percent: f64,
     pub resets_at: u64,
     pub window_minutes: u64,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiUsage {
+    pub id: String,
+    pub label: String,
+    pub actual_cost_micros: i64,
+    pub currency: String,
+    pub token_count: u64,
+    pub tpm: u64,
+    pub window_start: u64,
+    pub window_end: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Shortcut {
@@ -106,6 +119,7 @@ pub struct Workbench {
     pub sessions: Vec<Session>,
     pub session_total: usize,
     pub quotas: Vec<Quota>,
+    pub api_usage: Vec<ApiUsage>,
 }
 impl Workbench {
     pub fn observed(&mut self, id: &str, result: Result<()>, time: u64, ttl: u64) {
@@ -212,6 +226,7 @@ impl Host {
         snapshot.sources.retain(|s| match s.source_id.as_str() {
             "codex.sessions" => permissions.sessions,
             "codex.quota" => permissions.quota,
+            "sub2api.usage" => permissions.api_usage,
             _ => false,
         });
         if !permissions.sessions {
@@ -220,6 +235,9 @@ impl Host {
         }
         if !permissions.quota {
             snapshot.quotas.clear();
+        }
+        if !permissions.api_usage {
+            snapshot.api_usage.clear();
         }
         if !permissions.shortcuts {
             snapshot.shortcuts.clear();
@@ -461,6 +479,71 @@ mod tests {
         assert_eq!(state.sources[0].observed_at, 100);
         assert_eq!(state.sources[0].fresh_until, 120);
         assert_eq!(state.sources[0].health, "error");
+    }
+    #[test]
+    fn api_usage_is_opt_in_per_device_and_config_is_never_on_wire() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "测试电脑".into()).unwrap();
+        let (device, token) = paired(&mut host);
+        let (_, other) = paired(&mut host);
+        // Persisted older permission records acquire a disabled API permission.
+        let old: Permissions = serde_json::from_value(
+            serde_json::json!({"sessions":true,"quota":true,"shortcuts":true,"open":true}),
+        )
+        .unwrap();
+        assert!(!old.api_usage);
+        host.set_usage_config(Some(crate::usage::UsageConfig {
+            base_url: "https://example.com".into(),
+            email: "private@example.com".into(),
+            timezone: "Asia/Shanghai".into(),
+        }))
+        .unwrap();
+        host.workbench.api_usage.push(
+            crate::usage::parse_usage(
+                &serde_json::json!({"today_actual_cost":0,"today_tokens":12,"tpm":3}),
+                "Asia/Shanghai",
+                1792123200,
+            )
+            .unwrap(),
+        );
+        host.workbench.observed("sub2api.usage", Ok(()), 100, 180);
+        assert!(host
+            .authorized_snapshot(&token)
+            .unwrap()
+            .api_usage
+            .is_empty());
+        host.set_permissions(
+            &device,
+            Permissions {
+                api_usage: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let snapshot = host.authorized_snapshot(&token).unwrap();
+        assert_eq!(snapshot.api_usage[0].token_count, 12);
+        assert_eq!(snapshot.sources[0].source_id, "sub2api.usage");
+        assert!(snapshot.capabilities.is_empty());
+        let wire = serde_json::to_string(&snapshot).unwrap();
+        assert!(!wire.contains("private@example.com"));
+        assert!(!wire.contains("https://example.com"));
+        assert!(host
+            .authorized_snapshot(&other)
+            .unwrap()
+            .api_usage
+            .is_empty());
+        host.set_permissions(&device, Permissions::default())
+            .unwrap();
+        let snapshot = host.authorized_snapshot(&token).unwrap();
+        assert!(snapshot.api_usage.is_empty() && snapshot.sources.is_empty());
+        drop(host);
+        let mut host = Host::load(dir.path().into(), "unused".into()).unwrap();
+        assert_eq!(
+            host.usage_config.as_ref().unwrap().timezone,
+            "Asia/Shanghai"
+        );
+        host.set_usage_config(None).unwrap();
+        assert!(host.workbench.api_usage.is_empty());
     }
     #[test]
     fn shortcut_version_distinguishes_fields_with_delimiters() {

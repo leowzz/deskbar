@@ -1,4 +1,5 @@
 //! Embedded TLS listener and untrusted LAN discovery. No independent service.
+mod usage;
 use anyhow::{Context, Result};
 use axum::{
     extract::{ws::Message, Path, State, WebSocketUpgrade},
@@ -75,6 +76,8 @@ pub struct Agent {
     pub discovery_error: Option<String>,
     changed: watch::Sender<u64>,
     refresh: Arc<tokio::sync::Notify>,
+    usage_refresh: Arc<tokio::sync::Notify>,
+    usage_generation: Arc<std::sync::atomic::AtomicU64>,
 }
 
 #[derive(Serialize)]
@@ -87,6 +90,7 @@ pub struct AgentStatus {
     pub discovery_warning: Option<String>,
     pub workbench: desklet_host::Snapshot,
     pub shortcuts: Vec<ShortcutConfig>,
+    pub usage_config: Option<desklet_host::usage::UsageConfig>,
 }
 
 #[derive(Serialize)]
@@ -102,6 +106,7 @@ impl Agent {
         let identity = Identity::load(&host.id)?;
         let agent = Self::with_identity(host, identity, PORT).await?;
         agent.start_sources();
+        agent.start_usage();
         Ok(agent)
     }
 
@@ -130,6 +135,8 @@ impl Agent {
             discovery_error: None,
             changed,
             refresh: Arc::new(tokio::sync::Notify::new()),
+            usage_refresh: Arc::new(tokio::sync::Notify::new()),
+            usage_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         };
         // Discovery failure leaves the QR/manual invitation path usable.
         match discovery_socket() {
@@ -169,6 +176,7 @@ impl Agent {
             discovery_warning: self.discovery_error.clone(),
             workbench: host.snapshot(),
             shortcuts: host.shortcuts.clone(),
+            usage_config: host.usage_config.clone(),
         }
     }
 
@@ -220,6 +228,7 @@ impl Agent {
     }
     pub fn refresh_sources(&self) {
         self.refresh.notify_one();
+        self.usage_refresh.notify_one();
     }
     pub fn set_permissions(&self, id: &str, permissions: Permissions) -> Result<()> {
         self.host.lock().unwrap().set_permissions(id, permissions)?;

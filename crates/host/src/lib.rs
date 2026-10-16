@@ -1,5 +1,6 @@
-//! Host identity, device approval and authorized state. No window or network dependencies.
+//! Host identity, device approval, authorized state and independent source adapters.
 pub mod sources;
+pub mod usage;
 pub mod workbench;
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -64,6 +65,8 @@ struct Settings {
     devices: Vec<StoredDevice>,
     #[serde(default)]
     shortcuts: Vec<ShortcutConfig>,
+    #[serde(default)]
+    usage_config: Option<usage::UsageConfig>,
 }
 
 #[derive(Clone, Serialize)]
@@ -97,6 +100,7 @@ pub struct Host {
     pub devices: Vec<Device>,
     pub workbench: Workbench,
     pub shortcuts: Vec<ShortcutConfig>,
+    pub usage_config: Option<usage::UsageConfig>,
     commands: std::collections::HashMap<(String, String), (Command, CommandResult)>,
     path: PathBuf,
     invitation: Option<Invitation>,
@@ -119,6 +123,8 @@ pub struct Snapshot {
     pub session_total: usize,
     #[serde(default)]
     pub quotas: Vec<Quota>,
+    #[serde(default)]
+    pub api_usage: Vec<ApiUsage>,
     #[serde(default)]
     pub shortcuts: Vec<Shortcut>,
     pub capabilities: Vec<String>,
@@ -145,6 +151,7 @@ impl Host {
                 name: default_name,
                 devices: vec![],
                 shortcuts: vec![],
+                usage_config: None,
             }
         };
         let host = Self {
@@ -165,6 +172,7 @@ impl Host {
                 .collect(),
             workbench: Workbench::default(),
             shortcuts: settings.shortcuts,
+            usage_config: settings.usage_config,
             commands: Default::default(),
             path,
             invitation: None,
@@ -180,6 +188,7 @@ impl Host {
             host_id: self.id.clone(),
             name: self.name.clone(),
             shortcuts: self.shortcuts.clone(),
+            usage_config: self.usage_config.clone(),
             devices: devices
                 .iter()
                 .map(|d| StoredDevice {
@@ -350,6 +359,7 @@ impl Host {
             sessions: self.workbench.sessions.clone(),
             session_total: self.workbench.session_total,
             quotas: self.workbench.quotas.clone(),
+            api_usage: self.workbench.api_usage.clone(),
             shortcuts: self.shortcuts.iter().map(ShortcutConfig::public).collect(),
             capabilities: vec![],
         }

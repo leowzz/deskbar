@@ -31,12 +31,27 @@ class WorkSession {
 
 class WorkQuota {
   WorkQuota(Map<String, dynamic> v)
-    : label = v['label'] as String,
+    : id = (v['id'] as String?) ?? '',
+      label = v['label'] as String,
       remaining = (v['remaining_percent'] as num).toDouble(),
       resetsAt = v['resets_at'] as int;
-  final String label;
+  final String id, label;
   final double remaining;
   final int resetsAt;
+}
+
+class WorkApiUsage {
+  WorkApiUsage(Map<String, dynamic> v)
+    : id = v['id'] as String,
+      label = v['label'] as String,
+      actualCostMicros = v['actual_cost_micros'] as int,
+      currency = v['currency'] as String,
+      tokenCount = v['token_count'] as int,
+      tpm = v['tpm'] as int,
+      windowStart = v['window_start'] as int,
+      windowEnd = v['window_end'] as int;
+  final String id, label, currency;
+  final int actualCostMicros, tokenCount, tpm, windowStart, windowEnd;
 }
 
 class WorkShortcut {
@@ -66,6 +81,9 @@ class WorkbenchData {
       quotas = ((v['quotas'] as List?) ?? [])
           .map((e) => WorkQuota(e as Map<String, dynamic>))
           .toList(),
+      apiUsage = ((v['api_usage'] as List?) ?? [])
+          .map((e) => WorkApiUsage(e as Map<String, dynamic>))
+          .toList(),
       shortcuts = ((v['shortcuts'] as List?) ?? [])
           .map((e) => WorkShortcut(e as Map<String, dynamic>))
           .toList(),
@@ -76,6 +94,7 @@ class WorkbenchData {
   final List<SourceState> sources;
   final List<WorkSession> sessions;
   final List<WorkQuota> quotas;
+  final List<WorkApiUsage> apiUsage;
   final List<WorkShortcut> shortcuts;
   final List<String> capabilities;
   int get now => DateTime.now().millisecondsSinceEpoch ~/ 1000 + offset;

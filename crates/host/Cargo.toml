@@ -16,6 +16,10 @@ serde_yaml = "0.9"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio.workspace = true
 url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+chrono = "0.4"
+chrono-tz = "0.10"
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tempfile = "3"

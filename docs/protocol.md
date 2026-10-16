@@ -137,9 +137,10 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 
 ## v1 工作台实现子集
 
-- 时间为 UTC Unix 秒。`sources` 的 `source_id` 为 `codex.sessions` 或 `codex.quota`，包含 `health`（ready / error）、安全提示 `message`、`observed_at` 和 `fresh_until`。会话每五秒采集、二十秒有效；额度每两分钟采集、一百八十秒有效。失败保留最后值和原时间，显示失败而非伪造刷新。
+- 时间为 UTC Unix 秒。`sources` 的 `source_id` 为 `codex.sessions`、`codex.quota` 或 `sub2api.usage`，包含 `health`（ready / error）、安全提示 `message`、`observed_at` 和 `fresh_until`。会话每五秒采集、二十秒有效；额度每两分钟采集、一百八十秒有效；API 用量每分钟采集、一百八十秒有效，429 按 Retry-After 退避。失败保留最后值和原时间，显示失败而非伪造刷新。
 - `sessions`：`session_id`、`version`、`title`、`project`、`status`、`updated_at`。最多 40 个；`session_total` 是未归档主会话总数。`quotas`：`id`、`label`、`remaining_percent`、`resets_at`、`window_minutes`；缺失字段不补造额度。`shortcuts`：`shortcut_id`、`version`、`name`、`kind`。原始 URL / 应用路径仅在电脑端设置界面与配置中存在。
-- 设备许可为 `sessions`、`quota`、`shortcuts` 和 `open`，默认 false；升级旧记录也默认关闭。读取快照时按许可清空集合；`open` 加对应读取许可才公布 `open_session` / `open_shortcut` 能力。撤销单项共享会推送完整裁剪快照，替换 Android 的加密缓存。
+- `api_usage` 是 API 聚合用量数组，包含 `id`、`label`、`actual_cost_micros`（货币单位的百万分之一）、`currency`、`token_count`、`tpm`、`window_start`、`window_end`。目前来源为 Sub2API 今日统计，窗口按电脑配置的 IANA 时区计算，需与上游统计时区一致；跨日旧值不能视为新一天数据。登录邮箱、站点配置、密码和令牌不在设备快照中。未配置或未授权时数组为空；旧客户端可忽略新增字段。
+- 设备许可为 `sessions`、`quota`、`api_usage`、`shortcuts` 和 `open`，默认 false；旧记录新增的 `api_usage` 默认关闭，保留其余原许可。读取快照时按许可清空集合；`open` 加对应读取许可才公布 `open_session` / `open_shortcut` 能力。撤销单项共享会推送完整裁剪快照，替换 Android 的加密缓存。
 - `POST /v1/commands` 接收 `command_id`（UUID）、`host_id`、`host_epoch`、`action`、`target_id`、`target_version`、`expires_at`；未知字段拒绝。不接受路径、URL 或 shell。Host 验证设备、epoch、最长十秒有效期、当前权限、资源版本及来源健康。网页仅允许完整 http / https URL（不含登录凭据）；应用需为存在的绝对路径，macOS 限 .app。
 - 初次有效请求返回 `accepted` 并启动有界 OS 打开，`GET /v1/commands/{id}` 返回本设备的结果。打开命令五秒超时记 unknown；OS 接受记 succeeded，不保证窗口前置。Android 使用八秒有效期，提交一次后只查询同一 ID，传输失败不重新 POST。
 - 当前 epoch 内最多保留 4096 个设备与命令 ID 组合，不淘汰后重执行；满额拒绝新动作并提示重启。重复内容返回原结果，冲突拒绝；不同设备不能查询彼此结果。重启后旧 epoch 请求拒绝，找不到记录返回 unknown，不能推断未执行。设备撤销后所有受保护接口返回 401。

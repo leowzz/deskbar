@@ -76,6 +76,7 @@ async fn android_connection_fixture() {
                     Permissions {
                         sessions: true,
                         quota: true,
+                        api_usage: true,
                         shortcuts: true,
                         open: true,
                     },

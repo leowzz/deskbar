@@ -46,7 +46,8 @@
     ],
     "session_total": 1,
     "quotas": [],
-    "shortcuts": []
+    "shortcuts": [],
+    "api_usage": []
   },
   "revocation": {
     "type": "revoked"

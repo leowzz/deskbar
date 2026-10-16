@@ -70,6 +70,27 @@ fn refresh_sources(state: State<AgentState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn save_usage_source(
+    state: State<'_, AgentState>,
+    config: desklet_host::usage::UsageConfig,
+    password: String,
+) -> Result<(), String> {
+    let agent = state.agent()?.clone();
+    tauri::async_runtime::spawn_blocking(move || agent.save_usage_source(config, password))
+        .await
+        .map_err(|_| "无法保存用量来源".to_string())?
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+async fn remove_usage_source(state: State<'_, AgentState>) -> Result<(), String> {
+    let agent = state.agent()?.clone();
+    tauri::async_runtime::spawn_blocking(move || agent.remove_usage_source())
+        .await
+        .map_err(|_| "无法移除用量来源".to_string())?
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn choose_application(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
@@ -160,6 +181,8 @@ fn main() {
             save_shortcut,
             remove_shortcut,
             refresh_sources,
+            save_usage_source,
+            remove_usage_source,
             choose_application
         ])
         .run(tauri::generate_context!())
