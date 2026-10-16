@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import {
   call,
   type Device,
+  type ApplicationMetadata,
   type Permissions,
   type ShortcutConfig,
   type Status,
@@ -56,6 +57,7 @@ export function WorkbenchSettings({
   const [draft, setDraft] = useState<ShortcutConfig | null>(null);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const data = status.workbench;
   async function save() {
@@ -183,13 +185,14 @@ export function WorkbenchSettings({
           <div className="section-title">
             <h2>已添加入口</h2>
             <button
-              disabled={busy || saving}
+              disabled={busy || saving || picking}
               onClick={() => {
                 setDraft({
                   id: crypto.randomUUID(),
                   name: "",
                   kind: "url",
                   target: "",
+                  icon_png: "",
                 });
                 setFormError("");
               }}
@@ -205,7 +208,12 @@ export function WorkbenchSettings({
           )}
           {status.shortcuts.map((item) => (
             <article className="shortcut-row" key={item.id}>
-              <div>
+              <ShortcutIcon
+                key={item.icon_png}
+                icon={item.icon_png}
+                kind={item.kind}
+              />
+              <div className="shortcut-info">
                 <h3>{item.name}</h3>
                 <small>
                   {item.kind === "app" ? "应用" : "网页"} · {item.target}
@@ -236,7 +244,7 @@ export function WorkbenchSettings({
                 <>
                   <button
                     className="text-button"
-                    disabled={busy || saving}
+                    disabled={busy || saving || picking}
                     onClick={() => {
                       setDraft({ ...item });
                       setFormError("");
@@ -246,7 +254,7 @@ export function WorkbenchSettings({
                   </button>
                   <button
                     className="text-button"
-                    disabled={busy || saving}
+                    disabled={busy || saving || picking}
                     onClick={() => setRemoveId(item.id)}
                   >
                     移除
@@ -263,7 +271,7 @@ export function WorkbenchSettings({
                 void save();
               }}
             >
-              <fieldset disabled={saving}>
+              <fieldset disabled={saving || picking}>
                 <h3>
                   {status.shortcuts.some((s) => s.id === draft.id)
                     ? "编辑入口"
@@ -285,7 +293,12 @@ export function WorkbenchSettings({
                   <select
                     value={draft.kind}
                     onChange={(e) =>
-                      setDraft({ ...draft, kind: e.target.value, target: "" })
+                      setDraft({
+                        ...draft,
+                        kind: e.target.value,
+                        target: "",
+                        icon_png: "",
+                      })
                     }
                   >
                     <option value="url">网页</option>
@@ -304,7 +317,11 @@ export function WorkbenchSettings({
                     }
                     value={draft.target}
                     onChange={(e) =>
-                      setDraft({ ...draft, target: e.target.value })
+                      setDraft({
+                        ...draft,
+                        target: e.target.value,
+                        icon_png: "",
+                      })
                     }
                   />
                 </label>
@@ -315,22 +332,25 @@ export function WorkbenchSettings({
                     onClick={async () => {
                       setFormError("");
                       try {
-                        const target = await call<string | null>(
+                        setPicking(true);
+                        const selected = await call<ApplicationMetadata | null>(
                           "choose_application",
                         );
-                        if (target)
-                          setDraft({
-                            ...draft,
-                            target,
-                            name:
-                              draft.name ||
-                              target
-                                .split(/[\\/]/)
-                                .pop()!
-                                .replace(/\.app$/i, ""),
-                          });
+                        if (selected)
+                          setDraft((current) =>
+                            current && current.id === draft.id
+                              ? {
+                                  ...current,
+                                  target: selected.target,
+                                  name: current.name || selected.name,
+                                  icon_png: selected.icon_png,
+                                }
+                              : current,
+                          );
                       } catch (e) {
                         setFormError(String(e));
+                      } finally {
+                        setPicking(false);
                       }
                     }}
                   >
@@ -340,6 +360,60 @@ export function WorkbenchSettings({
                 {draft.kind === "app" && (
                   <p>选择电脑上的应用即可；路径只保存在这台电脑。</p>
                 )}
+                <div className="shortcut-icon-field">
+                  <ShortcutIcon
+                    key={draft.icon_png}
+                    icon={draft.icon_png}
+                    kind={draft.kind}
+                  />
+                  <div>
+                    <strong>入口图标</strong>
+                    <p>
+                      {draft.icon_png
+                        ? "已选择图标，保存后共享到设备。"
+                        : "保存时自动读取应用或系统网页图标。"}
+                    </p>
+                    <div className="icon-actions">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setFormError("");
+                          setPicking(true);
+                          try {
+                            const icon = await call<string | null>(
+                              "choose_shortcut_icon",
+                            );
+                            if (icon)
+                              setDraft((current) =>
+                                current && current.id === draft.id
+                                  ? { ...current, icon_png: icon }
+                                  : current,
+                              );
+                          } catch (error) {
+                            setFormError(
+                              error instanceof Error
+                                ? error.message
+                                : String(error),
+                            );
+                          } finally {
+                            setPicking(false);
+                          }
+                        }}
+                      >
+                        {picking ? "正在读取…" : "选择图片"}
+                      </button>
+                      {draft.icon_png && (
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => setDraft({ ...draft, icon_png: "" })}
+                        >
+                          使用自动图标
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 {formError && (
                   <p role="alert" className="notice error">
                     {formError}
@@ -363,6 +437,45 @@ export function WorkbenchSettings({
         </>
       )}
     </>
+  );
+}
+
+function ShortcutIcon({ icon, kind }: { icon: string; kind: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="shortcut-icon" aria-hidden="true">
+      {icon && !failed ? (
+        <img
+          src={`data:image/png;base64,${icon}`}
+          alt=""
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {kind === "app" ? (
+            <>
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </>
+          ) : (
+            <>
+              <circle cx="12" cy="12" r="9" />
+              <ellipse cx="12" cy="12" rx="4" ry="9" />
+              <path d="M3 12h18" />
+            </>
+          )}
+        </svg>
+      )}
+    </span>
   );
 }
 

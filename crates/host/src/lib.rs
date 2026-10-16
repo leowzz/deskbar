@@ -154,6 +154,8 @@ impl Host {
                 usage_config: None,
             }
         };
+        let mut shortcuts = settings.shortcuts;
+        workbench::sanitize_shortcut_icons(&mut shortcuts);
         let host = Self {
             id: settings.host_id,
             name: settings.name,
@@ -171,7 +173,7 @@ impl Host {
                 })
                 .collect(),
             workbench: Workbench::default(),
-            shortcuts: settings.shortcuts,
+            shortcuts,
             usage_config: settings.usage_config,
             commands: Default::default(),
             path,

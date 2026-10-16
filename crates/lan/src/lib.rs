@@ -1,4 +1,5 @@
 //! Embedded TLS listener and untrusted LAN discovery. No independent service.
+pub mod icons;
 mod usage;
 use anyhow::{Context, Result};
 use axum::{
@@ -107,6 +108,7 @@ impl Agent {
         let agent = Self::with_identity(host, identity, PORT).await?;
         agent.start_sources();
         agent.start_usage();
+        agent.start_shortcut_icons();
         Ok(agent)
     }
 
@@ -235,11 +237,65 @@ impl Agent {
         self.changed.send_modify(|r| *r += 1);
         Ok(())
     }
-    pub fn save_shortcut(&self, item: ShortcutConfig) -> Result<()> {
-        self.host.lock().unwrap().save_shortcut(item)?;
+    pub fn save_shortcut(&self, mut item: ShortcutConfig) -> Result<()> {
+        item.validate()?;
+        let automatic = item.icon_png.is_empty();
+        if automatic {
+            item.icon_png = icons::for_shortcut(&item).unwrap_or_default();
+        }
+        let mut host = self.host.lock().unwrap();
+        if automatic {
+            let previous_bytes = host
+                .shortcuts
+                .iter()
+                .filter(|s| s.id != item.id)
+                .filter_map(|s| STANDARD.decode(&s.icon_png).ok())
+                .map(|v| v.len())
+                .sum::<usize>();
+            let new_bytes = STANDARD.decode(&item.icon_png).map_or(0, |v| v.len());
+            if previous_bytes + new_bytes > desklet_host::workbench::MAX_SHORTCUT_ICON_BYTES {
+                item.icon_png.clear();
+            }
+        }
+        host.save_shortcut(item)?;
         self.changed.send_modify(|r| *r += 1);
         Ok(())
     }
+    fn start_shortcut_icons(&self) {
+        let agent = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let shortcuts = agent.host.lock().unwrap().shortcuts.clone();
+            for item in shortcuts.into_iter().filter(|s| s.icon_png.is_empty()) {
+                let Ok(icon) = icons::for_shortcut(&item) else {
+                    continue;
+                };
+                if icon.is_empty() {
+                    continue;
+                }
+                let mut host = agent.host.lock().unwrap();
+                let Some(mut current) = host
+                    .shortcuts
+                    .iter()
+                    .find(|s| {
+                        s.id == item.id
+                            && s.kind == item.kind
+                            && s.target == item.target
+                            && s.icon_png.is_empty()
+                    })
+                    .cloned()
+                else {
+                    continue;
+                };
+                current.icon_png = icon;
+                // Running actions and the original entry survive any acquisition,
+                // persistence or aggregate-budget failure.
+                if host.save_shortcut(current).is_ok() {
+                    agent.changed.send_modify(|r| *r += 1);
+                }
+            }
+        });
+    }
+
     pub fn remove_shortcut(&self, id: &str) -> Result<()> {
         self.host.lock().unwrap().remove_shortcut(id)?;
         self.changed.send_modify(|r| *r += 1);

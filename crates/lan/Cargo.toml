@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 open = "5"
+tempfile = "3"
+uuid.workspace = true
 desklet-host = { path = "../host" }
 anyhow.workspace = true
 serde.workspace = true
@@ -22,13 +24,15 @@ url = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSImage"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["linux-native-sync-persistent", "crypto-rust"] }
 
 [dev-dependencies]
-tempfile = "3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"

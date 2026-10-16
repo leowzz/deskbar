@@ -1,6 +1,7 @@
 //! Shared display data and the finite, device-scoped command gate.
 use crate::{digest, matches, Host};
 use anyhow::{bail, ensure, Context, Result};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -54,6 +55,8 @@ pub struct Shortcut {
     pub version: String,
     pub name: String,
     pub kind: String,
+    #[serde(default)]
+    pub icon_png: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ShortcutConfig {
@@ -61,7 +64,88 @@ pub struct ShortcutConfig {
     pub name: String,
     pub kind: String,
     pub target: String,
+    #[serde(default)]
+    pub icon_png: String,
 }
+
+pub const MAX_ICON_BYTES: usize = 32 * 1024;
+pub const MAX_SHORTCUT_ICON_BYTES: usize = 512 * 1024;
+
+/// Only bounded raster data is shared; file paths and image metadata stay local.
+pub fn validate_icon_png(value: &str) -> Result<usize> {
+    if value.is_empty() {
+        return Ok(0);
+    }
+    let invalid = "图标需为不超过 32 KB、最大 256 × 256 的 PNG 图片";
+    ensure!(value.len() <= MAX_ICON_BYTES.div_ceil(3) * 4, invalid);
+    let bytes = STANDARD.decode(value).context(invalid)?;
+    ensure!(
+        bytes.len() <= MAX_ICON_BYTES && bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        invalid
+    );
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(&bytes));
+    decoder.set_limits(png::Limits { bytes: 1024 * 1024 });
+    let mut reader = decoder.read_info().context(invalid)?;
+    let info = reader.info();
+    ensure!(
+        info.width > 0
+            && info.width <= 256
+            && info.height > 0
+            && info.height <= 256
+            && info.animation_control.is_none(),
+        invalid
+    );
+    let mut output = vec![0; reader.output_buffer_size()];
+    reader.next_frame(&mut output).context(invalid)?;
+    Ok(bytes.len())
+}
+
+/// Re-encode decoded pixels so ancillary chunks cannot carry local metadata.
+pub fn normalize_icon_png(value: &str) -> Result<String> {
+    validate_icon_png(value)?;
+    if value.is_empty() {
+        return Ok(String::new());
+    }
+    let bytes = STANDARD.decode(value)?;
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    decoder.set_limits(png::Limits { bytes: 1024 * 1024 });
+    let mut reader = decoder.read_info()?;
+    let mut pixels = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut pixels)?;
+    let mut output = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut output, info.width, info.height);
+        encoder.set_color(info.color_type);
+        encoder.set_depth(info.bit_depth);
+        let mut writer = encoder.write_header()?;
+        writer.write_image_data(&pixels[..info.buffer_size()])?;
+    }
+    ensure!(
+        output.len() <= MAX_ICON_BYTES,
+        "图标转换后超过 32 KB，请使用更小的图片"
+    );
+    Ok(STANDARD.encode(output))
+}
+
+pub(crate) fn sanitize_shortcut_icons(items: &mut [ShortcutConfig]) {
+    let mut total = 0;
+    for item in items {
+        match normalize_icon_png(&item.icon_png) {
+            Ok(icon) => {
+                let size = STANDARD.decode(&icon).map_or(0, |v| v.len());
+                if total + size <= MAX_SHORTCUT_ICON_BYTES {
+                    total += size;
+                    item.icon_png = icon;
+                } else {
+                    item.icon_png.clear();
+                }
+            }
+            Err(_) => item.icon_png.clear(),
+        }
+    }
+}
+
 impl ShortcutConfig {
     pub fn public(&self) -> Shortcut {
         Shortcut {
@@ -72,9 +156,11 @@ impl ShortcutConfig {
             ),
             name: self.name.clone(),
             kind: self.kind.clone(),
+            icon_png: self.icon_png.clone(),
         }
     }
     pub fn validate(&self) -> Result<()> {
+        validate_icon_png(&self.icon_png)?;
         ensure!(uuid::Uuid::parse_str(&self.id).is_ok(), "入口编号无效");
         ensure!(
             !self.name.trim().is_empty() && self.name.chars().count() <= 64,
@@ -193,7 +279,8 @@ impl Host {
         self.revision += 1;
         Ok(())
     }
-    pub fn save_shortcut(&mut self, item: ShortcutConfig) -> Result<()> {
+    pub fn save_shortcut(&mut self, mut item: ShortcutConfig) -> Result<()> {
+        item.icon_png = normalize_icon_png(&item.icon_png)?;
         item.validate()?;
         let previous = self.shortcuts.clone();
         if let Some(old) = self.shortcuts.iter_mut().find(|s| s.id == item.id) {
@@ -202,7 +289,15 @@ impl Host {
             ensure!(self.shortcuts.len() < 64, "最多保存 64 个入口");
             self.shortcuts.push(item);
         }
-        if let Err(e) = self.save(&self.devices) {
+        let icon_budget = self.shortcuts.iter().try_fold(0usize, |total, item| {
+            let total = total + validate_icon_png(&item.icon_png)?;
+            ensure!(
+                total <= MAX_SHORTCUT_ICON_BYTES,
+                "入口图标总大小超过 512 KB，请减少图标或使用更小的图片"
+            );
+            Ok::<_, anyhow::Error>(total)
+        });
+        if let Err(e) = icon_budget.and_then(|_| self.save(&self.devices)) {
             self.shortcuts = previous;
             return Err(e);
         }
@@ -373,6 +468,7 @@ mod tests {
             name: "网页".into(),
             kind: "url".into(),
             target: "https://example.com/private-path".into(),
+            icon_png: String::new(),
         };
         host.save_shortcut(shortcut.clone()).unwrap();
         let public = shortcut.public();
@@ -552,12 +648,131 @@ mod tests {
             name: "a".into(),
             kind: "url".into(),
             target: "https://x:url:https://y".into(),
+            icon_png: String::new(),
         };
         let version = a.public().version;
         a.name = "a:url:https://x".into();
         a.target = "https://y".into();
         assert_ne!(version, a.public().version);
     }
+    fn test_png(width: u32, height: u32, metadata: bool) -> String {
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, width, height);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            if metadata {
+                encoder
+                    .add_text_chunk("Source".into(), "/Users/private/credentials".into())
+                    .unwrap();
+            }
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&vec![128; (width * height * 4) as usize])
+                .unwrap();
+        }
+        STANDARD.encode(bytes)
+    }
+
+    #[test]
+    fn shortcut_icons_are_bounded_pixels_without_file_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let mut item = ShortcutConfig {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: "入口".into(),
+            kind: "url".into(),
+            target: "https://private.example/local-target".into(),
+            icon_png: test_png(2, 2, true),
+        };
+        let version = item.public().version;
+        host.save_shortcut(item.clone()).unwrap();
+        let pixels = STANDARD.decode(&host.shortcuts[0].icon_png).unwrap();
+        assert!(!String::from_utf8_lossy(&pixels).contains("credentials"));
+        let wire = serde_json::to_string(&host.snapshot()).unwrap();
+        assert!(
+            wire.contains("icon_png") && !wire.contains("local-target") && !wire.contains("/Users")
+        );
+        item.icon_png.clear();
+        assert_eq!(
+            version,
+            item.public().version,
+            "display-only backfill must not invalidate opening"
+        );
+        for invalid in [
+            "not base64".into(),
+            STANDARD.encode(b"not a PNG"),
+            test_png(257, 1, false),
+            STANDARD.encode(vec![0; MAX_ICON_BYTES + 1]),
+        ] {
+            item.icon_png = invalid;
+            assert!(host.save_shortcut(item.clone()).is_err());
+        }
+        let old: ShortcutConfig = serde_json::from_value(serde_json::json!({"id":item.id,"name":"旧入口","kind":"url","target":"https://example.com"})).unwrap();
+        assert!(old.icon_png.is_empty());
+        host.shortcuts[0].icon_png = "broken".into();
+        host.save(&host.devices).unwrap();
+        drop(host);
+        let restored = Host::load(dir.path().into(), "unused".into()).unwrap();
+        assert_eq!(
+            restored.shortcuts[0].target,
+            "https://private.example/local-target"
+        );
+        assert!(restored.shortcuts[0].icon_png.is_empty());
+    }
+
+    #[test]
+    fn aggregate_icon_budget_rejects_without_modifying_existing_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        // Deterministic noisy pixels produce a valid individual PNG near 16 KB.
+        let mut bytes = Vec::new();
+        let mut pixels = Vec::new();
+        let mut seed = 91u32;
+        for _ in 0..(64 * 64 * 4) {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            pixels.push(seed as u8);
+        }
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, 64, 64);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&pixels)
+                .unwrap();
+        }
+        let icon = STANDARD.encode(bytes);
+        let mut rejected = false;
+        for i in 0..64 {
+            let item = ShortcutConfig {
+                id: uuid::Uuid::new_v4().to_string(),
+                name: format!("入口{i}"),
+                kind: "url".into(),
+                target: "https://example.com".into(),
+                icon_png: icon.clone(),
+            };
+            let count = host.shortcuts.len();
+            if host.save_shortcut(item).is_err() {
+                assert_eq!(host.shortcuts.len(), count);
+                rejected = true;
+                break;
+            }
+        }
+        assert!(rejected);
+        assert!(host.shortcuts.len() < 64);
+        let total: usize = host
+            .shortcuts
+            .iter()
+            .map(|s| validate_icon_png(&s.icon_png).unwrap())
+            .sum();
+        assert!(total <= MAX_SHORTCUT_ICON_BYTES);
+    }
+
     #[test]
     fn reject_unbounded_shortcut_targets() {
         for target in [
@@ -572,6 +787,7 @@ mod tests {
                 name: "测试".into(),
                 kind: "url".into(),
                 target: target.into(),
+                icon_png: String::new(),
             };
             assert!(item.validate().is_err(), "{target}");
         }

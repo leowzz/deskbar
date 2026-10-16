@@ -47,6 +47,7 @@ async fn android_connection_fixture() {
         name: "测试入口".into(),
         kind: "url".into(),
         target: "https://example.com".into(),
+        icon_png: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGMwsAv6D8IMMAYAOewG/V2y8+cAAAAASUVORK5CYII=".into(),
     })
     .unwrap();
     let identity = Identity::from_key(rcgen::KeyPair::generate().unwrap().serialize_pem()).unwrap();

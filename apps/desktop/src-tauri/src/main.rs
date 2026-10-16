@@ -47,13 +47,14 @@ fn set_permissions(
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
-fn save_shortcut(
-    state: State<AgentState>,
+async fn save_shortcut(
+    state: State<'_, AgentState>,
     item: desklet_host::workbench::ShortcutConfig,
 ) -> Result<(), String> {
-    state
-        .agent()?
-        .save_shortcut(item)
+    let agent = state.agent()?.clone();
+    tauri::async_runtime::spawn_blocking(move || agent.save_shortcut(item))
+        .await
+        .map_err(|_| "无法保存入口".to_string())?
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
@@ -91,7 +92,9 @@ async fn remove_usage_source(state: State<'_, AgentState>) -> Result<(), String>
 }
 
 #[tauri::command]
-async fn choose_application(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn choose_application(
+    app: tauri::AppHandle,
+) -> Result<Option<desklet_lan::icons::ApplicationMetadata>, String> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
         let mut picker = app.dialog().file().set_title("选择要共享的应用");
@@ -108,14 +111,37 @@ async fn choose_application(app: tauri::AppHandle) -> Result<Option<String>, Str
         picker
             .blocking_pick_file()
             .map(|p| {
-                p.into_path()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .map_err(|_| "无法读取应用路径".to_string())
+                let path = p.into_path().map_err(|_| "无法读取应用路径".to_string())?;
+                desklet_lan::icons::application_metadata(&path).map_err(|e| e.to_string())
             })
             .transpose()
     })
     .await
     .map_err(|_| "无法打开应用选择器".to_string())?
+}
+
+#[tauri::command]
+async fn choose_shortcut_icon(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("选择入口图标")
+            .add_filter(
+                "图片",
+                &[
+                    "png", "jpg", "jpeg", "webp", "icns", "tiff", "gif", "bmp", "ico",
+                ],
+            )
+            .blocking_pick_file()
+            .map(|file| {
+                let path = file.into_path().map_err(|_| "无法读取图片".to_string())?;
+                desklet_lan::icons::import_icon(&path).map_err(|e| e.to_string())
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|_| "无法打开图标选择器".to_string())?
 }
 
 fn main() {
@@ -183,7 +209,8 @@ fn main() {
             refresh_sources,
             save_usage_source,
             remove_usage_source,
-            choose_application
+            choose_application,
+            choose_shortcut_icon
         ])
         .run(tauri::generate_context!())
         .expect("Desklet 连接助手无法启动");

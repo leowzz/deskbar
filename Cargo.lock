@@ -1061,6 +1061,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "chrono-tz",
+ "png 0.17.16",
  "rand 0.8.8",
  "reqwest 0.12.28",
  "rusqlite",
@@ -1088,6 +1089,9 @@ dependencies = [
  "futures-util",
  "if-addrs",
  "keyring",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "open",
  "rcgen",
  "reqwest 0.12.28",
@@ -1100,6 +1104,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "url",
+ "uuid",
 ]
 
 [[package]]

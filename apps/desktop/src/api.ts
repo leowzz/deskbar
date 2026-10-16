@@ -45,6 +45,12 @@ export interface ShortcutConfig {
   name: string;
   kind: string;
   target: string;
+  icon_png: string;
+}
+export interface ApplicationMetadata {
+  target: string;
+  name: string;
+  icon_png: string;
 }
 export interface SourceState {
   source_id: string;

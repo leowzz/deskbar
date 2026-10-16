@@ -184,13 +184,6 @@ small {
   width: 26px;
   height: 26px;
 }
-.brand-role {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-  margin-top: 1px;
-}
 .sidebar nav {
   display: grid;
   gap: 6px;
@@ -232,13 +225,6 @@ small {
   display: block;
   color: var(--text);
   font-weight: 500;
-}
-.sidebar-bottom span {
-  display: block;
-  margin-top: 2px;
-}
-.sidebar-bottom p {
-  margin-top: 10px;
 }
 main {
   min-width: 0;
@@ -557,7 +543,7 @@ header .primary {
   border-radius: 8px;
   margin-top: 12px;
 }
-.shortcut-row > div:first-child {
+.shortcut-info {
   flex: 1;
   min-width: min(210px, 100%);
   overflow-wrap: anywhere;
@@ -831,10 +817,6 @@ footer .text-button {
     font-size: 19px;
     padding: 0 4px;
   }
-  .brand-role {
-    display: inline;
-    margin-left: 8px;
-  }
   .sidebar nav {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
@@ -977,4 +959,52 @@ footer .text-button {
   .usage-metrics dl {
     gap: 12px;
   }
+}
+
+.shortcut-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--muted);
+  overflow: hidden;
+}
+.shortcut-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.shortcut-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.shortcut-icon-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  margin-top: 20px;
+}
+.shortcut-icon-field > .shortcut-icon {
+  width: 64px;
+  height: 64px;
+}
+.shortcut-icon-field > div {
+  min-width: 0;
+}
+.shortcut-icon-field strong {
+  font-weight: 500;
+}
+.shortcut-icon-field p {
+  font-size: 12px;
+}
+.icon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
