@@ -132,7 +132,10 @@ class LayoutWidget {
     'title': title,
     'visible': visible,
     'binding': binding,
-    'options': options,
+    // `showDetails` was removed from the layout contract. Older saved
+    // documents may still contain it, but detail data is now shown in a
+    // floating tooltip and must not participate in layout updates.
+    'options': _without(options, const {'showDetails'}),
     'placements': {
       for (final item in placements.entries) item.key.name: item.value.toJson(),
     },
@@ -151,7 +154,9 @@ class LayoutWidget {
       title: json['title'] == null ? '' : _string(json['title']),
       visible: json['visible'] as bool? ?? true,
       binding: binding,
-      options: _map(json['options'] ?? <String, dynamic>{}),
+      options: _without(_map(json['options'] ?? <String, dynamic>{}), const {
+        'showDetails',
+      }),
       placements: {
         for (final orientation in LayoutOrientation.values)
           orientation: GridPlacement.fromJson(
@@ -910,7 +915,6 @@ class LayoutWorkspace extends ChangeNotifier {
       'content': 'quota',
       'density': 'fill',
       'alignment': 'spaceEvenly',
-      'showDetails': true,
     },
     _ => {'showTitle': true},
   };
@@ -1109,6 +1113,9 @@ void _validateBinding(Map<String, dynamic> binding) {
 
 void _validateOptions(String type, Map<String, dynamic> options) {
   if (!const {'sessions', 'usage', 'shortcuts'}.contains(type)) return;
+  if (options.containsKey('showDetails')) {
+    throw const FormatException('详细数据改为悬浮提示');
+  }
   if (type == 'sessions' && options.containsKey('maxSessions')) {
     final limit = options['maxSessions'];
     if (limit is! num ||
@@ -1119,7 +1126,7 @@ void _validateOptions(String type, Map<String, dynamic> options) {
       throw const FormatException('会话数量需为 1 到 40 的整数');
     }
   }
-  for (final key in ['showTitle', 'fitRows', 'labels', 'showDetails']) {
+  for (final key in ['showTitle', 'fitRows', 'labels']) {
     if (options.containsKey(key) && options[key] is! bool) {
       throw const FormatException('组件开关参数无效');
     }

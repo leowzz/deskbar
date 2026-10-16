@@ -90,6 +90,9 @@ impl LayoutDocument {
                 for (key, value) in &widget.options {
                     let valid = match key.as_str() {
                         "showTitle" | "fitRows" | "labels" => value.is_boolean(),
+                        // Kept readable for layouts written by older editors;
+                        // current clients omit it and show details in a tooltip.
+                        "showDetails" => value.is_boolean(),
                         "maxSessions" => value.as_u64().is_some_and(|n| (1..=40).contains(&n)),
                         "itemWidth" | "itemHeight" => {
                             value.as_f64().is_some_and(|n| n > 0.0 && n <= 2000.0)
@@ -100,16 +103,28 @@ impl LayoutDocument {
                         "gap" | "gapX" | "gapY" => {
                             value.as_f64().is_some_and(|n| (0.0..=128.0).contains(&n))
                         }
-                        "density" => matches!(value.as_str(), Some("normal" | "compact")),
+                        "density" => match widget.r#type.as_str() {
+                            "sessions" => matches!(value.as_str(), Some("normal" | "compact")),
+                            "usage" => {
+                                matches!(value.as_str(), Some("compact" | "standard" | "fill"))
+                            }
+                            _ => false,
+                        },
                         "content" => matches!(value.as_str(), Some("quota" | "api")),
                         "columns" => value == "auto",
                         "rows" => {
                             value == "auto" || value.as_u64().is_some_and(|n| (1..=12).contains(&n))
                         }
-                        "alignment" => matches!(
-                            value.as_str(),
-                            Some("left" | "center" | "spaceEvenly" | "right")
-                        ),
+                        "alignment" => match widget.r#type.as_str() {
+                            "usage" => matches!(
+                                value.as_str(),
+                                Some("top" | "center" | "spaceEvenly" | "bottom")
+                            ),
+                            _ => matches!(
+                                value.as_str(),
+                                Some("left" | "center" | "spaceEvenly" | "right")
+                            ),
+                        },
                         _ => false,
                     };
                     ensure!(valid, "组件参数无效：{key}");
@@ -224,6 +239,23 @@ mod tests {
     }
     fn document() -> LayoutDocument {
         serde_json::from_str(include_str!("../../../protocol/layout.example.json")).unwrap()
+    }
+    #[test]
+    fn accepts_current_usage_options_and_legacy_detail_flag() {
+        let mut layout = document();
+        let mut usage = layout.pages[0].widgets[0].clone();
+        usage.id = "usage-1".into();
+        usage.title = "额度".into();
+        usage.r#type = "usage".into();
+        usage.visible = false;
+        usage.options = BTreeMap::from([
+            ("content".into(), serde_json::json!("api")),
+            ("density".into(), serde_json::json!("fill")),
+            ("alignment".into(), serde_json::json!("bottom")),
+            ("showDetails".into(), serde_json::json!(true)),
+        ]);
+        layout.pages[0].widgets.push(usage);
+        assert!(layout.validate("host").is_ok());
     }
     #[test]
     fn layout_is_device_scoped_durable_and_revision_checked() {

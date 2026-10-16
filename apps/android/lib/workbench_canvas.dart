@@ -1435,7 +1435,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               w,
               'itemHeight',
               '卡片目标高度',
-              w.options['density'] == 'compact' ? 88 : 140,
+              w.options['density'] == 'compact'
+                  ? sessionCompactMinimumHeight
+                  : sessionStandardMinimumHeight,
               400,
               96,
             ),
@@ -1476,7 +1478,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               ],
               onChanged: (v) {
                 if (v == null) return;
-                final minimum = v == 'compact' ? 88.0 : 140.0;
+                final minimum = v == 'compact'
+                    ? sessionCompactMinimumHeight
+                    : sessionStandardMinimumHeight;
                 final current = (w.options['itemHeight'] as num?)?.toDouble();
                 workspace.updateWidget(
                   id,
@@ -1729,14 +1733,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 id,
                 options: {'alignment': v ?? 'spaceEvenly'},
               ),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('显示详细数据'),
-              subtitle: const Text('显示 Token、TPM、统计窗口或额度重置时间。'),
-              value: w.options['showDetails'] != false,
-              onChanged: (v) =>
-                  workspace.updateWidget(id, options: {'showDetails': v}),
             ),
           ],
         ]),

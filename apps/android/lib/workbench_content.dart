@@ -6,6 +6,13 @@ import 'rawblock.dart';
 import 'top_notice.dart';
 import 'workbench_data.dart';
 
+const sessionCompactMinimumHeight = 88.0;
+const sessionStandardMinimumHeight = 96.0;
+
+double sessionMinimumHeight({required bool compact, double scale = 1}) =>
+    (compact ? sessionCompactMinimumHeight : sessionStandardMinimumHeight) *
+    math.max(1.0, scale).toDouble();
+
 String workbenchTime(int seconds) {
   if (seconds <= 0) return '未知';
   final d = DateTime.fromMillisecondsSinceEpoch(seconds * 1000).toLocal();
@@ -301,7 +308,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
         )..layout(maxWidth: math.max(1, box.maxWidth - padding * 2));
         final noticeHeight = notice.isEmpty ? 0.0 : painter.height + 4;
         painter.dispose();
-        final minimum = (compact ? 88.0 : 140.0) * scale;
+        final minimum = sessionMinimumHeight(compact: compact, scale: scale);
         final available = box.maxHeight - padding * 2 - noticeHeight;
         if (sessions.isNotEmpty && available < minimum) {
           return _smallMessage(
@@ -338,7 +345,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                       );
                       final target = math.max(
                         minimum,
-                        number('itemHeight', compact ? 96 : 148),
+                        number('itemHeight', sessionStandardMinimumHeight),
                       );
                       final rows = math.max(
                         1,
@@ -687,7 +694,6 @@ class WorkbenchWidgetBody extends StatelessWidget {
     final sourceId = api ? 'sub2api.usage' : 'codex.quota';
     final density = _usageDensity(options);
     final alignment = _usageAlignment(options);
-    final showDetails = options['showDetails'] != false;
     final resource = binding['resourceId'];
     final quotas = data.quotas
         .where((q) => resource == null || resource == '' || q.id == resource)
@@ -714,64 +720,29 @@ class WorkbenchWidgetBody extends StatelessWidget {
             : '暂时没有可用额度，请在电脑上确认 Codex 已登录。',
       );
     }
-    void detail() {
-      if (editing) return;
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (context) => SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  api ? 'API 用量详情' : 'Codex 额度详情',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                _status(context, data, sourceId),
-                const SizedBox(height: 16),
-                if (api)
-                  for (final u in usages) ...[
-                    Text(
-                      u.label,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      '${u.currency} ${(u.actualCostMicros / 1000000).toStringAsFixed(2)}',
-                    ),
-                    Text(
-                      'Token ${_quantity(u.tokenCount)} · TPM ${_quantity(u.tpm)}${u.windowEnd <= data.now ? ' · 上次数据，等待刷新' : ''}',
-                    ),
-                    Text(
-                      '${workbenchTime(u.windowStart)} — ${workbenchTime(u.windowEnd)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                  ]
-                else
-                  for (final q in quotas) ...[
-                    Text(
-                      q.label,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      q.resetsAt <= data.now
-                          ? '等待刷新'
-                          : '${q.remaining.round()}% 剩余',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    Text('${workbenchTime(q.resetsAt)} 重置'),
-                    const SizedBox(height: 16),
-                  ],
-              ],
-            ),
-          ),
-        ),
-      );
-    }
+    final detailMessage = api
+        ? usages
+              .map(
+                (u) => [
+                  u.label,
+                  '${u.currency} ${(u.actualCostMicros / 1000000).toStringAsFixed(2)}',
+                  'Token ${_quantity(u.tokenCount)} · TPM ${_quantity(u.tpm)}',
+                  '统计窗口 ${workbenchTime(u.windowStart)} — ${workbenchTime(u.windowEnd)}',
+                  if (u.windowEnd <= data.now) '上次数据，等待刷新',
+                ].join('\n'),
+              )
+              .join('\n\n')
+        : quotas
+              .map(
+                (q) => [
+                  q.label,
+                  q.resetsAt <= data.now
+                      ? '等待刷新'
+                      : '${q.remaining.round()}% 剩余',
+                  '${workbenchTime(q.resetsAt)} 重置',
+                ].join('\n'),
+              )
+              .join('\n\n');
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -817,29 +788,11 @@ class WorkbenchWidgetBody extends StatelessWidget {
         final titleStyle = textTheme.bodySmall?.copyWith(
           height: tiny ? 1.2 : 1.35,
         );
-        final detailStyle = textTheme.bodySmall;
         Widget usageItem(String label, Widget child) => LayoutDebugOverlay(
           enabled: debugLayout,
           label: 'item $label',
           top: true,
           child: child,
-        );
-        Widget apiMetric(String label, String value) => Expanded(
-          child: usageItem(
-            label,
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: detailStyle),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.titleMedium,
-                ),
-              ],
-            ),
-          ),
         );
         final children = <Widget>[
           usageItem('主指标标题', Text(title, style: titleStyle)),
@@ -877,35 +830,6 @@ class WorkbenchWidgetBody extends StatelessWidget {
               ),
             ),
           ],
-          if (!compact && showDetails) ...[
-            const SizedBox(height: 8),
-            if (api)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  apiMetric('Token', _quantity(u!.tokenCount)),
-                  const SizedBox(width: 12),
-                  apiMetric('TPM', _quantity(u.tpm)),
-                ],
-              )
-            else
-              usageItem(
-                '重置时间',
-                Text('${workbenchTime(q!.resetsAt)} 重置', style: detailStyle),
-              ),
-            if (api) ...[
-              const SizedBox(height: 2),
-              usageItem(
-                '统计窗口',
-                Text(
-                  '统计窗口 ${workbenchTime(u!.windowStart)} — ${workbenchTime(u.windowEnd)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: detailStyle,
-                ),
-              ),
-            ],
-          ],
         ];
         final fillHeight = density == 'fill' && !tiny;
         final content = Padding(
@@ -931,8 +855,11 @@ class WorkbenchWidgetBody extends StatelessWidget {
           label:
               '内容区 ${contentWidth.toStringAsFixed(1)} × ${contentHeight.toStringAsFixed(1)} dp · ${_usageDensityLabel(density)} · ${_usageAlignmentLabel(alignment)}',
           top: true,
-          child: InkWell(
-            onTap: editing ? null : detail,
+          child: Tooltip(
+            message: detailMessage,
+            preferBelow: false,
+            waitDuration: const Duration(milliseconds: 350),
+            showDuration: const Duration(seconds: 5),
             child: SingleChildScrollView(
               padding: EdgeInsets.zero,
               child: content,

@@ -259,6 +259,15 @@ void main() {
     await tester.tap(find.byTooltip('设置会话').first);
     await tester.pumpAndSettle();
 
+    final density = find.byKey(const ValueKey('density-main-sessions-compact'));
+    await tester.ensureVisible(density);
+    await tester.pumpAndSettle();
+    await tester.tap(density);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('标准').last);
+    await tester.pumpAndSettle();
+    expect(workspace.findWidget('main-sessions')!.options['itemHeight'], 96.0);
+
     final width = find.widgetWithText(TextField, '卡片目标宽度');
     final height = find.widgetWithText(TextField, '卡片目标高度');
     final widthMinus = find.byKey(const ValueKey('number-decrement-卡片目标宽度'));
@@ -294,7 +303,7 @@ void main() {
     await tester.enterText(height, '88');
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
-    expect(workspace.findWidget('main-sessions')!.options['itemHeight'], 88.0);
+    expect(workspace.findWidget('main-sessions')!.options['itemHeight'], 96.0);
     expect(tester.widget<IconButton>(heightMinus).onPressed, isNull);
     expect(tester.widget<IconButton>(heightMinus).tooltip, '已是最小值');
     expect(tester.takeException(), isNull);
@@ -667,7 +676,7 @@ void main() {
       expect(selected('用量内容'), 'quota');
       expect(selected('内容布局'), 'fill');
       expect(selected('内容对齐'), 'spaceEvenly');
-      expect(find.text('显示详细数据'), findsOneWidget);
+      expect(find.text('显示详细数据'), findsNothing);
       expect(selected('已授权来源'), 'codex.quota');
       expect(selected('显示范围'), 'weekly');
       expect(inspectorScroll().position.pixels, 0);
@@ -950,12 +959,15 @@ void main() {
       expect(find.text('上次实际成本 · 等待刷新'), findsOneWidget);
       expect(find.text('item 主指标标题'), findsOneWidget);
       expect(find.text('item 主指标数值'), findsOneWidget);
-      expect(find.text('item Token'), findsOneWidget);
-      expect(find.text('item TPM'), findsOneWidget);
-      expect(find.text('item 统计窗口'), findsOneWidget);
-      await tester.tap(find.text('USD 12.34'));
+      expect(find.text('item Token'), findsNothing);
+      expect(find.text('item TPM'), findsNothing);
+      expect(find.text('item 统计窗口'), findsNothing);
+      final tooltip = tester.widget<Tooltip>(find.byType(Tooltip).first);
+      expect(tooltip.message, contains('Token 1.2M · TPM 4.5K'));
+      expect(tooltip.message, contains('统计窗口'));
+      await tester.longPress(find.text('USD 12.34'));
       await tester.pumpAndSettle();
-      expect(find.text('API 用量详情'), findsOneWidget);
+      expect(find.textContaining('Token 1.2M · TPM 4.5K'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(
         MaterialApp(

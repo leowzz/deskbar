@@ -333,21 +333,17 @@ void main() {
     },
   );
 
-  test('usage display options support filling and detail controls', () {
+  test('usage display options support filling without layout details', () {
     final workspace = emptyWorkspace();
     final id = workspace.addWidget('usage')!;
     final defaults = workspace.findWidget(id)!.options;
     expect(defaults['density'], 'fill');
     expect(defaults['alignment'], 'spaceEvenly');
-    expect(defaults['showDetails'], true);
+    expect(defaults.containsKey('showDetails'), isFalse);
     expect(
       workspace.updateWidget(
         id,
-        options: {
-          'density': 'standard',
-          'alignment': 'bottom',
-          'showDetails': false,
-        },
+        options: {'density': 'standard', 'alignment': 'bottom'},
       ),
       true,
     );
@@ -356,6 +352,26 @@ void main() {
     expect(workspace.updateWidget(id, options: {'density': 'expanded'}), false);
     expect(workspace.updateWidget(id, options: {'alignment': 'right'}), false);
     expect(workspace.updateWidget(id, options: {'showDetails': 'yes'}), false);
+
+    final legacy = LayoutDocument.fromJson({
+      ...workspace.document.toJson(),
+      'pages': [
+        {
+          ...workspace.document.pages.single.toJson(),
+          'widgets': [
+            {
+              ...workspace.document.pages.single.widgets.single.toJson(),
+              'options': {
+                ...workspace.document.pages.single.widgets.single.options,
+                'showDetails': true,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(legacy.pages.single.widgets.single.options['showDetails'], isNull);
+    expect(legacy.toJson().toString(), isNot(contains('showDetails')));
   });
 
   test('mixed random edits always leave the complete draft valid', () {
