@@ -8,7 +8,8 @@
     "build": "pnpm editor:build && tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "tauri": "tauri",
-    "editor:build": "bash ../../scripts/build_editor.sh"
+    "editor:build": "bash ../../scripts/build_editor.sh",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod recent_apps;
 use deskbar_lan::{Agent, AgentStatus, PairingInvitation};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -153,6 +154,95 @@ async fn choose_application(
 }
 
 #[tauri::command]
+async fn choose_applications(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut picker = app.dialog().file().set_title("添加应用");
+        #[cfg(target_os = "macos")]
+        {
+            picker = picker
+                .set_directory("/Applications")
+                .add_filter("应用", &["app"]);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            picker = picker.add_filter("应用", &["exe"]);
+        }
+        picker
+            .blocking_pick_files()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|file| {
+                file.into_path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .map_err(|_| "无法读取应用路径".into())
+            })
+            .collect()
+    })
+    .await
+    .map_err(|_| "无法打开应用选择器".to_string())?
+}
+
+#[tauri::command]
+async fn import_application(
+    path: String,
+) -> Result<deskbar_lan::icons::ApplicationMetadata, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        deskbar_lan::icons::application_metadata(std::path::Path::new(&path))
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|_| "无法读取应用".to_string())?
+}
+
+#[tauri::command]
+async fn import_shortcut_icon(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        deskbar_lan::icons::import_icon(std::path::Path::new(&path)).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|_| "无法读取图标".to_string())?
+}
+
+#[tauri::command]
+async fn shortcut_recommendations(
+    recent: State<'_, std::sync::Arc<recent_apps::RecentApps>>,
+    excluded: Vec<String>,
+) -> Result<recent_apps::Recommendations, String> {
+    let recent = recent.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || recent.recommendations(&excluded))
+        .await
+        .map_err(|_| "无法读取最近应用".to_string())?
+}
+
+#[tauri::command]
+async fn shortcut_website_info(
+    url: String,
+) -> Result<deskbar_lan::website_icon::WebsiteInfo, String> {
+    deskbar_lan::website_icon::fetch(&url).await
+}
+
+#[tauri::command]
+async fn open_shortcut(state: State<'_, AgentState>, id: String) -> Result<(), String> {
+    let item = state
+        .agent()?
+        .host
+        .lock()
+        .unwrap()
+        .shortcuts
+        .iter()
+        .find(|item| item.id == id)
+        .cloned()
+        .ok_or("入口已移除")?;
+    item.validate().map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        open::that(item.target).map_err(|_| "未能打开，请检查应用或网址".to_string())
+    })
+    .await
+    .map_err(|_| "未能打开入口".to_string())?
+}
+
+#[tauri::command]
 async fn choose_shortcut_icon(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
@@ -181,6 +271,9 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
+            let recent = recent_apps::RecentApps::new(directory.join("recent-apps.json"));
+            recent_apps::start(app.handle().clone(), recent.clone());
+            app.manage(recent);
             let name = hostname::get()?
                 .to_string_lossy()
                 .trim_end_matches(".local")
@@ -231,6 +324,12 @@ fn main() {
             save_usage_source,
             remove_usage_source,
             choose_application,
+            choose_applications,
+            import_application,
+            import_shortcut_icon,
+            shortcut_recommendations,
+            shortcut_website_info,
+            open_shortcut,
             choose_shortcut_icon
         ])
         .run(tauri::generate_context!())

@@ -35,9 +35,10 @@ docs-check:
 
 check: docs-check
 	cargo fmt --all -- --check
-	cargo test --locked
+	cargo test --locked --workspace
 	cargo check --locked -p deskbar-desktop
 	pnpm --dir apps/desktop run check
+	pnpm --dir apps/desktop run test
 	pnpm --dir apps/desktop exec prettier --check src vite.config.ts
 	cd apps/android && dart format --output=none --set-exit-if-changed lib test integration_test test_driver
 	cd apps/android && flutter analyze

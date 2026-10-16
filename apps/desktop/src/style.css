@@ -532,39 +532,70 @@ header .primary {
   background: var(--chart);
   border-radius: inherit;
 }
-.shortcut-catalog {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  align-items: stretch;
-  gap: 12px;
-  padding: 16px;
+.shortcuts-panel {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  margin-top: 16px;
+  padding: 24px;
+}
+.shortcuts-panel.external-drag {
+  outline: 2px dashed var(--focus);
+  outline-offset: -4px;
+}
+.shortcut-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.shortcut-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shortcut-toolbar button,
+.website-info-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.shortcut-heading .icon-button {
+  padding: 8px;
+  min-width: 36px;
+  display: grid;
+  place-items: center;
+}
+.shortcut-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 205px), 1fr));
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 20px;
 }
 .shortcut-catalog:empty {
   display: none;
 }
 .shortcut-tile {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
+  gap: 14px;
   min-width: 0;
-  min-height: 112px;
-  padding: 12px 8px;
-  border: 1px solid transparent;
-  background: transparent;
+  min-height: 84px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
   cursor: grab;
   user-select: none;
   touch-action: none;
+  text-align: left;
 }
 .shortcut-tile:hover,
 .shortcut-tile[aria-expanded="true"] {
   background: var(--raised);
-  border-color: transparent;
+  border-color: var(--edge);
 }
 .shortcut-tile.dragging {
   opacity: 0.5;
@@ -574,16 +605,144 @@ header .primary {
   background: var(--selection);
   border-color: var(--focus);
 }
+.shortcut-info {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
 .shortcut-name {
-  width: 100%;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
-  text-align: center;
   overflow-wrap: anywhere;
 }
+.shortcut-kind {
+  color: var(--muted);
+  font-size: 13px;
+}
 .shortcut-tile .shortcut-icon {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+}
+.recent-heading {
+  margin-top: 32px;
+}
+.shortcut-empty {
+  color: var(--muted);
+  padding: 24px 0 8px;
+}
+.shortcut-feedback {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 12px;
+}
+.shortcut-recommendations {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+.shortcut-recommendation {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  min-height: 76px;
+  padding: 12px;
+  text-align: left;
+  background: var(--canvas);
+}
+.shortcut-recommendation > span:not(.shortcut-icon) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.shortcut-recommendation .shortcut-icon {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+}
+.shortcut-recommendation > .icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.shortcut-identity {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 20px;
+}
+.shortcut-identity label {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.shortcut-icon-picker {
+  position: relative;
+  padding: 8px;
+  background: var(--canvas);
+  align-self: flex-end;
+}
+.shortcut-icon-picker .shortcut-icon {
+  width: 52px;
+  height: 52px;
+  background: transparent;
+}
+.icon-edit {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  padding: 3px;
+  display: grid;
+  place-items: center;
+}
+.icon-edit .icon {
+  width: 14px;
+  height: 14px;
+}
+.shortcut-path-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+.shortcut-path-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--muted);
+}
+.shortcut-path-row button {
+  flex-shrink: 0;
+}
+.reset-shortcut-icon {
+  margin-top: 12px;
+}
+@media (max-width: 700px) {
+  .shortcuts-panel {
+    padding: 16px;
+  }
+  .shortcut-catalog,
+  .shortcut-recommendations {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shortcut-tile,
+  .shortcut-recommendation {
+    gap: 10px;
+    padding: 12px;
+  }
+}
+@media (max-width: 460px) {
+  .shortcut-catalog,
+  .shortcut-recommendations {
+    grid-template-columns: 1fr;
+  }
 }
 .shortcut-menu {
   position: fixed;
@@ -1053,34 +1212,6 @@ footer .text-button {
   width: 22px;
   height: 22px;
 }
-.shortcut-icon-field {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  border-top: 1px solid var(--line);
-  padding-top: 20px;
-  margin-top: 20px;
-}
-.shortcut-icon-field > .shortcut-icon {
-  width: 64px;
-  height: 64px;
-}
-.shortcut-icon-field > div {
-  min-width: 0;
-}
-.shortcut-icon-field strong {
-  font-weight: 500;
-}
-.shortcut-icon-field p {
-  font-size: 12px;
-}
-.icon-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
 /* The shared renderer keeps device dp independent from desktop window size. */
 .editor-main {
   max-width: none;

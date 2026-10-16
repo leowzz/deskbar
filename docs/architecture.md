@@ -68,6 +68,7 @@ App 不可见时持续刷新需要单独验证前台服务、通知和平台要�
 | `agents/desktop` | 复用 Tauri 外壳与设置；连接设置换为配对与设备许可 |
 | `codex.rs`、`usage.rs` | 复用采集规则，改用 DeskBar 领域类型 |
 | `commands.rs`、`shortcuts.rs` | 复用资源校验与本机打开能力，替换授权与命令信封 |
+| `Shortcuts.tsx`、`recent_apps.rs`、`website_icon.rs` | 复用分开的应用 / 网址添加、最近使用和显式网站信息读取；适配 DeskBar 图标与保存接口，记录仅在本机保留 |
 | `runtime.rs` | 保留采集调度；MQTT 状态机替换为 LAN 监听与会话管理 |
 | `nodes/app` | 复用工作台、点阵、主题和适配；移除 InboxController 依赖 |
 | `nodes/android` | 复用原生全屏、组件与设备适配；迁入独立 Android 工程 |

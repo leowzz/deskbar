@@ -1,6 +1,7 @@
 //! Embedded TLS listener and untrusted LAN discovery. No independent service.
 pub mod icons;
 mod usage;
+pub mod website_icon;
 use anyhow::{Context, Result};
 use axum::{
     extract::{ws::Message, Path, State, WebSocketUpgrade},

@@ -202,7 +202,7 @@ void main() {
           }
         }
         if (edge != 'left' && edge != 'right') {
-          expect(tester.getRect(frame).height, inInclusiveRange(48, 60));
+          expect(tester.getSize(frame).height, inInclusiveRange(48, 60));
           expect(after.y, before.y);
         }
         workspace.document.validate();
@@ -241,7 +241,7 @@ void main() {
           expect(tester.takeException(), isNull);
           await tester.tap(find.byTooltip('设置会话').first);
           await tester.pumpAndSettle();
-          expect(find.text('卡片目标宽度 · 280 dp'), findsOneWidget);
+          expect(find.widgetWithText(TextField, '卡片目标宽度'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
         });
@@ -395,7 +395,7 @@ void main() {
     addTearDown(workspace.dispose);
     await launch(tester, workspace, editor: false, size: const Size(360, 640));
     expect(find.byKey(const ValueKey('editor-inspector')), findsNothing);
-    expect(find.text('完成'), findsNothing);
+    expect(find.text('保存并同步'), findsNothing);
     final background = find.byKey(
       const ValueKey('page-edit-background-page-main'),
     );
@@ -759,6 +759,8 @@ void main() {
       find.byKey(const ValueKey('title-list')).hitTestable(),
       findsOneWidget,
     );
+    await tester.ensureVisible(find.text('显示组件'));
+    await tester.pumpAndSettle();
     expect(find.text('显示组件').hitTestable(), findsOneWidget);
     expect(sourceScroll().position.pixels, greaterThan(0));
     expect(tester.takeException(), isNull);
@@ -804,14 +806,14 @@ void main() {
       workspace.beginEdit();
       workspace.renamePage('page-main', '保存测试');
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('完成'));
-      await tester.tap(find.text('完成'));
+      await tester.ensureVisible(find.text('保存并同步'));
+      await tester.tap(find.text('保存并同步'));
       await tester.pumpAndSettle();
       expect(workspace.editing, isTrue);
       expect(find.textContaining('草稿仍保留'), findsOneWidget);
       repository.fail = false;
       repository.pending = Completer<void>();
-      await tester.tap(find.text('完成'));
+      await tester.tap(find.text('保存并同步'));
       await tester.pump();
       expect(find.text('保存中…'), findsOneWidget);
       await tester.binding.handlePopRoute();

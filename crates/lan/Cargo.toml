@@ -21,6 +21,10 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 socket2 = { version = "0.6", features = ["all"] }
 if-addrs = "0.14"
 url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+scraper = "0.24"
+image = { version = "0.25", default-features = false, features = ["png", "ico", "jpeg", "gif", "webp"] }
+resvg = { version = "0.45", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

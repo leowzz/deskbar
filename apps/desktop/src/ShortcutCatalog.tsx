@@ -55,12 +55,14 @@ export function ShortcutCatalog({
   items,
   disabled,
   onEdit,
+  onOpen,
   onDelete,
   onReorder,
 }: {
   items: ShortcutConfig[];
   disabled: boolean;
   onEdit: (item: ShortcutConfig) => void;
+  onOpen: (id: string) => void;
   onDelete: (id: string) => void;
   onReorder: (ids: string[]) => void;
 }) {
@@ -71,6 +73,7 @@ export function ShortcutCatalog({
   const menuRef = useRef<HTMLDivElement>(null);
   const catalogRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  const lastDrag = useRef(0);
 
   useEffect(() => {
     if (!disabled) return;
@@ -145,6 +148,7 @@ export function ShortcutCatalog({
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
     if (!current?.active || cancelled || disabled || !current.over) return;
+    lastDrag.current = performance.now();
     const ids = items.map((item) => item.id);
     const from = ids.indexOf(current.id);
     const to = ids.indexOf(current.over);
@@ -172,16 +176,24 @@ export function ShortcutCatalog({
             type="button"
             key={item.id}
             data-shortcut-id={item.id}
+            data-shortcut-icon={item.id}
             className={`shortcut-tile${drag?.id === item.id ? " dragging" : ""}${drag?.over === item.id && drag.id !== item.id ? " drop-target" : ""}`}
             disabled={disabled}
             aria-haspopup="menu"
             aria-expanded={menu?.id === item.id}
-            title={`${item.kind === "app" ? "应用" : "网页"} · ${item.target}`}
+            title={`${item.name} · 双击在本机打开，右键编辑`}
+            onDoubleClick={() => {
+              if (performance.now() - lastDrag.current > 400) onOpen(item.id);
+            }}
             onContextMenu={(event) => {
               event.preventDefault();
               context(item.id, event.clientX, event.clientY);
             }}
             onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onOpen(item.id);
+              }
               if (
                 event.key === "ContextMenu" ||
                 (event.shiftKey && event.key === "F10")
@@ -232,7 +244,12 @@ export function ShortcutCatalog({
               icon={item.icon_png}
               kind={item.kind}
             />
-            <span className="shortcut-name">{item.name}</span>
+            <span className="shortcut-info">
+              <span className="shortcut-name">{item.name}</span>
+              <span className="shortcut-kind">
+                {item.kind === "app" ? "应用" : "网址"}
+              </span>
+            </span>
           </button>
         ))}
       </div>

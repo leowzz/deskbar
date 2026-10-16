@@ -155,10 +155,8 @@ class _DesktopEditorState extends State<DesktopEditor> {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    theme: rawBlockTheme().copyWith(platform: TargetPlatform.android),
-    darkTheme: rawBlockTheme(
-      Brightness.dark,
-    ).copyWith(platform: TargetPlatform.android),
+    theme: _editorTheme(Brightness.light),
+    darkTheme: _editorTheme(Brightness.dark),
     themeMode: dark ? ThemeMode.dark : ThemeMode.light,
     home: Scaffold(
       body: !ready
@@ -274,6 +272,25 @@ class _DesktopEditorState extends State<DesktopEditor> {
             ),
     ),
   );
+
+  ThemeData _editorTheme(Brightness brightness) {
+    final theme = rawBlockTheme(brightness);
+    return theme.copyWith(
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      filledButtonTheme: FilledButtonThemeData(
+        style: theme.filledButtonTheme.style?.copyWith(
+          // Compact density subtracts 8 px; retain a 36 px click target.
+          minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: theme.textButtonTheme.style?.copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
+        ),
+      ),
+    );
+  }
 
   Widget _dimension(
     String label,

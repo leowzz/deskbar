@@ -130,7 +130,7 @@ export function WorkbenchEditor({ status }: { status: Status }) {
               ? "设备已同步"
               : "等待设备接收布局"}
         </span>
-        {editing && <span>草稿预览 · 完成后同步到设备</span>}
+        {editing && <span>更改尚未同步</span>}
       </div>
       {error && (
         <p className="notice error" role="alert">

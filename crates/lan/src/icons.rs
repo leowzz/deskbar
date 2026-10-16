@@ -6,7 +6,7 @@ use deskbar_host::workbench::{normalize_icon_png, ShortcutConfig};
 use serde::Serialize;
 use std::path::Path;
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct ApplicationMetadata {
     pub target: String,
     pub name: String,

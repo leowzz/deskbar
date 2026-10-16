@@ -21,6 +21,16 @@ class UnusedRepository extends LayoutRepository {
       throw StateError('Mobile must not save layouts');
 }
 
+class EditorRepository extends LayoutRepository {
+  LayoutDocument? saved;
+  bool fail = false;
+  @override
+  Future<void> save(LayoutDocument document) async {
+    if (fail) throw StateError('Save failed');
+    saved = document;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   Map<String, dynamic> layout() =>
@@ -33,6 +43,205 @@ void main() {
           (_) async => null,
         );
   });
+  testWidgets(
+    'desktop keyboard, numeric properties and save retain draft semantics',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final connection = Connection()..data = WorkbenchData(fixture.snapshot());
+      final repository = EditorRepository();
+      final workspace = LayoutWorkspace(
+        document: LayoutDocument(
+          activePageId: 'main',
+          pages: [
+            LayoutPage(
+              id: 'main',
+              name: '总览',
+              widgets: [
+                LayoutWidget(
+                  id: 'quota',
+                  type: 'usage',
+                  title: '额度',
+                  placements: {
+                    LayoutOrientation.wide: const GridPlacement(
+                      x: 4,
+                      y: 4,
+                      w: 12,
+                      h: 12,
+                    ),
+                    LayoutOrientation.portrait: const GridPlacement(
+                      x: 2,
+                      y: 8,
+                      w: 8,
+                      h: 24,
+                    ),
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      addTearDown(connection.dispose);
+      addTearDown(workspace.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: rawBlockTheme(),
+          home: Scaffold(
+            body: WorkbenchCanvas(
+              connection: connection,
+              workspace: workspace,
+              repository: repository,
+              allowEditing: true,
+              previewSize: const Size(1280, 720),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('outline-quota')));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(
+        workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
+        5,
+      );
+      expect(
+        workspace.selectedWidget!.placementFor(LayoutOrientation.portrait).x,
+        2,
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(
+        workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
+        4,
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(
+        workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
+        5,
+      );
+      final name = find.byKey(const ValueKey('title-quota'));
+      await tester.enterText(name, '额度名称');
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(workspace.findWidget('quota'), isNotNull);
+      expect(
+        workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
+        5,
+      );
+      final x = find.descendant(
+        of: find.byKey(const ValueKey('placement-quota-wide-x')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(x, '7');
+      expect(
+        workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
+        5,
+      );
+      repository.fail = true;
+      // Saving from a numeric field must include the still-focused input.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(workspace.editing, isTrue);
+      expect(
+        workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
+        7,
+      );
+      expect(repository.saved, isNull);
+      repository.fail = false;
+      await tester.tap(find.text('保存并同步'));
+      await tester.pumpAndSettle();
+      expect(workspace.editing, isFalse);
+      expect(
+        repository.saved!.activePage.widgets.single
+            .placementFor(LayoutOrientation.wide)
+            .x,
+        7,
+      );
+      await tester.tap(find.byKey(const ValueKey('outline-quota')));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pumpAndSettle();
+      expect(workspace.findWidget('quota'), isNull);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(workspace.findWidget('quota'), isNotNull);
+      await tester.tap(find.text('放弃更改'));
+      await tester.pumpAndSettle();
+      expect(workspace.document.toJson(), repository.saved!.toJson());
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  for (final width in [560.0, 900.0]) {
+    testWidgets('desktop panels stay reachable at $width', (tester) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final connection = Connection()..data = WorkbenchData(fixture.snapshot());
+      final workspace = LayoutWorkspace();
+      addTearDown(connection.dispose);
+      addTearDown(workspace.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: rawBlockTheme(Brightness.dark),
+          home: Scaffold(
+            body: WorkbenchCanvas(
+              connection: connection,
+              workspace: workspace,
+              allowEditing: true,
+              previewSize: const Size(400, 800),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('outline-main-sessions')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('title-main-sessions')).hitTestable(),
+        findsOneWidget,
+      );
+      final x = tester.getRect(
+        find.byKey(const ValueKey('placement-main-sessions-portrait-x')),
+      );
+      final y = tester.getRect(
+        find.byKey(const ValueKey('placement-main-sessions-portrait-y')),
+      );
+      expect(y.top, x.top);
+      expect(y.left, greaterThan(x.right));
+      expect(
+        tester.getRect(find.text('保存并同步')).right,
+        lessThanOrEqualTo(width),
+      );
+      await tester.tap(find.text('页面与组件'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('editor-outline')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
   for (final size in [const Size(400, 800), const Size(1280, 720)]) {
     testWidgets('direct selection docks inspector outside $size', (
       tester,
@@ -77,11 +286,8 @@ void main() {
         find.byKey(const ValueKey('editor-inspector')),
       );
       expect(canvas.overlaps(inspector), isFalse);
-      if (size.width > size.height) {
-        expect(inspector.top, greaterThanOrEqualTo(canvas.bottom));
-      } else {
-        expect(inspector.left, greaterThanOrEqualTo(canvas.right));
-      }
+      expect(inspector.left, greaterThanOrEqualTo(canvas.right));
+      expect(find.byKey(const ValueKey('editor-outline')), findsOneWidget);
       expect(tester.getRect(find.byType(PageView)), canvas);
       expect(tester.getSize(body), before);
       final name = find.byKey(const ValueKey('title-main-sessions'));
@@ -96,17 +302,8 @@ void main() {
         find.byKey(const ValueKey('editor-inspector')),
       );
       expect(rotatedCanvas.overlaps(rotatedInspector), isFalse);
-      if (size.width > size.height) {
-        expect(
-          rotatedInspector.left,
-          greaterThanOrEqualTo(rotatedCanvas.right),
-        );
-      } else {
-        expect(
-          rotatedInspector.top,
-          greaterThanOrEqualTo(rotatedCanvas.bottom),
-        );
-      }
+      expect(rotatedInspector.left, greaterThanOrEqualTo(rotatedCanvas.right));
+      expect(rotatedInspector, inspector);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });

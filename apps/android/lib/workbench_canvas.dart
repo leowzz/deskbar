@@ -57,6 +57,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   late final DisplayPreferences display =
       widget.displayPreferences ?? DisplayPreferences();
   String? panel, inspectedId;
+  final editorFocus = FocusNode(debugLabel: 'Desktop canvas');
+  bool outlineTab = true;
+  bool get desktopEditor => widget.allowEditing && widget.previewSize != null;
   bool reportedEditing = false;
   Size viewport = Size.zero;
   bool bindingQueued = false;
@@ -115,6 +118,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     widget.connection.removeListener(_connectionChanged);
     if (widget.workspace == null) workspace.dispose();
     pages.dispose();
+    editorFocus.dispose();
     display.removeListener(_displayChanged);
     if (widget.displayPreferences == null) display.dispose();
     super.dispose();
@@ -254,6 +258,83 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     if (!success) _toast(workspace.error ?? '未能完成修改');
   }
 
+  void _desktopHistory({bool redo = false}) {
+    final id = workspace.selectedWidgetId ?? inspectedId;
+    final changed = redo ? workspace.redo() : workspace.undo();
+    if (changed && workspace.activePage.widgets.any((w) => w.id == id)) {
+      workspace.selectWidget(id);
+    }
+  }
+
+  // Text fields keep their native editing shortcuts. Canvas commands only run
+  // when no text editor or modal route owns focus.
+  KeyEventResult _desktopKey(KeyEvent event) {
+    if (saving || ModalRoute.of(context)?.isCurrent != true) {
+      return KeyEventResult.ignored;
+    }
+    final focus = FocusManager.instance.primaryFocus;
+    final typing =
+        focus?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+    final key = event.logicalKey;
+    final keyboard = HardwareKeyboard.instance;
+    final command = keyboard.isMetaPressed || keyboard.isControlPressed;
+    if (command && key == LogicalKeyboardKey.keyS) {
+      if (event is KeyDownEvent && workspace.editing) unawaited(_finish());
+      return KeyEventResult.handled;
+    }
+    if (typing) return KeyEventResult.ignored;
+    if (command &&
+        (key == LogicalKeyboardKey.keyZ || key == LogicalKeyboardKey.keyY)) {
+      if (event is KeyDownEvent) {
+        if (keyboard.isShiftPressed || key == LogicalKeyboardKey.keyY) {
+          _desktopHistory(redo: true);
+        } else {
+          _desktopHistory();
+        }
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      _closePanel();
+      return KeyEventResult.handled;
+    }
+    final selected = workspace.selectedWidget;
+    if (selected == null ||
+        !workspace.editing ||
+        command ||
+        keyboard.isAltPressed) {
+      return KeyEventResult.ignored;
+    }
+    if (key == LogicalKeyboardKey.delete ||
+        key == LogicalKeyboardKey.backspace) {
+      if (event is KeyDownEvent) {
+        workspace.removeWidget(selected.id);
+        _closePanel();
+      }
+      return KeyEventResult.handled;
+    }
+    final step = keyboard.isShiftPressed ? 10 : 1;
+    final delta = switch (key) {
+      LogicalKeyboardKey.arrowLeft => Offset(-step.toDouble(), 0),
+      LogicalKeyboardKey.arrowRight => Offset(step.toDouble(), 0),
+      LogicalKeyboardKey.arrowUp => Offset(0, -step.toDouble()),
+      LogicalKeyboardKey.arrowDown => Offset(0, step.toDouble()),
+      _ => null,
+    };
+    if (delta == null || !selected.visible) return KeyEventResult.ignored;
+    final r = selected.placementFor(orientation);
+    final next = r.copyWith(
+      x: (r.x + delta.dx.toInt()).clamp(0, orientation.columns - r.w),
+      y: (r.y + delta.dy.toInt()).clamp(0, orientation.rows - r.h),
+    );
+    if (next != r) {
+      _result(
+        workspace.setPlacement(selected.id, orientation, next, displace: true),
+      );
+    }
+    return KeyEventResult.handled;
+  }
+
   void _syncRemoteLayout() {
     if (widget.allowEditing) return;
     final data = widget.connection.data;
@@ -305,6 +386,10 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   Future<void> _finish() async {
     if (saving) return;
     setState(() => saving = true);
+    FocusManager.instance.primaryFocus?.unfocus();
+    // Commit numeric property fields before capturing the document.
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
     try {
       final savedDocument = _bindDocument(workspace.document);
       await repository.save(savedDocument);
@@ -363,8 +448,13 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         }
       },
       child: Focus(
+        focusNode: editorFocus,
         autofocus: true,
         onKeyEvent: (node, event) {
+          if (desktopEditor &&
+              (event is KeyDownEvent || event is KeyRepeatEvent)) {
+            return _desktopKey(event);
+          }
           if (event is! KeyDownEvent || workspace.editing) {
             return KeyEventResult.ignored;
           }
@@ -405,8 +495,10 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                   ),
                 ),
               ),
-            if (widget.allowEditing) _editToolbar(),
-            if (widget.allowEditing) const SizedBox(height: 12),
+            if (widget.allowEditing)
+              desktopEditor ? _desktopToolbar() : _editToolbar(),
+            if (widget.allowEditing && !desktopEditor)
+              const SizedBox(height: 12),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, box) {
@@ -424,6 +516,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                       ? _canvas()
                       : _desktopPreview();
                   if (!widget.allowEditing) return canvas;
+                  if (desktopEditor) return _desktopWorkspace(box, canvas);
                   final inspector = panel == null
                       ? const Center(child: Text('选择组件'))
                       : _editorPanel();
@@ -479,16 +572,243 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     );
     return ColoredBox(
       color: c.sidebar,
-      child: widget.previewFit
-          ? Center(
-              child: FittedBox(fit: BoxFit.contain, child: screen),
-            )
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(child: screen),
-            ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: widget.previewFit
+            ? Center(
+                child: FittedBox(fit: BoxFit.contain, child: screen),
+              )
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(child: screen),
+              ),
+      ),
     );
   }
+
+  Widget _desktopToolbar() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                PopupMenuButton<String>(
+                  tooltip: '添加组件',
+                  enabled: !saving,
+                  onSelected: (type) {
+                    _begin();
+                    if (workspace.editing) unawaited(_createWidget(type));
+                  },
+                  itemBuilder: (_) => [
+                    for (final type in ['sessions', 'usage', 'shortcuts'])
+                      PopupMenuItem(
+                        value: type,
+                        child: Text(widgetTypeName(type)),
+                      ),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.add, size: 18),
+                        SizedBox(width: 6),
+                        Text('添加组件'),
+                        Icon(Icons.expand_more, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  tooltip: '撤销 · ⌘ / Ctrl Z',
+                  onPressed: workspace.canUndo && !saving
+                      ? _desktopHistory
+                      : null,
+                  icon: const Icon(Icons.undo),
+                ),
+                IconButton(
+                  tooltip: '重做 · ⌘ / Ctrl Shift Z',
+                  onPressed: workspace.canRedo && !saving
+                      ? () => _desktopHistory(redo: true)
+                      : null,
+                  icon: const Icon(Icons.redo),
+                ),
+                IconButton(
+                  tooltip: '整理本页',
+                  onPressed: saving
+                      ? null
+                      : () {
+                          _begin();
+                          _result(workspace.arrangePage(orientation));
+                        },
+                  icon: const Icon(Icons.auto_awesome_mosaic_outlined),
+                ),
+              ],
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: saving || !workspace.editing ? null : workspace.cancelEdit,
+          child: const Text('放弃更改'),
+        ),
+        const SizedBox(width: 8),
+        FilledButton(
+          onPressed: saving || !workspace.editing ? null : _finish,
+          child: Text(saving ? '保存中…' : '保存并同步'),
+        ),
+      ],
+    ),
+  );
+
+  Widget _desktopWorkspace(BoxConstraints box, Widget canvas) {
+    final c = deskbarColors(context);
+    final inspector = SizedBox(
+      key: const ValueKey('editor-inspector'),
+      child: panel == 'widget' && inspectedId != null
+          ? _editorPanel()
+          : ColoredBox(
+              color: c.surface,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _sectionHeading('属性'),
+                  const Expanded(child: Center(child: Text('选择画布或列表中的组件'))),
+                ],
+              ),
+            ),
+    );
+    final stage = Column(
+      children: [
+        SizedBox(
+          height: 44,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    workspace.activePage.name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  orientation == LayoutOrientation.wide ? '横屏布局' : '竖屏布局',
+                  style: TextStyle(color: c.muted, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(child: canvas),
+        SizedBox(
+          height: 36,
+          child: Center(
+            child: Text(
+              '方向键微调 · Shift 加速 · Delete 删除 · Esc 取消选择',
+              style: TextStyle(color: c.muted, fontSize: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+    // The host window determines editor chrome. Device rotation changes only
+    // the canvas and the independent orientation placement being edited.
+    if (box.maxWidth >= 1000) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(width: 220, child: _desktopOutline()),
+          const SizedBox(width: 12),
+          Expanded(child: stage),
+          const SizedBox(width: 12),
+          SizedBox(width: 300, child: inspector),
+        ],
+      );
+    }
+    if (box.maxWidth >= 700) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: stage),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 280,
+            child: Column(
+              children: [
+                _outlineTabs(),
+                Expanded(child: outlineTab ? _desktopOutline() : inspector),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        Expanded(child: stage),
+        _outlineTabs(),
+        SizedBox(
+          height: math.min(300, box.maxHeight * .45),
+          child: outlineTab ? _desktopOutline() : inspector,
+        ),
+      ],
+    );
+  }
+
+  Widget _outlineTabs() => Row(
+    children: [
+      for (final entry in [(true, '页面与组件'), (false, '属性')])
+        Expanded(
+          child: TextButton(
+            style: TextButton.styleFrom(
+              backgroundColor: outlineTab == entry.$1
+                  ? deskbarColors(context).selection
+                  : null,
+            ),
+            onPressed: () => setState(() => outlineTab = entry.$1),
+            child: Text(entry.$2),
+          ),
+        ),
+    ],
+  );
+
+  Widget _sectionHeading(String title, {Widget? action}) => SizedBox(
+    height: 44,
+    child: Padding(
+      padding: const EdgeInsets.only(left: 12, right: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+          ),
+          ?action,
+        ],
+      ),
+    ),
+  );
+
+  Widget _desktopOutline() => Material(
+    key: const ValueKey('editor-outline'),
+    color: deskbarColors(context).surface,
+    child: AbsorbPointer(
+      absorbing: saving,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 2, child: _pagesBody()),
+          Divider(height: 1, color: deskbarColors(context).line),
+          _sectionHeading('本页组件'),
+          Expanded(flex: 3, child: _componentsBody()),
+        ],
+      ),
+    ),
+  );
 
   Widget _editToolbar() => Material(
     color: deskbarColors(context).canvas,
@@ -801,45 +1121,66 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
 
   Widget _pagesBody() => Column(
     children: [
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: () async {
-            final name = await _askName('新建空白页', '新页面');
-            if (name != null && mounted) workspace.addPage(name: name);
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('新建页面'),
+      if (desktopEditor)
+        _sectionHeading(
+          '页面',
+          action: IconButton(
+            tooltip: '新建页面',
+            onPressed: _newPage,
+            icon: const Icon(Icons.add, size: 18),
+          ),
+        )
+      else
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _newPage,
+            icon: const Icon(Icons.add),
+            label: const Text('新建页面'),
+          ),
         ),
-      ),
       Expanded(
         child: ReorderableListView.builder(
           buildDefaultDragHandles: false,
-          onReorderItem: (oldIndex, newIndex) => _result(
-            workspace.movePage(workspace.pages[oldIndex].id, newIndex),
-          ),
+          onReorderItem: (oldIndex, newIndex) {
+            _begin();
+            _result(workspace.movePage(workspace.pages[oldIndex].id, newIndex));
+          },
           itemCount: workspace.pages.length,
           itemBuilder: (context, index) {
             final p = workspace.pages[index];
             return ListTile(
               key: ValueKey(p.id),
-              contentPadding: EdgeInsets.zero,
+              selected: desktopEditor && workspace.activePage.id == p.id,
+              selectedTileColor: deskbarColors(context).selection,
+              selectedColor: deskbarColors(context).selectedText,
+              dense: desktopEditor,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              minLeadingWidth: 24,
               leading: ReorderableDragStartListener(
                 index: index,
-                child: const SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Icon(Icons.drag_handle),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: SizedBox(
+                    width: desktopEditor ? 24 : 48,
+                    height: desktopEditor ? 36 : 48,
+                    child: const Icon(Icons.drag_handle, size: 18),
+                  ),
                 ),
               ),
-              title: Text(p.name),
-              onTap: () => _navigate(p.id),
+              title: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+              onTap: () {
+                _begin();
+                _navigate(p.id);
+                editorFocus.requestFocus();
+              },
               trailing: PopupMenuButton<String>(
                 tooltip: '页面操作 ${p.name}',
                 onSelected: (action) async {
                   if (action == 'rename') {
                     final name = await _askName('重命名页面', p.name);
                     if (name != null && mounted) {
+                      _begin();
                       _result(workspace.renamePage(p.id, name));
                     }
                   } else {
@@ -862,6 +1203,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                       ),
                     );
                     if (confirmed == true && mounted) {
+                      _begin();
                       _result(workspace.deletePage(p.id));
                     }
                   }
@@ -881,6 +1223,14 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       ),
     ],
   );
+  Future<void> _newPage() async {
+    final name = await _askName('新建空白页', '新页面');
+    if (name == null || !mounted) return;
+    _begin();
+    workspace.addPage(name: name);
+    if (desktopEditor) _closePanel();
+  }
+
   Future<void> _addWidget() async {
     _openPanel('add');
   }
@@ -941,30 +1291,58 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     children: [
       for (final w in workspace.activePage.widgets)
         ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Checkbox(
-            value: w.visible,
-            onChanged: (v) =>
-                _result(workspace.setWidgetVisible(w.id, v ?? false)),
+          key: ValueKey('outline-${w.id}'),
+          dense: desktopEditor,
+          selected: workspace.selectedWidgetId == w.id,
+          selectedTileColor: deskbarColors(context).selection,
+          selectedColor: deskbarColors(context).selectedText,
+          minLeadingWidth: 24,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          leading: desktopEditor
+              ? Icon(switch (w.type) {
+                  'sessions' => Icons.view_agenda_outlined,
+                  'usage' => Icons.donut_large_outlined,
+                  _ => Icons.apps_outlined,
+                }, size: 18)
+              : Checkbox(
+                  value: w.visible,
+                  onChanged: (v) =>
+                      _result(workspace.setWidgetVisible(w.id, v ?? false)),
+                ),
+          title: Text(
+            w.title.isEmpty ? widgetTypeName(w.type) : w.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-          title: Text(w.title.isEmpty ? widgetTypeName(w.type) : w.title),
           onTap: () => _inspect(w.id),
           trailing: IconButton(
-            tooltip: '设置组件',
-            onPressed: () => _inspect(w.id),
-            icon: const Icon(Icons.tune),
+            tooltip: desktopEditor ? (w.visible ? '隐藏组件' : '显示组件') : '设置组件',
+            onPressed: () {
+              if (!desktopEditor) {
+                _inspect(w.id);
+                return;
+              }
+              _begin();
+              _result(workspace.setWidgetVisible(w.id, !w.visible));
+            },
+            icon: Icon(
+              desktopEditor
+                  ? (w.visible
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined)
+                  : Icons.tune,
+              size: 18,
+            ),
           ),
         ),
       if (workspace.activePage.widgets.isEmpty)
-        const Padding(
-          padding: EdgeInsets.all(12),
-          child: Text('新页面从空白开始，可以重复添加同类组件。'),
+        const Padding(padding: EdgeInsets.all(12), child: Text('从工具栏添加组件')),
+      if (!desktopEditor)
+        TextButton.icon(
+          onPressed: _addWidget,
+          icon: const Icon(Icons.add),
+          label: const Text('添加组件'),
         ),
-      TextButton.icon(
-        onPressed: _addWidget,
-        icon: const Icon(Icons.add),
-        label: const Text('添加组件'),
-      ),
     ],
   );
   Future<void> _inspect(String id) async {
@@ -974,7 +1352,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     setState(() {
       panel = 'widget';
       inspectedId = id;
+      if (desktopEditor) outlineTab = false;
     });
+    if (desktopEditor) editorFocus.requestFocus();
   }
 
   Widget _widgetInspector() {
@@ -993,6 +1373,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             value: w.title,
             onChanged: (v) => workspace.updateWidget(id, title: v),
           ),
+          if (desktopEditor) _placementControls(w),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('显示组件'),
@@ -1099,7 +1480,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     ];
     return LayoutBuilder(
       builder: (context, box) {
-        final columns = orientation == LayoutOrientation.wide
+        final columns = !desktopEditor && orientation == LayoutOrientation.wide
             ? math.max(1, (box.maxWidth / 260).floor()).clamp(1, 3)
             : 1;
         final columnWidth = (box.maxWidth - 24 - (columns - 1) * 16) / columns;
@@ -1117,6 +1498,71 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           ),
         );
       },
+    );
+  }
+
+  Widget _placementControls(LayoutWidget w) {
+    final r = w.placementFor(orientation);
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '位置与尺寸 · 网格',
+            style: TextStyle(color: deskbarColors(context).muted, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, box) => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final field in [
+                  ('x', 'X', r.x),
+                  ('y', 'Y', r.y),
+                  ('w', '宽', r.w),
+                  ('h', '高', r.h),
+                ])
+                  SizedBox(
+                    width: (box.maxWidth - 8) / 2,
+                    child: _DesktopNumberField(
+                      key: ValueKey(
+                        'placement-${w.id}-${orientation.name}-${field.$1}',
+                      ),
+                      label: field.$2,
+                      value: field.$3.toDouble(),
+                      min: field.$1 == 'x' || field.$1 == 'y' ? 0 : 1,
+                      max:
+                          (field.$1 == 'x' || field.$1 == 'w'
+                                  ? orientation.columns
+                                  : orientation.rows)
+                              .toDouble(),
+                      onChanged: (value) {
+                        final current = workspace
+                            .findWidget(w.id)!
+                            .placementFor(orientation);
+                        _result(
+                          workspace.setPlacement(
+                            w.id,
+                            orientation,
+                            switch (field.$1) {
+                              'x' => current.copyWith(x: value.round()),
+                              'y' => current.copyWith(y: value.round()),
+                              'w' => current.copyWith(w: value.round()),
+                              _ => current.copyWith(h: value.round()),
+                            },
+                            displace: true,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1259,19 +1705,111 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     ValueChanged<double> onChanged, {
     String suffix = ' dp',
     bool enabled = true,
-  }) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const SizedBox(height: 12),
-      Text('$label · ${value.round()}$suffix'),
-      Slider(
-        value: value.clamp(min, max),
-        min: min,
-        max: max,
-        divisions: math.max(1, (max - min).round()),
-        onChanged: enabled ? onChanged : null,
-      ),
-    ],
+  }) => desktopEditor
+      ? Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: _DesktopNumberField(
+            label: label,
+            value: value,
+            min: min,
+            max: max,
+            suffix: suffix.trim(),
+            onChanged: enabled ? onChanged : null,
+          ),
+        )
+      : Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 12),
+            Text('$label · ${value.round()}$suffix'),
+            Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: math.max(1, (max - min).round()),
+              onChanged: enabled ? onChanged : null,
+            ),
+          ],
+        );
+}
+
+/// Commit on Enter or blur, so a partially typed number never changes layout.
+class _DesktopNumberField extends StatefulWidget {
+  const _DesktopNumberField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.suffix = '',
+  });
+  final String label, suffix;
+  final double value, min, max;
+  final ValueChanged<double>? onChanged;
+  @override
+  State<_DesktopNumberField> createState() => _DesktopNumberFieldState();
+}
+
+class _DesktopNumberFieldState extends State<_DesktopNumberField> {
+  late final controller = TextEditingController(
+    text: widget.value.round().toString(),
+  );
+  final focus = FocusNode();
+  @override
+  void initState() {
+    super.initState();
+    focus.addListener(_blur);
+  }
+
+  void _blur() {
+    if (!focus.hasFocus) _commit();
+  }
+
+  void _commit() {
+    final value = double.tryParse(controller.text);
+    if (value != null &&
+        value.isFinite &&
+        value >= widget.min &&
+        value <= widget.max &&
+        value != widget.value) {
+      widget.onChanged?.call(value.roundToDouble());
+    }
+    // Also restore the actual value after invalid input or a rejected placement.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) controller.text = widget.value.round().toString();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopNumberField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && !focus.hasFocus) {
+      controller.text = widget.value.round().toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    focus.removeListener(_blur);
+    focus.dispose();
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextField(
+    controller: controller,
+    focusNode: focus,
+    enabled: widget.onChanged != null,
+    keyboardType: TextInputType.number,
+    decoration: InputDecoration(
+      labelText: widget.label,
+      suffixText: widget.suffix,
+      isDense: true,
+    ),
+    onSubmitted: (_) => _commit(),
+    onTapOutside: (_) => focus.unfocus(),
   );
 }
 
