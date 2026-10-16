@@ -3,6 +3,16 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+const defaultSessionDisplayLimit = 20;
+const maximumSessionDisplayLimit = 40;
+
+int sessionDisplayLimit(Map<String, dynamic> options) {
+  final value = options['maxSessions'];
+  return value is num && value.isFinite
+      ? value.round().clamp(1, maximumSessionDisplayLimit)
+      : defaultSessionDisplayLimit;
+}
+
 enum LayoutOrientation { wide, portrait }
 
 extension LayoutOrientationGrid on LayoutOrientation {
@@ -822,6 +832,7 @@ class LayoutWorkspace extends ChangeNotifier {
 
   static Map<String, dynamic> defaultOptions(String type) => switch (type) {
     'sessions' => {
+      'maxSessions': defaultSessionDisplayLimit,
       'showTitle': true,
       'itemWidth': 280.0,
       'itemHeight': 96.0,
@@ -952,6 +963,16 @@ void _validateBinding(Map<String, dynamic> binding) {
 
 void _validateOptions(String type, Map<String, dynamic> options) {
   if (!const {'sessions', 'usage', 'shortcuts'}.contains(type)) return;
+  if (type == 'sessions' && options.containsKey('maxSessions')) {
+    final limit = options['maxSessions'];
+    if (limit is! num ||
+        !limit.isFinite ||
+        limit != limit.round() ||
+        limit < 1 ||
+        limit > maximumSessionDisplayLimit) {
+      throw const FormatException('会话数量需为 1 到 40 的整数');
+    }
+  }
   for (final key in ['showTitle', 'fitRows', 'labels']) {
     if (options.containsKey(key) && options[key] is! bool) {
       throw const FormatException('组件开关参数无效');

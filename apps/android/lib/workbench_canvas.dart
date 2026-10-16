@@ -1013,8 +1013,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             currentHost == '' ||
             currentHost == data.hostId);
     final resources = <String, String>{
-      if (w.type == 'sessions' && data != null)
-        for (final s in data.sessions) s.id: s.title,
       if (w.type == 'shortcuts' && data != null)
         for (final s in data.shortcuts) s.id: s.name,
       if (w.type == 'usage' && data != null && source == 'codex.quota')
@@ -1053,7 +1051,22 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             }
           },
         ),
-        if (valid) ...[
+        if (w.type == 'sessions')
+          KeyedSubtree(
+            key: ValueKey('session-limit-${w.id}'),
+            child: _slider(
+              '最多显示会话数',
+              sessionDisplayLimit(w.options).toDouble(),
+              1,
+              maximumSessionDisplayLimit.toDouble(),
+              (v) => workspace.updateWidget(
+                w.id,
+                options: {'maxSessions': v.round()},
+              ),
+              suffix: ' 个',
+            ),
+          )
+        else if (valid) ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             key: ValueKey('resource-${w.id}-$source-$selectedResource'),

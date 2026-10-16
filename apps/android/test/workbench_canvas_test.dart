@@ -507,7 +507,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(selected('会话信息'), 'compact');
       expect(selected('已授权来源'), 'codex.sessions');
-      expect(selected('显示范围'), 'session');
+      expect(field('显示范围'), findsNothing);
+      expect(find.text('最多显示会话数 · 20 个'), findsOneWidget);
       expect(inspectorScroll().position.pixels, 0);
       await tester.drag(
         find.byType(SingleChildScrollView).last,
@@ -528,7 +529,8 @@ void main() {
       await open('session-b');
       expect(selected('会话信息'), 'normal');
       expect(selected('已授权来源'), 'codex.sessions');
-      expect(selected('显示范围'), 'session-b');
+      expect(field('显示范围'), findsNothing);
+      expect(find.text('最多显示会话数 · 20 个'), findsOneWidget);
       await tester.ensureVisible(field('会话信息'));
       await tester.pumpAndSettle();
       await tester.tap(field('会话信息'));
@@ -554,7 +556,8 @@ void main() {
       expect(selected('显示范围'), 'weekly');
       await open('session-a');
       expect(selected('会话信息'), 'compact');
-      expect(selected('显示范围'), 'session');
+      expect(field('显示范围'), findsNothing);
+      expect(find.text('最多显示会话数 · 20 个'), findsOneWidget);
       expect(inspectorScroll().position.pixels, aOffset);
       expect(tester.takeException(), isNull);
     },
@@ -833,7 +836,7 @@ void main() {
             body: WorkbenchWidgetBody(
               connection: connection,
               id: 'missing',
-              type: 'sessions',
+              type: 'usage',
               options: const {},
               binding: const {'resourceId': 'deleted'},
             ),

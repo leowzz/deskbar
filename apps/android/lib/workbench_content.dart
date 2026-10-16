@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'connection.dart';
+import 'layout_workspace.dart';
 import 'rawblock.dart';
 import 'top_notice.dart';
 import 'workbench_data.dart';
@@ -115,14 +116,8 @@ class WorkbenchWidgetBody extends StatelessWidget {
 
   Widget _sessions(BuildContext context, WorkbenchData data) {
     final source = data.source('codex.sessions');
-    final resource = binding['resourceId'];
-    final sessions = data.sessions
-        .where((s) => resource == null || resource == '' || s.id == resource)
-        .toList();
     if (source == null) return const _Message('请在电脑端开启「近期会话」共享。');
-    if (resource != null && resource != '' && sessions.isEmpty) {
-      return const _Message('绑定的会话不在共享范围，长按调整来源。');
-    }
+    final sessions = data.sessions.take(sessionDisplayLimit(options)).toList();
     final fresh = online && source.fresh(data.now);
     final allowed = data.capabilities.contains('open_session');
     final canOpen = !editing && fresh && allowed && !connection.opening;
