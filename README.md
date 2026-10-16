@@ -1,6 +1,6 @@
 # Desklet
 
-Desklet 把 Android 屏幕变成电脑旁的工作台。电脑安装 Agent，Android 安装 App，通过局域网配对连接。目标是显示会话、额度与 API 用量，并打开已授权的会话和快捷入口。
+Desklet 把 Android 屏幕变成电脑旁的工作台。电脑安装 **Desklet 连接助手**（Agent），Android 安装 **Desklet 工作台**，通过局域网配对连接。目标是显示会话、额度与 API 用量，并打开已授权的会话和快捷入口。
 
 **当前阶段：连接与配对的第一版实现。** 已有独立的 macOS 桌面 Agent 和 Android App，支持局域网发现、扫码或粘贴完整邀请、电脑确认、加密直连、自动重连和移除设备。配对后目前只显示电脑连接状态；会话、额度、API 用量、快捷入口和页面编辑尚未接入。
 
@@ -14,7 +14,7 @@ Desklet 把 Android 屏幕变成电脑旁的工作台。电脑安装 Agent，And
 - Session 卡片可调整目标宽高与间距；快捷入口可调整图标大小和横纵间距，也可铺满整页。
 - 配对绑定稳定主机身份与公钥，IP 变化后重新发现并核验原身份。
 
-项目名统一使用 **Desklet**，仓库名使用 `desklet`。
+产品系列名使用 **Desklet**，仓库名使用 `desklet`。电脑端对外名称为 **Desklet 连接助手**，移动端为 **Desklet 工作台**。应用标识、协议身份和配置目录保持不变。
 
 ## 从这里开始
 
@@ -36,7 +36,7 @@ Desklet 把 Android 屏幕变成电脑旁的工作台。电脑安装 Agent，And
 
 ```sh
 make setup           # 安装桌面与 Flutter 依赖
-make dev             # 打开桌面 Agent，关闭窗口后仍在菜单栏运行
+make dev             # 打开 Desklet 连接助手，关闭窗口后仍在菜单栏运行
 make android         # 在指定 Android 设备运行，先设置 ANDROID_DEVICE
 make check           # 文档、格式、Rust 测试、桌面类型与 Flutter 检查
 make android-build   # 生成开发 APK，不是签名发布版本
@@ -45,7 +45,7 @@ make prototype       # 保留原 HTML 布局原型预览
 
 `make android ANDROID_DEVICE=<设备序列号>` 用于选择运行设备。Android 开发 APK 位于 `apps/android/build/app/outputs/flutter-apk/app-debug.apk`。
 
-两端连接同一 Wi-Fi，在电脑上点击「连接设备」，再在 Android 扫码。没有摄像头时，复制完整邀请并在 Android 点击「粘贴邀请」；最后回到电脑允许连接。邀请两分钟过期，只能配对一台设备。电脑可随时移除已配对设备。
+两端连接同一 Wi-Fi，在电脑上点击「连接设备」，再在 Android 的「Desklet 工作台」中扫码。没有摄像头时，复制完整邀请并在 Android 点击「粘贴邀请」；最后回到电脑允许连接。邀请两分钟过期，只能配对一台设备。电脑可随时移除已配对设备。
 
 工作台 App 退到后台时暂停连接，回到前台后重新同步。自动发现不可用时仍可扫码或粘贴邀请；访客网络隔离和防火墙仍可能阻止直连。启动遇到配置或钥匙串访问问题时会显示提示，处理后退出重开。
 

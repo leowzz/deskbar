@@ -87,7 +87,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
     private fun friendly(error: Exception): String = when (error) {
         is UserError -> error.message ?: "连接未完成，请重试"
         is javax.net.ssl.SSLException -> "无法核验这台电脑，请重新生成邀请；已配对电脑换了身份时需要重新配对"
-        else -> "未能连接电脑，请确认两端在同一局域网，电脑上的 Desklet 正在运行"
+        else -> "未能连接电脑，请确认两端在同一局域网，电脑上的 Desklet 连接助手正在运行"
     }
     private fun randomSecret(): String = ByteArray(32).also { SecureRandom().nextBytes(it) }.let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
 
@@ -215,7 +215,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                         state("revoked", "电脑已移除这台设备，请重新配对", ticket)
                     } else if (json.getString("host_id") == host.getString("host_id") && json.getInt("protocol_version") == 1) {
                         emit(JSONObject().put("type", "snapshot").put("snapshot", json), ticket)
-                    } else { webSocket.cancel(); socket = null; state("offline", "电脑版本不兼容，请更新 Desklet", ticket) }
+                    } else { webSocket.cancel(); socket = null; state("offline", "电脑版本不兼容，请更新 Desklet 连接助手", ticket) }
                 } catch (_: Exception) { webSocket.cancel(); socket = null; state("offline", "未能读取电脑状态，请重试", ticket) }
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

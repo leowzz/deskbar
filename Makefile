@@ -7,7 +7,7 @@ ANDROID_DEVICE ?=
 .PHONY: help setup dev prototype android android-build desktop-build check docs-check test-android-connection
 
 help:
-	@printf '%s\n' 'Desklet — 电脑旁的工作台' '  make setup          安装依赖' '  make dev            运行桌面 Agent' '  make android        运行 Android（设置 ANDROID_DEVICE）' '  make check          文档与代码检查' '  make desktop-build  构建桌面开发版本' '  make android-build  构建 Android 开发 APK' '  make prototype      预览 HTML 布局原型'
+	@printf '%s\n' 'Desklet — 电脑旁的工作台' '  make setup          安装依赖' '  make dev            运行 Desklet 连接助手' '  make android        运行 Desklet 工作台（设置 ANDROID_DEVICE）' '  make check          文档与代码检查' '  make desktop-build  构建桌面开发版本' '  make android-build  构建 Android 开发 APK' '  make prototype      预览 HTML 布局原型'
 
 setup:
 	pnpm install --frozen-lockfile

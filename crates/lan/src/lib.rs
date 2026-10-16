@@ -39,7 +39,7 @@ impl Identity {
                 let value = KeyPair::generate()?.serialize_pem();
                 entry
                     .set_password(&value)
-                    .context("无法保存电脑身份，请允许 Desklet 访问系统钥匙串后重试")?;
+                    .context("无法保存电脑身份，请允许 Desklet 连接助手访问系统钥匙串后重试")?;
                 value
             }
             Err(e) => return Err(e).context("无法读取电脑身份，请解锁系统钥匙串后重试"),

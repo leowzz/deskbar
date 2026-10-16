@@ -114,7 +114,7 @@ impl Host {
             .truncate(false)
             .open(directory.join("agent.lock"))?;
         lock.try_lock()
-            .context("Desklet 已在运行，请从菜单栏打开")?;
+            .context("Desklet 连接助手已在运行，请从菜单栏打开")?;
         let path = directory.join("host.yaml");
         let settings: Settings = if path.exists() {
             serde_yaml::from_str(&fs::read_to_string(&path)?)

@@ -44,10 +44,10 @@ fn main() {
                 .trim_end_matches(".local")
                 .to_string();
             let agent = tauri::async_runtime::block_on(Agent::start(directory, name))
-                .map_err(|e| format!("{e}。请退出 Desklet 后重试"));
+                .map_err(|e| format!("{e}。请退出 Desklet 连接助手后重试"));
             app.manage(AgentState(agent));
-            let show = MenuItem::with_id(app, "show", "打开 Desklet", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "退出 Desklet", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "打开 Desklet 连接助手", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出 Desklet 连接助手", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
             // Small monochrome screen, generated in memory; no icon asset pipeline.
             let mut rgba = vec![0u8; 22 * 22 * 4];
@@ -66,7 +66,7 @@ fn main() {
             TrayIconBuilder::new()
                 .icon(tauri::image::Image::new_owned(rgba, 22, 22))
                 .icon_as_template(true)
-                .tooltip("Desklet")
+                .tooltip("Desklet 连接助手")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
@@ -95,5 +95,5 @@ fn main() {
             revoke_device
         ])
         .run(tauri::generate_context!())
-        .expect("Desklet 无法启动");
+        .expect("Desklet 连接助手无法启动");
 }

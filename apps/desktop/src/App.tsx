@@ -99,8 +99,8 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#">
-          Desklet
+        <a className="brand" href="#" aria-label="Desklet 连接助手">
+          Desklet<span className="brand-role">连接助手</span>
         </a>
         <div className="nav-label">这台电脑</div>
         <div className="nav-item">
@@ -149,7 +149,7 @@ export function App() {
             <h2>{status?.name ?? "这台电脑"}</h2>
             <p>
               {status
-                ? "Desklet 正在运行"
+                ? "连接助手正在运行"
                 : loadError
                   ? "连接暂不可用"
                   : "正在读取连接状态"}
@@ -227,7 +227,9 @@ export function App() {
         ) : (
           <section className="empty-state">
             <h2>为电脑添一块屏幕</h2>
-            <p>在 Android 上打开 Desklet，扫描连接邀请，再回到这里确认。</p>
+            <p>
+              在 Android 上打开 Desklet 工作台，扫描连接邀请，再回到这里确认。
+            </p>
             <button className="secondary" disabled={busy} onClick={invite}>
               连接第一台设备
             </button>
@@ -247,7 +249,7 @@ export function App() {
             <h3>找不到电脑？</h3>
             <p>
               确认两端已连接同一 Wi-Fi，并允许 Desklet
-              访问本地网络。访客网络可能禁止设备互相连接。
+              连接助手访问本地网络。访客网络可能禁止设备互相连接。
             </p>
             <p>自动发现不可用时，可以扫描或粘贴完整连接邀请。</p>
             {status?.addresses.map((address) => (
@@ -312,7 +314,7 @@ export function App() {
                 在 Android 上<br />
                 扫码连接
               </h2>
-              <p>打开 Desklet，点击「扫码连接电脑」。</p>
+              <p>打开 Desklet 工作台，点击「扫码连接电脑」。</p>
               <div className="qr">
                 {remaining > 0 && qr ? (
                   <img src={qr} alt="Desklet 一次性连接邀请二维码" />

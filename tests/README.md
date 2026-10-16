@@ -20,6 +20,7 @@ make test-android-connection ANDROID_DEVICE=emulator-5560
 
 - macOS：桌面前端生产构建、Tauri 原生编译与开发程序启动；桌面浏览器在宽屏与 560 像素窗口检查设备管理、邀请、确认与移除，交互使用测试桥接数据。
 - Android：Flutter 分析、组件测试、debug APK 构建；Android 12 / API 31 arm64 模拟器的上述原生连接测试通过。
+- 小米 14 Ultra / Android 16（API 36、arm64）：改名后的「Desklet 工作台」开发 APK 已通过 USB 安装并启动，确认前台 Activity 和进程存在。该记录仅证明安装与启动，扫码、配对及网络权限仍待用户现场测试。
 - Rust：邀请过期、错误秘密、一次邀请不能被其他设备复用、相同请求重试、审批、摘要保存、撤权、重启保留身份 / 更换 epoch、重复进程锁、真实 TLS 认证测试通过。
 
 ## 仍未完成

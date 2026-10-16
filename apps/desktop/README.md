@@ -1,4 +1,4 @@
-# Desktop Agent
+# Desklet 连接助手
 
 Tauri + React / TypeScript + Rust 的独立 macOS 连接应用。界面负责连接邀请、设备确认和移除，托盘负责窗口打开与退出；关闭窗口保留后台连接。当前没有采集或打开会话的能力。
 

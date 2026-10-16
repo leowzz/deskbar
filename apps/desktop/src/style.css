@@ -120,6 +120,11 @@ h3 {
   text-decoration: none;
   margin: 0 8px 64px;
 }
+.brand-role {
+  display: block;
+  margin-top: 8px;
+  font: 600 16px/1.5 var(--body-font);
+}
 .brand:focus-visible {
   outline-color: var(--white);
 }

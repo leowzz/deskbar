@@ -10,7 +10,7 @@ class DeskletApp extends StatelessWidget {
   const DeskletApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Desklet',
+    title: 'Desklet 工作台',
     debugShowCheckedModeBanner: false,
     theme: rawBlockTheme(),
     home: const Workbench(),
@@ -68,7 +68,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('在电脑上的 Desklet 点击「连接设备」，复制完整邀请。'),
+                const Text('在电脑上的 Desklet 连接助手点击「连接设备」，复制完整邀请。'),
                 const SizedBox(height: 20),
                 TextField(
                   controller: invitation,
@@ -159,7 +159,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
       final text = Theme.of(context).textTheme;
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Desklet'),
+          title: const Text('Desklet 工作台', style: TextStyle(fontSize: 22)),
           shape: const Border(bottom: BorderSide(width: 3)),
         ),
         body: SafeArea(
@@ -255,13 +255,13 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                       Text(
                         online
                             ? '工作台还没有内容。会话、额度和快捷入口将在后续版本中加入。'
-                            : '请保持电脑上的 Desklet 运行，并连接同一局域网。恢复后会自动重连。',
+                            : '请保持电脑上的 Desklet 连接助手运行，并连接同一局域网。恢复后会自动重连。',
                       ),
                     ] else ...[
                       const SizedBox(height: 16),
                       Text('电脑旁的\n另一块屏幕', style: text.headlineMedium),
                       const SizedBox(height: 24),
-                      const Text('在电脑和这里打开 Desklet，连接同一 Wi-Fi，即可开始。'),
+                      const Text('在电脑上打开 Desklet 连接助手，连接同一 Wi-Fi，即可开始。'),
                       const SizedBox(height: 32),
                       Wrap(
                         spacing: 12,

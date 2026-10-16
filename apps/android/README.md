@@ -1,4 +1,4 @@
-# Android Workbench
+# Desklet 工作台
 
 Flutter + Kotlin 的独立 Android App，标识 `app.desklet.workbench`，最低 Android 9。当前支持扫码 / 粘贴完整邀请、等待电脑确认、连接状态、搜索附近电脑、前台恢复重连和断开电脑；工作台业务组件尚未加入。
 
