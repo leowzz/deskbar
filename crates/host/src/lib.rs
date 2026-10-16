@@ -1,4 +1,6 @@
 //! Host identity, device approval and authorized state. No window or network dependencies.
+pub mod sources;
+pub mod workbench;
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rand::RngCore;
@@ -11,6 +13,7 @@ use std::{
 };
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
+use workbench::*;
 
 pub fn now() -> u64 {
     SystemTime::now()
@@ -37,6 +40,8 @@ pub struct Device {
     pub id: String,
     pub name: String,
     pub paired_at: u64,
+    #[serde(default)]
+    pub permissions: Permissions,
     #[serde(skip_serializing, default)]
     pub token_hash: String,
 }
@@ -48,6 +53,8 @@ struct StoredDevice {
     name: String,
     paired_at: u64,
     token_hash: String,
+    #[serde(default)]
+    permissions: Permissions,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -55,6 +62,8 @@ struct Settings {
     host_id: String,
     name: String,
     devices: Vec<StoredDevice>,
+    #[serde(default)]
+    shortcuts: Vec<ShortcutConfig>,
 }
 
 #[derive(Clone, Serialize)]
@@ -86,6 +95,9 @@ pub struct Host {
     pub epoch: String,
     pub revision: u64,
     pub devices: Vec<Device>,
+    pub workbench: Workbench,
+    pub shortcuts: Vec<ShortcutConfig>,
+    commands: std::collections::HashMap<(String, String), (Command, CommandResult)>,
     path: PathBuf,
     invitation: Option<Invitation>,
     pending: Option<Pending>,
@@ -100,7 +112,15 @@ pub struct Snapshot {
     pub epoch: String,
     pub revision: u64,
     pub server_time: u64,
-    pub sources: Vec<serde_json::Value>,
+    pub sources: Vec<SourceState>,
+    #[serde(default)]
+    pub sessions: Vec<Session>,
+    #[serde(default)]
+    pub session_total: usize,
+    #[serde(default)]
+    pub quotas: Vec<Quota>,
+    #[serde(default)]
+    pub shortcuts: Vec<Shortcut>,
     pub capabilities: Vec<String>,
 }
 
@@ -124,6 +144,7 @@ impl Host {
                 host_id: Uuid::new_v4().to_string(),
                 name: default_name,
                 devices: vec![],
+                shortcuts: vec![],
             }
         };
         let host = Self {
@@ -139,8 +160,12 @@ impl Host {
                     name: d.name,
                     paired_at: d.paired_at,
                     token_hash: d.token_hash,
+                    permissions: d.permissions,
                 })
                 .collect(),
+            workbench: Workbench::default(),
+            shortcuts: settings.shortcuts,
+            commands: Default::default(),
             path,
             invitation: None,
             pending: None,
@@ -154,6 +179,7 @@ impl Host {
         let settings = Settings {
             host_id: self.id.clone(),
             name: self.name.clone(),
+            shortcuts: self.shortcuts.clone(),
             devices: devices
                 .iter()
                 .map(|d| StoredDevice {
@@ -161,6 +187,7 @@ impl Host {
                     name: d.name.clone(),
                     paired_at: d.paired_at,
                     token_hash: d.token_hash.clone(),
+                    permissions: d.permissions.clone(),
                 })
                 .collect(),
         };
@@ -265,6 +292,7 @@ impl Host {
             name: p.info.name.clone(),
             paired_at: time,
             token_hash: digest(&p.token),
+            permissions: Permissions::default(),
         });
         self.save(&devices)?;
         self.devices = devices;
@@ -318,7 +346,11 @@ impl Host {
             epoch: self.epoch.clone(),
             revision: self.revision,
             server_time: now(),
-            sources: vec![],
+            sources: self.workbench.sources.clone(),
+            sessions: self.workbench.sessions.clone(),
+            session_total: self.workbench.session_total,
+            quotas: self.workbench.quotas.clone(),
+            shortcuts: self.shortcuts.iter().map(ShortcutConfig::public).collect(),
             capabilities: vec![],
         }
     }

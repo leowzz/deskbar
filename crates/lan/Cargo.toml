@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+open = "5"
 desklet-host = { path = "../host" }
 anyhow.workspace = true
 serde.workspace = true

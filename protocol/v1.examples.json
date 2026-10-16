@@ -22,10 +22,47 @@
     "epoch": "example-process",
     "revision": 1,
     "server_time": 1792123200,
-    "sources": [],
-    "capabilities": []
+    "sources": [
+      {
+        "source_id": "codex.sessions",
+        "health": "ready",
+        "message": "",
+        "observed_at": 1792123200,
+        "fresh_until": 1792123220
+      }
+    ],
+    "capabilities": [
+      "open_session"
+    ],
+    "sessions": [
+      {
+        "session_id": "00000000-0000-4000-8000-000000000001",
+        "version": "example-resource-version",
+        "title": "继续实现工作台",
+        "project": "desklet",
+        "status": "running",
+        "updated_at": 1792123200
+      }
+    ],
+    "session_total": 1,
+    "quotas": [],
+    "shortcuts": []
   },
   "revocation": {
     "type": "revoked"
+  },
+  "command": {
+    "command_id": "00000000-0000-4000-8000-000000000002",
+    "host_id": "example-host",
+    "host_epoch": "example-process",
+    "action": "open_session",
+    "target_id": "00000000-0000-4000-8000-000000000001",
+    "target_version": "example-resource-version",
+    "expires_at": 1792123208
+  },
+  "command_result": {
+    "command_id": "00000000-0000-4000-8000-000000000002",
+    "status": "succeeded",
+    "message": "电脑已接受打开请求"
   }
 }

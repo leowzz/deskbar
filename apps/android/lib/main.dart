@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'connection.dart';
+import 'workbench_content.dart';
 import 'rawblock.dart';
 
 void main() => runApp(const DeskletApp());
@@ -165,7 +166,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
+              constraints: const BoxConstraints(maxWidth: 1200),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -246,17 +247,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 40),
-                      Text(
-                        online ? '电脑已连接' : '等待电脑\n恢复连接',
-                        style: text.headlineMedium,
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        online
-                            ? '工作台还没有内容。会话、额度和快捷入口将在后续版本中加入。'
-                            : '请保持电脑上的 Desklet 连接助手运行，并连接同一局域网。恢复后会自动重连。',
-                      ),
+                      WorkbenchContent(connection: connection),
                     ] else ...[
                       const SizedBox(height: 16),
                       Text('电脑旁的\n另一块屏幕', style: text.headlineMedium),

@@ -491,3 +491,81 @@ footer .text-button {
     font-size: 40px;
   }
 }
+.sharing {
+  border: 0;
+  padding: 0;
+  margin: 16px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.sharing legend {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.sharing label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+input[type="checkbox"] {
+  accent-color: #000;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+.source-card {
+  border: 3px solid #000;
+  padding: 20px;
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+}
+.source-card p {
+  margin: 16px 0;
+}
+.source-card .status-tag {
+  display: inline-block;
+  white-space: normal;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 0;
+  border-bottom: 3px solid #000;
+}
+.shortcut-row > div:first-child {
+  flex: 1;
+  min-width: min(240px, 100%);
+  overflow-wrap: anywhere;
+}
+.shortcut-form {
+  border: 3px solid #000;
+  padding: 24px;
+  margin-top: 24px;
+}
+.shortcut-form label {
+  display: block;
+  margin: 16px 0;
+}
+.shortcut-form input,
+.shortcut-form select {
+  display: block;
+  border: 3px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px;
+  font: 15px/1.5 var(--mono-font);
+  margin-top: 8px;
+}

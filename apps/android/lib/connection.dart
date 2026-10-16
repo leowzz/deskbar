@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'workbench_data.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,9 @@ class Connection extends ChangeNotifier {
   bool searching = false;
   List<String> nearby = [];
   DateTime? lastSeen;
+  WorkbenchData? data;
+  bool opening = false;
+  Timer? _clock;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnect;
   bool _active = true;
@@ -36,6 +40,9 @@ class Connection extends ChangeNotifier {
         notifyListeners();
       },
     );
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (data != null) notifyListeners();
+    });
     await restore();
     if (_disposed) return;
     _reconnect = Timer.periodic(const Duration(seconds: 8), (_) {
@@ -51,9 +58,13 @@ class Connection extends ChangeNotifier {
   Future<void> restore() async {
     try {
       final value = await _channel.invokeMethod<String>('restore');
-      hostName = value == null
+      final saved = value == null
           ? null
-          : (jsonDecode(value) as Map<String, dynamic>)['name'] as String;
+          : jsonDecode(value) as Map<String, dynamic>;
+      hostName = saved?['name'] as String?;
+      data = saved?['snapshot'] == null
+          ? null
+          : WorkbenchData(saved!['snapshot'] as Map<String, dynamic>);
       phase = hostName == null
           ? ConnectionPhase.unpaired
           : ConnectionPhase.connecting;
@@ -74,8 +85,9 @@ class Connection extends ChangeNotifier {
         hostName = event['name'] as String;
         error = null;
       case 'snapshot':
-        hostName =
-            (event['snapshot'] as Map<String, dynamic>)['name'] as String;
+        final snapshot = event['snapshot'] as Map<String, dynamic>;
+        data = WorkbenchData(snapshot);
+        hostName = snapshot['name'] as String;
         lastSeen = DateTime.now();
         phase = ConnectionPhase.online;
         error = null;
@@ -89,6 +101,7 @@ class Connection extends ChangeNotifier {
       case 'revoked':
         hostName = null;
         lastSeen = null;
+        data = null;
         phase = ConnectionPhase.unpaired;
         error = event['message'] as String?;
     }
@@ -165,12 +178,43 @@ class Connection extends ChangeNotifier {
       await _channel.invokeMethod<void>('forget');
       hostName = null;
       lastSeen = null;
+      data = null;
       error = null;
       phase = ConnectionPhase.unpaired;
     } on PlatformException catch (e) {
       error = e.message;
     }
     notifyListeners();
+  }
+
+  Future<String> open(String action, String id, String version) async {
+    if (opening) return '请等待上一次操作完成';
+    final snapshot = data;
+    if (!_active || phase != ConnectionPhase.online || snapshot == null) {
+      return '电脑离线，连接后才能打开';
+    }
+    if (!snapshot.capabilities.contains(action)) return '请在电脑上允许这台设备打开内容';
+    final attempt = _attempt;
+    opening = true;
+    notifyListeners();
+    try {
+      final value = await _channel.invokeMethod<String>('command', {
+        'host_id': snapshot.hostId,
+        'host_epoch': snapshot.epoch,
+        'action': action,
+        'target_id': id,
+        'target_version': version,
+        'expires_at': snapshot.now + 8,
+      });
+      if (attempt != _attempt) return '操作已结束，请查看电脑';
+      final result = jsonDecode(value!) as Map<String, dynamic>;
+      return result['message'] as String;
+    } on PlatformException catch (e) {
+      return e.message ?? '结果未知，请先查看电脑；不会自动重试';
+    } finally {
+      opening = false;
+      notifyListeners();
+    }
   }
 
   Future<void> setActive(bool active) async {
@@ -200,6 +244,7 @@ class Connection extends ChangeNotifier {
     _disposed = true;
     _attempt++;
     _reconnect?.cancel();
+    _clock?.cancel();
     unawaited(_subscription?.cancel());
     super.dispose();
   }

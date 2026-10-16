@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { WorkbenchSettings, Sharing } from "./WorkbenchSettings";
 import QRCode from "qrcode";
 import { call, type Invitation, type Status } from "./api";
 
@@ -190,6 +191,7 @@ export function App() {
                     )}{" "}
                     配对
                   </p>
+                  <Sharing device={device} busy={busy} run={run} />
                 </div>
                 {removeId === device.id ? (
                   <div className="remove-confirm">
@@ -235,6 +237,7 @@ export function App() {
             </button>
           </section>
         )}
+        {status && <WorkbenchSettings status={status} busy={busy} run={run} />}
         <footer>
           <span>电脑和设备需要连接同一局域网。</span>
           <button
@@ -288,7 +291,7 @@ export function App() {
               </h2>
               <p className="request-name">{pending.name}</p>
               <p>
-                只确认你正在操作的设备。连接后，它可以读取这台电脑共享的状态；你随时可以移除它。
+                只确认你正在操作的设备。连接后，请在设备卡片中选择共享内容；你随时可以修改权限或移除设备。
               </p>
               <div className="modal-actions">
                 <button className="secondary" disabled={busy} onClick={close}>

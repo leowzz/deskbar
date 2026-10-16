@@ -58,7 +58,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
             }
             "restore" -> io.execute { try {
                 val host = store.load()
-                main.post { result.success(host?.let { JSONObject().put("name", it.getString("name")).put("host_id", it.getString("host_id")).toString() }) }
+                main.post { result.success(host?.let { JSONObject().put("name", it.getString("name")).put("host_id", it.getString("host_id")).put("snapshot", it.optJSONObject("snapshot")).toString() }) }
             } catch (_: Exception) { main.post { result.error("storage", "无法读取已保存的连接，请重试或移除后重新配对", null) } } }
             "pair" -> {
                 stop()
@@ -75,6 +75,22 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                     io.execute { try { connect(ticket) } catch (e: Exception) { if (e !is RevokedError) state("offline", friendly(e), ticket) } finally { if (ticket == generation.get()) connecting = false } }
                 }
                 result.success(null)
+            }
+            "command" -> {
+                val ticket = generation.get()
+                val input = JSONObject(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()).put("command_id", UUID.randomUUID().toString())
+                io.execute {
+                    try {
+                        val response = command(input, ticket)
+                        main.post { result.success(response.toString()) }
+                    } catch (e: Exception) {
+                        if (e is RevokedError) {
+                            synchronized(this) { if (ticket == generation.get()) store.clear() }
+                            state("revoked", "电脑已移除这台设备，请重新配对", ticket)
+                        }
+                        main.post { result.error("command", if (e is UserError) e.message else "结果未知，请先查看电脑；不会自动重试", null) }
+                    }
+                }
             }
             "discover" -> io.execute { try { val found = discover(); main.post { result.success(found.toString()) } }
                 catch (_: Exception) { main.post { result.error("discovery", "未能搜索局域网，请检查 Wi-Fi 后重试；也可以直接扫码连接", null) } } }
@@ -214,6 +230,13 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                         socket = null; webSocket.cancel()
                         state("revoked", "电脑已移除这台设备，请重新配对", ticket)
                     } else if (json.getString("host_id") == host.getString("host_id") && json.getInt("protocol_version") == 1) {
+                        synchronized(this@ConnectionRuntime) {
+                            if (ticket != generation.get() || socket !== webSocket) return
+                            val saved = store.load() ?: return
+                            json.put("received_at", System.currentTimeMillis() / 1000)
+                            saved.put("snapshot", json)
+                            store.save(saved)
+                        }
                         emit(JSONObject().put("type", "snapshot").put("snapshot", json), ticket)
                     } else { webSocket.cancel(); socket = null; state("offline", "电脑版本不兼容，请更新 Desklet 连接助手", ticket) }
                 } catch (_: Exception) { webSocket.cancel(); socket = null; state("offline", "未能读取电脑状态，请重试", ticket) }
@@ -234,6 +257,26 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                 }
             }
         })
+    }
+
+    private fun command(input: JSONObject, ticket: Long): JSONObject {
+        if (ticket != generation.get() || socket == null) throw UserError("电脑离线，连接后才能打开")
+        val host = store.load() ?: throw UserError("请重新连接电脑")
+        val http = client ?: throw UserError("电脑离线，连接后才能打开")
+        val endpoint = host.getString("endpoint")
+        val token = host.getString("token")
+        val id = input.getString("command_id")
+        // Submit once. A lost response is resolved only by querying this ID.
+        var response = try { request(http, endpoint, "/v1/commands", input, token) }
+            catch (e: UserError) { throw e }
+            catch (_: Exception) { request(http, endpoint, "/v1/commands/$id", token = token) }
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(7)
+        while (response.optString("status") == "accepted" && ticket == generation.get() && System.nanoTime() < deadline) {
+            Thread.sleep(200)
+            response = request(http, endpoint, "/v1/commands/$id", token = token)
+        }
+        if (response.optString("status") == "accepted") return JSONObject().put("status", "unknown").put("message", "电脑已接收，结果暂未确认；请先查看电脑")
+        return response
     }
 
     private fun discover(): JSONArray {

@@ -1,3 +1,8 @@
+import 'package:desklet/connection.dart';
+import 'package:desklet/workbench_content.dart';
+import 'package:desklet/workbench_data.dart';
+import 'package:desklet/rawblock.dart';
+import '../test/workbench_fixture.dart';
 import 'package:desklet/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,5 +36,29 @@ void main() {
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
+    final connection = Connection()
+      ..data = WorkbenchData(snapshot())
+      ..phase = ConnectionPhase.online;
+    addTearDown(connection.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: rawBlockTheme(),
+        home: Scaffold(
+          appBar: AppBar(title: const Text('Desklet 工作台')),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: WorkbenchContent(connection: connection),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('43%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    if (capture) {
+      await binding.takeScreenshot('rawblock-workbench');
+    }
   });
 }

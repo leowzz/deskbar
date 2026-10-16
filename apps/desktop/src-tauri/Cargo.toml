@@ -7,7 +7,9 @@ edition.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+tauri-plugin-dialog = "2"
 tauri = { version = "2", features = ["tray-icon"] }
+desklet-host = { path = "../../../crates/host" }
 desklet-lan = { path = "../../../crates/lan" }
 tokio.workspace = true
 hostname = "0.4"

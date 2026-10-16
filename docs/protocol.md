@@ -1,6 +1,6 @@
 # LAN 协议草案
 
-状态：连接子集已有第一版实现，其余为目标草案。下列路径、字段和时间值是建议契约，需在连接原型中验证后冻结。2026-10-16。
+状态：连接、授权快照与有限动作已有第一版实现，其余为目标草案。下列路径、字段和时间值是建议契约，需在连接原型中验证后冻结。2026-10-16。
 
 ## 身份与地址分离
 
@@ -128,8 +128,18 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 - 连接邀请为 `desklet://pair` URI，携带版本、Host、名称、SPKI pin、候选 HTTPS 地址、配对会话、256 位秘密和过期时刻。完整邀请只能经用户可信的扫码 / 复制路径输入；普通发现消息不替换已保存 pin。无摄像头路径使用完整邀请，尚无短码 PAKE。
 - `POST /v1/pairing/request` 接收 `session_id`、`secret`、`claim`（客户端 256 位随机秘密）、`name`，返回 `id`、`name`、`expires_at`。相同邀请与 claim 重试返回原请求，其他请求无法再次消费邀请。
 - `POST /v1/pairing/status` 接收 `request_id` 与 `claim`；审批前返回 `token: null`，电脑审批后在邀请有效期内返回独立 256 位设备令牌。过期、取消与移除后不可再领取。
-- `GET /v1/snapshot` 与 `GET /v1/events`（WSS）使用 Authorization Bearer。WSS 订阅先登记再读取初始完整快照，十秒发送一次授权状态。源列表与能力目前为空，不把心跳冒充来源刷新。撤权使后续请求返回 401，并向现存 WSS 发送 `{"type":"revoked"}` 后关闭。
+- `GET /v1/snapshot` 与 `GET /v1/events`（WSS）使用 Authorization Bearer。WSS 订阅先登记再读取初始完整快照，十秒发送一次授权状态。快照携带按设备许可裁剪的来源、近期会话、额度、入口和能力；心跳不延长来源新鲜度。撤权使后续请求返回 401，并向现存 WSS 发送 `{"type":"revoked"}` 后关闭。
 - Android 不跟随重定向，TLS 验证证书有效期并固定 SPKI；重连优先使用最近地址，失败后搜索相同 Host。新 offer 的 pin 不能更改现存信任。收到撤权清除本机凭据；普通离线保留配对。
-- 监听端口占用时回退到随机可用端口，邀请与 offer 携带实际端口。还没有局部扫描、mDNS、动作和资源接口。
+- 监听端口占用时回退到随机可用端口，邀请与 offer 携带实际端口。尚无局部扫描、mDNS 和图标资源接口。
 
 消息样例见 [protocol/v1.examples.json](../protocol/v1.examples.json)。Schema 与跨语言类型生成尚未加入，v1 子集仍可能在阶段 1 验证时调整。
+
+
+## v1 工作台实现子集
+
+- 时间为 UTC Unix 秒。`sources` 的 `source_id` 为 `codex.sessions` 或 `codex.quota`，包含 `health`（ready / error）、安全提示 `message`、`observed_at` 和 `fresh_until`。会话每五秒采集、二十秒有效；额度每两分钟采集、一百八十秒有效。失败保留最后值和原时间，显示失败而非伪造刷新。
+- `sessions`：`session_id`、`version`、`title`、`project`、`status`、`updated_at`。最多 40 个；`session_total` 是未归档主会话总数。`quotas`：`id`、`label`、`remaining_percent`、`resets_at`、`window_minutes`；缺失字段不补造额度。`shortcuts`：`shortcut_id`、`version`、`name`、`kind`。原始 URL / 应用路径仅在电脑端设置界面与配置中存在。
+- 设备许可为 `sessions`、`quota`、`shortcuts` 和 `open`，默认 false；升级旧记录也默认关闭。读取快照时按许可清空集合；`open` 加对应读取许可才公布 `open_session` / `open_shortcut` 能力。撤销单项共享会推送完整裁剪快照，替换 Android 的加密缓存。
+- `POST /v1/commands` 接收 `command_id`（UUID）、`host_id`、`host_epoch`、`action`、`target_id`、`target_version`、`expires_at`；未知字段拒绝。不接受路径、URL 或 shell。Host 验证设备、epoch、最长十秒有效期、当前权限、资源版本及来源健康。网页仅允许完整 http / https URL（不含登录凭据）；应用需为存在的绝对路径，macOS 限 .app。
+- 初次有效请求返回 `accepted` 并启动有界 OS 打开，`GET /v1/commands/{id}` 返回本设备的结果。打开命令五秒超时记 unknown；OS 接受记 succeeded，不保证窗口前置。Android 使用八秒有效期，提交一次后只查询同一 ID，传输失败不重新 POST。
+- 当前 epoch 内最多保留 4096 个设备与命令 ID 组合，不淘汰后重执行；满额拒绝新动作并提示重启。重复内容返回原结果，冲突拒绝；不同设备不能查询彼此结果。重启后旧 epoch 请求拒绝，找不到记录返回 unknown，不能推断未执行。设备撤销后所有受保护接口返回 401。

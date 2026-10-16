@@ -35,8 +35,71 @@ fn revoke_device(state: State<AgentState>, id: String) -> Result<(), String> {
     state.agent()?.revoke(&id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn set_permissions(
+    state: State<AgentState>,
+    id: String,
+    permissions: desklet_host::workbench::Permissions,
+) -> Result<(), String> {
+    state
+        .agent()?
+        .set_permissions(&id, permissions)
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn save_shortcut(
+    state: State<AgentState>,
+    item: desklet_host::workbench::ShortcutConfig,
+) -> Result<(), String> {
+    state
+        .agent()?
+        .save_shortcut(item)
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn remove_shortcut(state: State<AgentState>, id: String) -> Result<(), String> {
+    state
+        .agent()?
+        .remove_shortcut(&id)
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn refresh_sources(state: State<AgentState>) -> Result<(), String> {
+    state.agent()?.refresh_sources();
+    Ok(())
+}
+
+#[tauri::command]
+async fn choose_application(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut picker = app.dialog().file().set_title("选择要共享的应用");
+        #[cfg(target_os = "macos")]
+        {
+            picker = picker
+                .set_directory("/Applications")
+                .add_filter("应用", &["app"]);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            picker = picker.add_filter("应用", &["exe"]);
+        }
+        picker
+            .blocking_pick_file()
+            .map(|p| {
+                p.into_path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .map_err(|_| "无法读取应用路径".to_string())
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|_| "无法打开应用选择器".to_string())?
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             let name = hostname::get()?
@@ -92,7 +155,12 @@ fn main() {
             create_invitation,
             cancel_pairing,
             approve_device,
-            revoke_device
+            revoke_device,
+            set_permissions,
+            save_shortcut,
+            remove_shortcut,
+            refresh_sources,
+            choose_application
         ])
         .run(tauri::generate_context!())
         .expect("Desklet 连接助手无法启动");

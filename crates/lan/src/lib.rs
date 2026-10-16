@@ -1,7 +1,7 @@
 //! Embedded TLS listener and untrusted LAN discovery. No independent service.
 use anyhow::{Context, Result};
 use axum::{
-    extract::{ws::Message, State, WebSocketUpgrade},
+    extract::{ws::Message, Path, State, WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -9,7 +9,11 @@ use axum::{
 };
 use axum_server::tls_rustls::RustlsConfig;
 use base64::{engine::general_purpose::STANDARD, Engine};
-use desklet_host::{now, Device, Host, PairingRequest};
+use desklet_host::{
+    now,
+    workbench::{Command, OpenTarget, Permissions, ShortcutConfig},
+    Device, Host, PairingRequest,
+};
 use rcgen::{CertificateParams, KeyPair, PublicKeyData};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -70,6 +74,7 @@ pub struct Agent {
     pub endpoints: Vec<String>,
     pub discovery_error: Option<String>,
     changed: watch::Sender<u64>,
+    refresh: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Serialize)]
@@ -80,6 +85,8 @@ pub struct AgentStatus {
     pub pending: Option<PairingRequest>,
     pub addresses: Vec<String>,
     pub discovery_warning: Option<String>,
+    pub workbench: desklet_host::Snapshot,
+    pub shortcuts: Vec<ShortcutConfig>,
 }
 
 #[derive(Serialize)]
@@ -93,7 +100,9 @@ impl Agent {
         let host = Host::load(directory, name)
             .context("无法读取电脑配置，请检查是否已在运行或配置目录不可访问")?;
         let identity = Identity::load(&host.id)?;
-        Self::with_identity(host, identity, PORT).await
+        let agent = Self::with_identity(host, identity, PORT).await?;
+        agent.start_sources();
+        Ok(agent)
     }
 
     pub async fn with_identity(
@@ -120,6 +129,7 @@ impl Agent {
             endpoints: addresses(port),
             discovery_error: None,
             changed,
+            refresh: Arc::new(tokio::sync::Notify::new()),
         };
         // Discovery failure leaves the QR/manual invitation path usable.
         match discovery_socket() {
@@ -157,7 +167,74 @@ impl Agent {
             pending: host.pending(now()),
             addresses: addresses(self.port),
             discovery_warning: self.discovery_error.clone(),
+            workbench: host.snapshot(),
+            shortcuts: host.shortcuts.clone(),
         }
+    }
+
+    fn start_sources(&self) {
+        let agent = self.clone();
+        tokio::spawn(async move {
+            loop {
+                let result = tokio::task::spawn_blocking(|| {
+                    desklet_host::sources::sessions(&desklet_host::sources::codex_home())
+                })
+                .await;
+                {
+                    let mut host = agent.host.lock().unwrap();
+                    let result =
+                        result.unwrap_or_else(|_| Err(anyhow::anyhow!("无法读取 Codex 会话")));
+                    let health = result
+                        .map(|(sessions, total)| {
+                            host.workbench.sessions = sessions;
+                            host.workbench.session_total = total;
+                        })
+                        .map_err(|_| {
+                            anyhow::anyhow!(
+                                "无法读取 Codex 会话，请确认 Codex 已打开并更新连接助手"
+                            )
+                        });
+                    host.workbench.observed("codex.sessions", health, now(), 20);
+                    host.revision += 1;
+                }
+                agent.changed.send_modify(|r| *r += 1);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+        let agent = self.clone();
+        tokio::spawn(async move {
+            loop {
+                let result = desklet_host::sources::quotas().await;
+                {
+                    let mut host = agent.host.lock().unwrap();
+                    let health = result.map(|quotas| {
+                        host.workbench.quotas = quotas;
+                    });
+                    host.workbench.observed("codex.quota", health, now(), 180);
+                    host.revision += 1;
+                }
+                agent.changed.send_modify(|r| *r += 1);
+                tokio::select! { _ = tokio::time::sleep(Duration::from_secs(120)) => {}, _ = agent.refresh.notified() => {} }
+            }
+        });
+    }
+    pub fn refresh_sources(&self) {
+        self.refresh.notify_one();
+    }
+    pub fn set_permissions(&self, id: &str, permissions: Permissions) -> Result<()> {
+        self.host.lock().unwrap().set_permissions(id, permissions)?;
+        self.changed.send_modify(|r| *r += 1);
+        Ok(())
+    }
+    pub fn save_shortcut(&self, item: ShortcutConfig) -> Result<()> {
+        self.host.lock().unwrap().save_shortcut(item)?;
+        self.changed.send_modify(|r| *r += 1);
+        Ok(())
+    }
+    pub fn remove_shortcut(&self, id: &str) -> Result<()> {
+        self.host.lock().unwrap().remove_shortcut(id)?;
+        self.changed.send_modify(|r| *r += 1);
+        Ok(())
     }
 
     pub fn invite(&self) -> Result<PairingInvitation> {
@@ -225,6 +302,8 @@ fn router(agent: Agent) -> Router {
         .route("/v1/pairing/status", post(claim_pairing))
         .route("/v1/snapshot", get(snapshot))
         .route("/v1/events", get(events))
+        .route("/v1/commands", post(command))
+        .route("/v1/commands/{id}", get(command_result))
         .layer(axum::extract::DefaultBodyLimit::max(4096))
         .with_state(agent)
 }
@@ -284,7 +363,7 @@ async fn snapshot(State(agent): State<Agent>, headers: HeaderMap) -> Response {
     if !bearer(&headers).is_some_and(|token| host.authenticate(token)) {
         return error(StatusCode::UNAUTHORIZED, "这台设备已取消连接，请重新配对");
     }
-    Json(host.snapshot()).into_response()
+    Json(host.authorized_snapshot(bearer(&headers).unwrap()).unwrap()).into_response()
 }
 
 async fn events(State(agent): State<Agent>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
@@ -301,7 +380,7 @@ async fn events(State(agent): State<Agent>, headers: HeaderMap, ws: WebSocketUpg
         loop {
             let json = {
                 let host = agent.host.lock().unwrap();
-                if !host.authenticate(&token) { None } else { Some(serde_json::to_string(&host.snapshot()).unwrap()) }
+                host.authorized_snapshot(&token).map(|snapshot| serde_json::to_string(&snapshot).unwrap())
             };
             let Some(json) = json else {
                 let _ = socket.send(Message::Text("{\"type\":\"revoked\"}".into())).await;
@@ -320,6 +399,76 @@ async fn events(State(agent): State<Agent>, headers: HeaderMap, ws: WebSocketUpg
             }
         }
     }).into_response()
+}
+
+async fn command(
+    State(agent): State<Agent>,
+    headers: HeaderMap,
+    Json(input): Json<Command>,
+) -> Response {
+    let prepared = {
+        let mut host = agent.host.lock().unwrap();
+        let Some(device) = bearer(&headers).and_then(|t| host.device_id(t)) else {
+            return error(StatusCode::UNAUTHORIZED, "这台设备已取消连接，请重新配对");
+        };
+        host.prepare_command(&device, input, now())
+            .map(|(result, target)| (device, result, target))
+    };
+    match prepared {
+        Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string()),
+        Ok((device, result, target)) => {
+            if let Some(target) = target {
+                let id = result.command_id.clone();
+                tokio::spawn(async move {
+                    let outcome = open_target(target).await;
+                    let (status, message) = match outcome {
+                        Some(true) => ("succeeded", "电脑已接受打开请求"),
+                        Some(false) => ("failed", "未能打开，请检查电脑上的应用或入口设置"),
+                        None => ("unknown", "打开请求超时，结果未知；请先查看电脑"),
+                    };
+                    agent
+                        .host
+                        .lock()
+                        .unwrap()
+                        .finish_command(&device, &id, status, message);
+                });
+            }
+            Json(result).into_response()
+        }
+    }
+}
+async fn command_result(
+    State(agent): State<Agent>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let host = agent.host.lock().unwrap();
+    let Some(device) = bearer(&headers).and_then(|t| host.device_id(t)) else {
+        return error(StatusCode::UNAUTHORIZED, "这台设备已取消连接，请重新配对");
+    };
+    Json(host.command_result(&device, &id)).into_response()
+}
+async fn open_target(target: OpenTarget) -> Option<bool> {
+    let target = match target {
+        OpenTarget::Session(id) => format!("codex://threads/{id}"),
+        OpenTarget::Shortcut(item) => item.target,
+    };
+    tokio::time::timeout(Duration::from_secs(5), async {
+        for command in open::commands(target) {
+            let mut command = tokio::process::Command::from(command);
+            command
+                .kill_on_drop(true)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            if command.status().await.is_ok_and(|s| s.success()) {
+                return true;
+            }
+        }
+        false
+    })
+    .await
+    .ok()
 }
 
 fn discovery_socket() -> Result<tokio::net::UdpSocket> {

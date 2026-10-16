@@ -13,6 +13,9 @@ base64.workspace = true
 rand = "0.8"
 subtle = "2"
 serde_yaml = "0.9"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio.workspace = true
+url = "2"
 
 [dev-dependencies]
 tempfile = "3"

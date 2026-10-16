@@ -1,6 +1,10 @@
 //! Explicitly launched test fixture. Never linked into the desktop application.
 //! Creates a temporary identity, auto-approves one device, then revokes it.
-use desklet_host::{now, Host};
+use desklet_host::{
+    now,
+    workbench::{Permissions, Quota, Session, ShortcutConfig},
+    Host,
+};
 use desklet_lan::{Agent, Identity};
 use std::{fs, path::PathBuf, time::Duration};
 
@@ -11,7 +15,33 @@ async fn android_connection_fixture() {
         std::env::var("DESKLET_FIXTURE_DIR").expect("Set a private fixture directory"),
     );
     fs::create_dir_all(&directory).unwrap();
-    let host = Host::load(directory.join("host"), "Desklet 连接测试".into()).unwrap();
+    let mut host = Host::load(directory.join("host"), "Desklet 连接测试".into()).unwrap();
+    host.workbench.sessions = vec![Session {
+        session_id: "00000000-0000-4000-8000-000000000001".into(),
+        version: "fixture-version".into(),
+        title: "验证工作台连接".into(),
+        project: "Desklet".into(),
+        status: "running".into(),
+        updated_at: now(),
+    }];
+    host.workbench.session_total = 1;
+    host.workbench.quotas = vec![Quota {
+        id: "weekly".into(),
+        label: "每周额度".into(),
+        remaining_percent: 42.,
+        resets_at: now() + 180,
+        window_minutes: 10080,
+    }];
+    host.workbench
+        .observed("codex.sessions", Ok(()), now(), 180);
+    host.workbench.observed("codex.quota", Ok(()), now(), 180);
+    host.save_shortcut(ShortcutConfig {
+        id: "00000000-0000-4000-8000-000000000002".into(),
+        name: "测试入口".into(),
+        kind: "url".into(),
+        target: "https://example.com".into(),
+    })
+    .unwrap();
     let identity = Identity::from_key(rcgen::KeyPair::generate().unwrap().serialize_pem()).unwrap();
     let agent = Agent::with_identity(host, identity, 0).await.unwrap();
     let invitation = agent.invite().unwrap();
@@ -40,8 +70,23 @@ async fn android_connection_fixture() {
     while now() < deadline {
         if let Some(pending) = agent.status().pending {
             agent.approve(&pending.id).unwrap();
+            agent
+                .set_permissions(
+                    &pending.id,
+                    Permissions {
+                        sessions: true,
+                        quota: true,
+                        shortcuts: true,
+                        open: true,
+                    },
+                )
+                .unwrap();
             // Allows Android to verify persisted credentials and reconnect first.
-            tokio::time::sleep(Duration::from_secs(15)).await;
+            tokio::time::sleep(Duration::from_secs(8)).await;
+            agent
+                .set_permissions(&pending.id, Permissions::default())
+                .unwrap();
+            tokio::time::sleep(Duration::from_secs(8)).await;
             agent.revoke(&pending.id).unwrap();
             tokio::time::sleep(Duration::from_secs(5)).await;
             assert!(agent.status().devices.is_empty());
