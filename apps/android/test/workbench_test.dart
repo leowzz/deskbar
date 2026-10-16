@@ -30,6 +30,15 @@ void main() {
           },
         );
   });
+  test('reuses decoded shortcut icon bytes across snapshot refreshes', () {
+    final first = WorkShortcut(
+      (snapshot()['shortcuts'] as List).first as Map<String, dynamic>,
+    );
+    final second = WorkShortcut(
+      (snapshot()['shortcuts'] as List).first as Map<String, dynamic>,
+    );
+    expect(second.iconBytes, same(first.iconBytes));
+  });
   for (final scenario in [
     (const Size(360, 640), 1.0),
     (const Size(360, 640), 1.8),
@@ -207,4 +216,39 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('shortcut adaptive size honors the available area', (
+    tester,
+  ) async {
+    final c = Connection()
+      ..data = WorkbenchData(snapshot())
+      ..phase = ConnectionPhase.online;
+    addTearDown(c.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: rawBlockTheme(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 220,
+            child: WorkbenchWidgetBody(
+              connection: c,
+              id: 'icons-max',
+              type: 'shortcuts',
+              options: const {
+                'iconSize': 'max',
+                'rows': 'auto',
+                'alignment': 'center',
+              },
+              binding: const {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final image = tester.getSize(find.byType(Image));
+    expect(image.width, greaterThan(72));
+    expect(image.width, lessThanOrEqualTo(200));
+    expect(tester.takeException(), isNull);
+  });
 }

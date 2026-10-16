@@ -47,10 +47,11 @@ mDNS 留作后续 Adapter。二维码与手工地址始终可用。客户端隔�
 
 ## 配对与信任
 
-桌面创建持久安装身份与 TLS 密钥。建议支持两条配对路径：
+桌面创建持久安装身份与 TLS 密钥。支持三条配对路径：
 
-1. **扫码**：电脑显示主机公钥摘要、候选地址、配对会话 ID 与 256 位一次性秘密；建议两分钟过期。Android 先核验可信公钥，再提交秘密。桌面确认共享内容后才消耗会话并签发设备凭据。
-2. **配对码**：供无摄像头设备使用，通过已审查的 PAKE 实现核验身份，再固定主机公钥。候选为 SPAKE2+；跨语言库、协议上下文绑定与 TLS 公钥绑定尚未验证。
+1. **局域网自动发现（默认）**：电脑响应 IPv4 多播 query，offer 携带主机公钥摘要、候选地址、配对会话 ID、256 位一次性秘密和两分钟过期时刻。Android 点击电脑名称后先核验可信公钥，再提交秘密；桌面只需确认一次，审批后签发设备凭据。发现 offer 不能替换已保存的主机 pin。
+2. **扫码 / 粘贴备用邀请**：电脑显示主机公钥摘要、候选地址、配对会话 ID 与 256 位一次性秘密；Android 扫描或粘贴完整邀请后执行同样的核验和审批流程。
+3. **配对码**：供无摄像头设备使用，通过已审查的 PAKE 实现核验身份，再固定主机公钥。候选为 SPAKE2+；跨语言库、协议上下文绑定与 TLS 公钥绑定尚未验证。
 
 短配对码不能只作为普通 HTTPS 请求里的密码。PAKE 上下文绑定产品、版本、双方身份和本次 TLS 公钥；限制尝试次数，失败后由桌面重新生成。
 
@@ -85,7 +86,7 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 
 | 接口 | 用途 |
 | --- | --- |
-| `POST /v1/pairing/*` | 仅在桌面开启配对会话时登记；完成扫码或 PAKE 核验 |
+| `POST /v1/pairing/*` | 仅在桌面发现 offer 或备用邀请开启配对会话时登记；完成 TLS pin 核验与电脑审批 |
 | `GET /v1/events` → WSS | 认证、版本协商、完整快照、心跳和动作结果 |
 | `GET /v1/snapshot` | 显式刷新与诊断，同一份授权快照 |
 | `POST /v1/commands` | 返回 `command_id` 与当前执行状态 |
@@ -124,8 +125,8 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 
 本节记录代码当前行为，前文的完整协议仍需按阶段验证。
 
-- IPv4 多播组 `239.77.68.76`，UDP `42831`；JSON query 包含 `product=deskbar`、`version=1`、`type=query`、随机 `nonce`。offer 回显 nonce，提供 `host_id`、`name`、实际 `port` 与 `pin`。响应向查询源单播，按源 IP 两秒内最多一次。发现不授予信任。当前只在启动时绑定接口，尚不覆盖 IPv6 和网络切换重绑。
-- 连接邀请为 `deskbar://pair` URI，携带版本、Host、名称、SPKI pin、候选 HTTPS 地址、配对会话、256 位秘密和过期时刻。完整邀请只能经用户可信的扫码 / 复制路径输入；普通发现消息不替换已保存 pin。无摄像头路径使用完整邀请，尚无短码 PAKE。
+- IPv4 多播组 `239.77.68.76`，UDP `42831`；JSON query 包含 `product=deskbar`、`version=1`、`type=query`、随机 `nonce`。offer 回显 nonce，提供 `host_id`、`name`、实际 `port`、`pin`、配对会话、256 位秘密和过期时刻。响应向查询源单播，按源 IP 两秒内最多一次。发现不授予信任，Android 点击后仍须 TLS pin 核验和电脑审批。当前只在启动时绑定接口，尚不覆盖 IPv6 和网络切换重绑。
+- 连接邀请为 `deskbar://pair` URI，携带版本、Host、名称、SPKI pin、候选 HTTPS 地址、配对会话、256 位秘密和过期时刻。自动发现 offer 使用相同字段，Android 点击电脑后在本机组装 URI；扫码 / 粘贴保留为备用入口，尚无短码 PAKE。
 - `POST /v1/pairing/request` 接收 `session_id`、`secret`、`claim`（客户端 256 位随机秘密）、`name`，返回 `id`、`name`、`expires_at`。相同邀请与 claim 重试返回原请求，其他请求无法再次消费邀请。
 - `POST /v1/pairing/status` 接收 `request_id` 与 `claim`；审批前返回 `token: null`，电脑审批后在邀请有效期内返回独立 256 位设备令牌。过期、取消与移除后不可再领取。
 - `GET /v1/snapshot` 与 `GET /v1/events`（WSS）使用 Authorization Bearer。WSS 订阅先登记再读取初始完整快照，十秒发送一次授权状态。快照携带按设备许可裁剪的来源、近期会话、额度、入口和能力；心跳不延长来源新鲜度。撤权使后续请求返回 401，并向现存 WSS 发送 `{"type":"revoked"}` 后关闭。
@@ -148,6 +149,6 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 
 ## 电脑管理布局与设备显示报告
 
-`Snapshot` 新增 `layout`（当前 schemaVersion 3 文档，未配置时为 null 并使用双端共享初始布局）和 `layout_revision`（每设备独立版本）。示例见 [layout.example.json](../protocol/layout.example.json)。布局只含稳定 ID、来源、参数及横竖屏网格位置，不携带路径或凭据；按设备隔离，电脑本地 `save_layout` 校验预期版本后原子保存并触发完整快照推送。移动端无布局写入接口，不迁移旧 Android 布局。
+`Snapshot` 新增 `layout`（当前 schemaVersion 3 文档，未配置时为 null 并使用双端共享初始布局）和 `layout_revision`（每设备独立版本）。示例见 [layout.example.json](../protocol/layout.example.json)。布局只含稳定 ID、来源、参数及横竖屏网格位置，不携带路径或凭据；快捷入口的 `iconSize` 可为正数或 `max`，`rows` 可为 `auto` 或 1–12 的整数，`alignment` 可为 `left`、`center`、`spaceEvenly` 或 `right`。按设备隔离，电脑本地 `save_layout` 校验预期版本后原子保存并触发完整快照推送。移动端无布局写入接口，不迁移旧 Android 布局。
 
 认证 WSS 接受设备的 JSON 显示报告：`width` / `height` 为工作台内容可用 dp，`text_scale` 为文字倍率，`dark` 为主题，`page_id` 为当前页，`layout_revision` 为已应用版本。最大 2048 字节；宽高限制 1–8192，字号倍率 0.5–4，未知字段拒绝。报告按凭据归属设备，仅存内存并由 Host 添加 `seen_at`，不提升权限或修改配置。设备每五秒及参数变化上报；超过十五秒无报告视为离线。电脑以已应用版本区分保存和接收，不将保存成功宣称为设备已更新。

@@ -19,6 +19,19 @@ String widgetTypeName(String type) => switch (type) {
   _ => '未知组件',
 };
 
+String _shortcutRowsValue(dynamic value) {
+  if (value is num && value.isFinite && value == value.round()) {
+    final row = value.round();
+    if (row >= 1 && row <= 12) return '$row';
+  }
+  return 'auto';
+}
+
+String _shortcutAlignmentValue(dynamic value) =>
+    const {'left', 'center', 'spaceEvenly', 'right'}.contains(value)
+    ? value as String
+    : 'spaceEvenly';
+
 class WorkbenchCanvas extends StatefulWidget {
   const WorkbenchCanvas({
     super.key,
@@ -63,7 +76,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   bool reportedEditing = false;
   Size viewport = Size.zero;
   bool bindingQueued = false;
-  Timer? _persist, _displayTimer;
+  Timer? _persist, _displayTimer, _autoSave;
+  Future<bool>? _saveOperation;
+  LayoutDocument? _lastSavedDocument, _observedDocument;
   String? _remoteKey, _lastReport;
   bool loading = true, saving = false, _syncing = false, readOnly = false;
   String? warning, _activeId;
@@ -79,6 +94,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     display.addListener(_displayChanged);
     widget.connection.addListener(_connectionChanged);
     _activeId = workspace.activePage.id;
+    _lastSavedDocument = workspace.document;
+    _observedDocument = workspace.document;
     if (!widget.allowEditing) {
       loading = false;
       _syncRemoteLayout();
@@ -102,7 +119,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       warning = loaded.warning;
       readOnly = loaded.readOnly;
     } catch (_) {
-      warning = '未能读取布局，当前使用初始布局。完成编辑时可以重新保存。';
+      warning = '未能读取布局，当前使用初始布局。编辑时会自动尝试更新。';
     }
     if (mounted) {
       setState(() => loading = false);
@@ -113,6 +130,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   @override
   void dispose() {
     _persist?.cancel();
+    _autoSave?.cancel();
     _displayTimer?.cancel();
     workspace.removeListener(_changed);
     widget.connection.removeListener(_connectionChanged);
@@ -155,7 +173,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       if (!readOnly) {
         unawaited(
           repository.save(next).catchError((Object error) {
-            if (mounted) _toast('组件已绑定此电脑，但未能保存。请完成一次布局编辑以重新保存。');
+            if (mounted) _toast('组件已绑定此电脑，但布局更新失败。请稍后重试。');
           }),
         );
       }
@@ -239,13 +257,16 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         () => unawaited(_saveNavigation()),
       );
     }
+    final documentChanged = !identical(_observedDocument, workspace.document);
+    _observedDocument = workspace.document;
+    if (documentChanged && workspace.editing) _scheduleAutoSave();
   }
 
   Future<void> _saveNavigation() async {
     try {
       await repository.save(workspace.committed);
     } catch (_) {
-      if (mounted) _toast('页面选择未保存，布局仍可使用。');
+      if (mounted) _toast('页面选择更新失败，布局仍可使用。');
     }
   }
 
@@ -269,7 +290,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   // Text fields keep their native editing shortcuts. Canvas commands only run
   // when no text editor or modal route owns focus.
   KeyEventResult _desktopKey(KeyEvent event) {
-    if (saving || ModalRoute.of(context)?.isCurrent != true) {
+    if (ModalRoute.of(context)?.isCurrent != true) {
       return KeyEventResult.ignored;
     }
     final focus = FocusManager.instance.primaryFocus;
@@ -278,10 +299,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     final key = event.logicalKey;
     final keyboard = HardwareKeyboard.instance;
     final command = keyboard.isMetaPressed || keyboard.isControlPressed;
-    if (command && key == LogicalKeyboardKey.keyS) {
-      if (event is KeyDownEvent && workspace.editing) unawaited(_finish());
-      return KeyEventResult.handled;
-    }
     if (typing) return KeyEventResult.ignored;
     if (command &&
         (key == LogicalKeyboardKey.keyZ || key == LogicalKeyboardKey.keyY)) {
@@ -375,7 +392,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       widget.onConnectionSettings?.call();
       return;
     }
-    if (readOnly || loading || saving) {
+    if (readOnly || loading) {
       _toast(readOnly ? '请升级工作台后再编辑布局。' : '正在读取布局，请稍候。');
       return;
     }
@@ -383,24 +400,75 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     workspace.beginEdit();
   }
 
+  void _scheduleAutoSave() {
+    if (!widget.allowEditing ||
+        !desktopEditor ||
+        !workspace.editing ||
+        loading ||
+        readOnly) {
+      return;
+    }
+    _autoSave?.cancel();
+    _autoSave = Timer(const Duration(milliseconds: 450), () {
+      _autoSave = null;
+      unawaited(_saveDraft());
+    });
+  }
+
+  Future<bool> _saveDraft({bool flush = false}) async {
+    if (!widget.allowEditing || !workspace.editing || loading || readOnly) {
+      return false;
+    }
+    final active = _saveOperation;
+    if (active != null) {
+      if (!flush) return false;
+      final success = await active;
+      if (!success) return false;
+      if (!identical(workspace.document, _lastSavedDocument)) {
+        return _saveDraft(flush: true);
+      }
+      return true;
+    }
+    if (identical(workspace.document, _lastSavedDocument)) return true;
+
+    final draft = workspace.document;
+    final savedDocument = _bindDocument(draft);
+    if (mounted) setState(() => saving = true);
+    late final Future<bool> operation;
+    operation = () async {
+      try {
+        await repository.save(savedDocument);
+        if (!mounted) return true;
+        workspace.markSaved(savedDocument, draft: draft);
+        _lastSavedDocument = savedDocument;
+        _observedDocument = workspace.document;
+        return true;
+      } catch (_) {
+        if (mounted) _toast('布局更新失败，请稍后重试。');
+        return false;
+      } finally {
+        if (mounted) setState(() => saving = false);
+      }
+    }();
+    _saveOperation = operation;
+    final success = await operation;
+    if (identical(_saveOperation, operation)) _saveOperation = null;
+    if (success &&
+        workspace.editing &&
+        !identical(workspace.document, _lastSavedDocument)) {
+      if (flush) return _saveDraft(flush: true);
+      _scheduleAutoSave();
+    }
+    return success;
+  }
+
   Future<void> _finish() async {
-    if (saving) return;
-    setState(() => saving = true);
+    _autoSave?.cancel();
     FocusManager.instance.primaryFocus?.unfocus();
-    // Commit numeric property fields before capturing the document.
+    // Commit numeric property fields before flushing the pending draft.
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
-    try {
-      final savedDocument = _bindDocument(workspace.document);
-      await repository.save(savedDocument);
-      if (!mounted) return;
-      workspace.replaceDocument(savedDocument);
-      _toast('已保存所有页面');
-    } catch (_) {
-      _toast('布局未能保存，草稿仍保留。请重试。');
-    } finally {
-      if (mounted) setState(() => saving = false);
-    }
+    if (await _saveDraft(flush: true) && mounted) workspace.commitEdit();
   }
 
   void _navigate(String id) {
@@ -436,13 +504,13 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   Widget build(BuildContext context) {
     final c = deskbarColors(context);
     return PopScope(
-      canPop: !workspace.editing && !display.immersive && !saving,
+      canPop: !workspace.editing && !display.immersive,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop || saving) return;
+        if (didPop) return;
         if (panel != null) {
           _closePanel();
         } else if (workspace.editing) {
-          workspace.cancelEdit();
+          unawaited(_finish());
         } else if (display.immersive) {
           unawaited(display.setImmersive(false));
         }
@@ -597,7 +665,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               children: [
                 PopupMenuButton<String>(
                   tooltip: '添加组件',
-                  enabled: !saving,
                   onSelected: (type) {
                     _begin();
                     if (workspace.editing) unawaited(_createWidget(type));
@@ -624,40 +691,31 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 const SizedBox(width: 12),
                 IconButton(
                   tooltip: '撤销 · ⌘ / Ctrl Z',
-                  onPressed: workspace.canUndo && !saving
-                      ? _desktopHistory
-                      : null,
+                  onPressed: workspace.canUndo ? _desktopHistory : null,
                   icon: const Icon(Icons.undo),
                 ),
                 IconButton(
                   tooltip: '重做 · ⌘ / Ctrl Shift Z',
-                  onPressed: workspace.canRedo && !saving
+                  onPressed: workspace.canRedo
                       ? () => _desktopHistory(redo: true)
                       : null,
                   icon: const Icon(Icons.redo),
                 ),
                 IconButton(
                   tooltip: '整理本页',
-                  onPressed: saving
-                      ? null
-                      : () {
-                          _begin();
-                          _result(workspace.arrangePage(orientation));
-                        },
+                  onPressed: () {
+                    _begin();
+                    _result(workspace.arrangePage(orientation));
+                  },
                   icon: const Icon(Icons.auto_awesome_mosaic_outlined),
                 ),
               ],
             ),
           ),
         ),
-        TextButton(
-          onPressed: saving || !workspace.editing ? null : workspace.cancelEdit,
-          child: const Text('放弃更改'),
-        ),
-        const SizedBox(width: 8),
         FilledButton(
-          onPressed: saving || !workspace.editing ? null : _finish,
-          child: Text(saving ? '保存中…' : '保存并同步'),
+          onPressed: !workspace.editing ? null : _finish,
+          child: Text(saving ? '更新中…' : '完成'),
         ),
       ],
     ),
@@ -796,17 +854,14 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   Widget _desktopOutline() => Material(
     key: const ValueKey('editor-outline'),
     color: deskbarColors(context).surface,
-    child: AbsorbPointer(
-      absorbing: saving,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(flex: 2, child: _pagesBody()),
-          Divider(height: 1, color: deskbarColors(context).line),
-          _sectionHeading('本页组件'),
-          Expanded(flex: 3, child: _componentsBody()),
-        ],
-      ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 2, child: _pagesBody()),
+        Divider(height: 1, color: deskbarColors(context).line),
+        _sectionHeading('本页组件'),
+        Expanded(flex: 3, child: _componentsBody()),
+      ],
     ),
   );
 
@@ -816,12 +871,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       height: 48,
       child: Row(
         children: [
-          TextButton(
-            onPressed: saving || !workspace.editing
-                ? null
-                : workspace.cancelEdit,
-            child: const Text('取消'),
-          ),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -829,7 +878,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 children: [
                   PopupMenuButton<String>(
                     tooltip: '切换编辑页面',
-                    enabled: !saving,
                     onSelected: (id) {
                       _begin();
                       _navigate(id);
@@ -856,41 +904,35 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                   ),
                   IconButton(
                     tooltip: '撤销',
-                    onPressed: workspace.canUndo && !saving
-                        ? workspace.undo
-                        : null,
+                    onPressed: workspace.canUndo ? workspace.undo : null,
                     icon: const Icon(Icons.undo),
                   ),
                   IconButton(
                     tooltip: '重做',
-                    onPressed: workspace.canRedo && !saving
-                        ? workspace.redo
-                        : null,
+                    onPressed: workspace.canRedo ? workspace.redo : null,
                     icon: const Icon(Icons.redo),
                   ),
                   IconButton(
                     tooltip: '添加组件',
-                    onPressed: saving ? null : _addWidget,
+                    onPressed: _addWidget,
                     icon: const Icon(Icons.add),
                   ),
                   IconButton(
                     tooltip: '显示的组件',
-                    onPressed: saving ? null : _components,
+                    onPressed: _components,
                     icon: const Icon(Icons.layers_outlined),
                   ),
                   IconButton(
                     tooltip: '管理页面',
-                    onPressed: saving ? null : _managePages,
+                    onPressed: _managePages,
                     icon: const Icon(Icons.tab_outlined),
                   ),
                   IconButton(
                     tooltip: '整理本页',
-                    onPressed: saving
-                        ? null
-                        : () {
-                            _begin();
-                            _result(workspace.arrangePage(orientation));
-                          },
+                    onPressed: () {
+                      _begin();
+                      _result(workspace.arrangePage(orientation));
+                    },
                     icon: const Icon(Icons.auto_awesome_mosaic_outlined),
                   ),
                 ],
@@ -898,8 +940,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             ),
           ),
           FilledButton(
-            onPressed: saving || !workspace.editing ? null : _finish,
-            child: Text(saving ? '保存中…' : '完成'),
+            onPressed: !workspace.editing ? null : _finish,
+            child: Text(saving ? '更新中…' : '完成'),
           ),
         ],
       ),
@@ -925,21 +967,18 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         },
         child: PageStorage(
           bucket: storage,
-          child: AbsorbPointer(
-            absorbing: saving,
-            child: PageView.builder(
-              controller: pages,
-              physics: workspace.editing
-                  ? const NeverScrollableScrollPhysics()
-                  : const PageScrollPhysics(),
-              onPageChanged: (index) {
-                if (!_syncing && index < workspace.pages.length) {
-                  _navigate(workspace.pages[index].id);
-                }
-              },
-              itemCount: workspace.pages.length,
-              itemBuilder: (context, index) => _page(workspace.pages[index]),
-            ),
+          child: PageView.builder(
+            controller: pages,
+            physics: workspace.editing
+                ? const NeverScrollableScrollPhysics()
+                : const PageScrollPhysics(),
+            onPageChanged: (index) {
+              if (!_syncing && index < workspace.pages.length) {
+                _navigate(workspace.pages[index].id);
+              }
+            },
+            itemCount: workspace.pages.length,
+            itemBuilder: (context, index) => _page(workspace.pages[index]),
           ),
         ),
       );
@@ -1058,19 +1097,16 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 Expanded(child: heading),
                 IconButton(
                   tooltip: '关闭设置',
-                  onPressed: saving ? null : _closePanel,
+                  onPressed: _closePanel,
                   icon: const Icon(Icons.close),
                 ),
               ],
             ),
           ),
           Expanded(
-            child: AbsorbPointer(
-              absorbing: saving,
-              child: KeyedSubtree(
-                key: ValueKey('editor-panel-$panel-${inspectedId ?? ''}'),
-                child: body,
-              ),
+            child: KeyedSubtree(
+              key: ValueKey('editor-panel-$panel-${inspectedId ?? ''}'),
+              child: body,
             ),
           ),
         ],
@@ -1388,10 +1424,18 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         children: [
           if (w.type == 'sessions') ...[
             _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
-            _optionSlider(w, 'itemHeight', '卡片目标高度', 64, 400, 96),
+            _optionSlider(
+              w,
+              'itemHeight',
+              '卡片目标高度',
+              w.options['density'] == 'compact' ? 88 : 140,
+              400,
+              96,
+            ),
             _optionSlider(w, 'gap', '卡片间距', 0, 40, 12),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
+              isThreeLine: true,
               title: const Text('自动铺满完整行'),
               subtitle: const Text('根据目标高度计算完整行数，大字号时增加最小高度。'),
               value: w.options['fitRows'] != false,
@@ -1403,19 +1447,153 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               initialValue: w.options['density'] == 'compact'
                   ? 'compact'
                   : 'normal',
+              isExpanded: true,
               decoration: const InputDecoration(labelText: '会话信息'),
               items: const [
-                DropdownMenuItem(value: 'normal', child: Text('标准')),
-                DropdownMenuItem(value: 'compact', child: Text('精简')),
+                DropdownMenuItem(
+                  value: 'normal',
+                  child: Text(
+                    '标准',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'compact',
+                  child: Text(
+                    '精简',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
-              onChanged: (v) =>
-                  workspace.updateWidget(id, options: {'density': v}),
+              onChanged: (v) {
+                if (v == null) return;
+                final minimum = v == 'compact' ? 88.0 : 140.0;
+                final current = (w.options['itemHeight'] as num?)?.toDouble();
+                workspace.updateWidget(
+                  id,
+                  options: {
+                    'density': v,
+                    if (current != null && current < minimum)
+                      'itemHeight': minimum,
+                  },
+                );
+              },
             ),
           ],
           if (w.type == 'shortcuts') ...[
-            _optionSlider(w, 'iconSize', '图标尺寸', 24, 200, 56),
+            DropdownButtonFormField<String>(
+              key: ValueKey('icon-size-mode-$id-${w.options['iconSize']}'),
+              initialValue: w.options['iconSize'] == 'max' ? 'max' : 'fixed',
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '图标尺寸'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'fixed',
+                  child: Text(
+                    '固定尺寸',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'max',
+                  child: Text(
+                    '自适应最大',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (v) => workspace.updateWidget(
+                id,
+                options: {
+                  'iconSize': v == 'max'
+                      ? 'max'
+                      : (w.options['iconSize'] is num
+                            ? w.options['iconSize']
+                            : 56.0),
+                },
+              ),
+            ),
+            if (w.options['iconSize'] != 'max')
+              _optionSlider(w, 'iconSize', '固定图标大小', 24, 200, 56),
             _optionSlider(w, 'gapX', '横向间距', 0, 64, 16),
             _optionSlider(w, 'gapY', '纵向间距', 0, 64, 16),
+            DropdownButtonFormField<String>(
+              key: ValueKey('shortcut-rows-$id-${w.options['rows']}'),
+              initialValue: _shortcutRowsValue(w.options['rows']),
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '行数'),
+              items: [
+                const DropdownMenuItem(
+                  value: 'auto',
+                  child: Text(
+                    '自动',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                for (var row = 1; row <= 12; row++)
+                  DropdownMenuItem(
+                    value: '$row',
+                    child: Text(
+                      '$row 行',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (v) => workspace.updateWidget(
+                id,
+                options: {'rows': v == 'auto' ? 'auto' : int.parse(v!)},
+              ),
+            ),
+            DropdownButtonFormField<String>(
+              key: ValueKey('shortcut-alignment-$id-${w.options['alignment']}'),
+              initialValue: _shortcutAlignmentValue(w.options['alignment']),
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '对齐方式'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'left',
+                  child: Text(
+                    '左对齐',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'center',
+                  child: Text(
+                    '居中对齐',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'spaceEvenly',
+                  child: Text(
+                    '均匀分布',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'right',
+                  child: Text(
+                    '右对齐',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (v) => workspace.updateWidget(
+                id,
+                options: {'alignment': v ?? 'spaceEvenly'},
+              ),
+            ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('显示名称'),
@@ -1428,10 +1606,25 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             DropdownButtonFormField<String>(
               key: ValueKey('content-$id-${w.options['content']}'),
               initialValue: w.options['content'] == 'api' ? 'api' : 'quota',
+              isExpanded: true,
               decoration: const InputDecoration(labelText: '用量内容'),
               items: const [
-                DropdownMenuItem(value: 'quota', child: Text('Codex 额度')),
-                DropdownMenuItem(value: 'api', child: Text('API 用量')),
+                DropdownMenuItem(
+                  value: 'quota',
+                  child: Text(
+                    'Codex 额度',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'api',
+                  child: Text(
+                    'API 用量',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
               onChanged: (v) => workspace.updateWidget(
                 id,
@@ -1451,12 +1644,20 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             key: ValueKey('move-$id'),
+            isExpanded: true,
             decoration: const InputDecoration(labelText: '移到其他页面'),
             items: [
               for (final p in workspace.pages.where(
                 (p) => p.id != workspace.activePage.id,
               ))
-                DropdownMenuItem(value: p.id, child: Text(p.name)),
+                DropdownMenuItem(
+                  value: p.id,
+                  child: Text(
+                    p.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
             ],
             onChanged: (v) {
               if (v != null) {
@@ -1612,6 +1813,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 value: source,
                 child: Text(
                   '${widget.connection.hostName ?? '此电脑'} · ${source == 'sub2api.usage' ? 'API 用量' : widgetTypeName(w.type)}',
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1650,14 +1852,21 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             isExpanded: true,
             decoration: const InputDecoration(labelText: '显示范围'),
             items: [
-              const DropdownMenuItem(value: '', child: Text('全部')),
+              const DropdownMenuItem(
+                value: '',
+                child: Text('全部', maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
               if (selectedResource != null &&
                   selectedResource.isNotEmpty &&
                   !resources.containsKey(selectedResource))
                 DropdownMenuItem(
                   value: selectedResource,
                   enabled: false,
-                  child: const Text('原资源不可用，请重新选择'),
+                  child: const Text(
+                    '原资源不可用，请重新选择',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               for (final r in resources.entries)
                 DropdownMenuItem(
@@ -1690,13 +1899,18 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     double min,
     double max,
     double fallback,
-  ) => _slider(
-    label,
-    (w.options[key] as num?)?.toDouble() ?? fallback,
-    min,
-    max,
-    (v) => workspace.updateWidget(w.id, options: {key: v.roundToDouble()}),
-  );
+  ) {
+    final raw = (w.options[key] as num?)?.toDouble() ?? fallback;
+    final value = raw.isFinite ? raw.clamp(min, max).toDouble() : min;
+    return _slider(
+      label,
+      value,
+      min,
+      max,
+      (v) => workspace.updateWidget(w.id, options: {key: v.roundToDouble()}),
+    );
+  }
+
   Widget _slider(
     String label,
     double value,
@@ -1781,6 +1995,20 @@ class _DesktopNumberFieldState extends State<_DesktopNumberField> {
     });
   }
 
+  void _step(int delta) {
+    final current = widget.value.round();
+    final next = (current + delta).clamp(
+      widget.min.round(),
+      widget.max.round(),
+    );
+    if (next == current || widget.onChanged == null) return;
+    controller.value = TextEditingValue(
+      text: '$next',
+      selection: TextSelection.collapsed(offset: '$next'.length),
+    );
+    widget.onChanged!(next.toDouble());
+  }
+
   @override
   void didUpdateWidget(covariant _DesktopNumberField oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1798,19 +2026,67 @@ class _DesktopNumberFieldState extends State<_DesktopNumberField> {
   }
 
   @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    focusNode: focus,
-    enabled: widget.onChanged != null,
-    keyboardType: TextInputType.number,
-    decoration: InputDecoration(
-      labelText: widget.label,
-      suffixText: widget.suffix,
-      isDense: true,
-    ),
-    onSubmitted: (_) => _commit(),
-    onTapOutside: (_) => focus.unfocus(),
-  );
+  Widget build(BuildContext context) {
+    final canDecrease = widget.onChanged != null && widget.value > widget.min;
+    final canIncrease = widget.onChanged != null && widget.value < widget.max;
+    return TextField(
+      controller: controller,
+      focusNode: focus,
+      enabled: widget.onChanged != null,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        isDense: true,
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 76,
+          maxWidth: 108,
+          minHeight: 40,
+        ),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.suffix.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: Text(widget.suffix),
+              ),
+            IconButton(
+              key: ValueKey('number-decrement-${widget.label}'),
+              tooltip: canDecrease ? '减 1' : '已是最小值',
+              onPressed: canDecrease ? () => _step(-1) : null,
+              style: IconButton.styleFrom(
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: EdgeInsets.zero,
+              ),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints.tightFor(width: 28, height: 32),
+              iconSize: 17,
+              icon: const Icon(Icons.remove),
+            ),
+            IconButton(
+              key: ValueKey('number-increment-${widget.label}'),
+              tooltip: canIncrease ? '加 1' : '已是最大值',
+              onPressed: canIncrease ? () => _step(1) : null,
+              style: IconButton.styleFrom(
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: EdgeInsets.zero,
+              ),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints.tightFor(width: 28, height: 32),
+              iconSize: 17,
+              icon: const Icon(Icons.add),
+            ),
+          ],
+        ),
+      ),
+      onSubmitted: (_) => _commit(),
+      onTapOutside: (_) => focus.unfocus(),
+    );
+  }
 }
 
 /// Keep the same editor and focus while external undo/redo updates its value.

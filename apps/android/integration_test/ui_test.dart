@@ -23,7 +23,7 @@ void main() {
     await local.invokeMethod<void>('saveTheme', {'theme': 'light'});
     await tester.pumpWidget(const DeskBarApp());
     await tester.pumpAndSettle();
-    expect(find.text('扫码连接电脑'), findsOneWidget);
+    expect(find.text('扫码连接'), findsOneWidget);
     expect(tester.takeException(), isNull);
     const capture = bool.fromEnvironment('DESKBAR_SCREENSHOTS');
     if (capture) {

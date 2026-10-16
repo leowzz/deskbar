@@ -13,6 +13,54 @@ enum ConnectionPhase {
   approval,
 }
 
+class NearbyComputer {
+  NearbyComputer({
+    required this.hostId,
+    required this.name,
+    required this.invitation,
+  });
+
+  factory NearbyComputer.fromJson(Map<String, dynamic> value) {
+    final endpoint = value['endpoint'] as String?;
+    final session = value['session'] as String?;
+    final secret = value['secret'] as String?;
+    final host = value['host_id'] as String?;
+    final pin = value['pin'] as String?;
+    final expires = value['expires'];
+    if (endpoint == null ||
+        session == null ||
+        secret == null ||
+        host == null ||
+        pin == null ||
+        expires is! num) {
+      throw const FormatException('自动发现返回的电脑信息不完整');
+    }
+    final uri = Uri(
+      scheme: 'deskbar',
+      host: 'pair',
+      queryParameters: {
+        'v': '1',
+        'host': host,
+        'name': value['name'] as String? ?? 'DeskBar 连接助手',
+        'pin': pin,
+        'session': session,
+        'secret': secret,
+        'expires': expires.toInt().toString(),
+        'endpoint': endpoint,
+      },
+    ).toString();
+    return NearbyComputer(
+      hostId: host,
+      name: value['name'] as String? ?? 'DeskBar 连接助手',
+      invitation: uri,
+    );
+  }
+
+  final String hostId;
+  final String name;
+  final String invitation;
+}
+
 class Connection extends ChangeNotifier {
   static const _channel = MethodChannel('app.deskbar/connection');
   static const _events = EventChannel('app.deskbar/events');
@@ -21,7 +69,7 @@ class Connection extends ChangeNotifier {
   String? error;
   bool busy = false;
   bool searching = false;
-  List<String> nearby = [];
+  List<NearbyComputer> nearby = [];
   DateTime? lastSeen;
   WorkbenchData? data;
   bool opening = false;
@@ -45,12 +93,13 @@ class Connection extends ChangeNotifier {
     });
     await restore();
     if (_disposed) return;
+    if (hostName == null) unawaited(discover());
     _reconnect = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (_active &&
-          hostName != null &&
-          !busy &&
-          phase != ConnectionPhase.online) {
+      if (!_active || busy) return;
+      if (hostName != null && phase != ConnectionPhase.online) {
         unawaited(reconnect());
+      } else if (hostName == null && !searching) {
+        unawaited(discover());
       }
     });
   }
@@ -160,9 +209,19 @@ class Connection extends ChangeNotifier {
     notifyListeners();
     try {
       final value = await _channel.invokeMethod<String>('discover');
+      final seen = <String>{};
+      NearbyComputer? parse(dynamic value) {
+        try {
+          return NearbyComputer.fromJson(value as Map<String, dynamic>);
+        } on FormatException {
+          return null;
+        }
+      }
+
       nearby = (jsonDecode(value ?? '[]') as List)
-          .map((e) => (e as Map<String, dynamic>)['name'] as String)
-          .toSet()
+          .map(parse)
+          .whereType<NearbyComputer>()
+          .where((computer) => seen.add(computer.hostId))
           .toList();
     } on PlatformException catch (e) {
       error = e.message;

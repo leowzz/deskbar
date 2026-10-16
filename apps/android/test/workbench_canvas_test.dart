@@ -248,6 +248,45 @@ void main() {
       }
     }
   }
+  testWidgets('number controls step by one and disable at card minimums', (
+    tester,
+  ) async {
+    final workspace = LayoutWorkspace();
+    addTearDown(workspace.dispose);
+    await launch(tester, workspace);
+    workspace.beginEdit();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置会话').first);
+    await tester.pumpAndSettle();
+
+    final width = find.widgetWithText(TextField, '卡片目标宽度');
+    final height = find.widgetWithText(TextField, '卡片目标高度');
+    final widthMinus = find.byKey(const ValueKey('number-decrement-卡片目标宽度'));
+    final widthPlus = find.byKey(const ValueKey('number-increment-卡片目标宽度'));
+    final heightMinus = find.byKey(const ValueKey('number-decrement-卡片目标高度'));
+    expect(tester.widget<IconButton>(widthMinus).onPressed, isNotNull);
+    await tester.tap(widthMinus);
+    await tester.pumpAndSettle();
+    expect(workspace.findWidget('main-sessions')!.options['itemWidth'], 279.0);
+    await tester.tap(widthPlus);
+    await tester.pumpAndSettle();
+    expect(workspace.findWidget('main-sessions')!.options['itemWidth'], 280.0);
+
+    await tester.enterText(width, '120');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    expect(workspace.findWidget('main-sessions')!.options['itemWidth'], 120.0);
+    expect(tester.widget<IconButton>(widthMinus).onPressed, isNull);
+    expect(tester.widget<IconButton>(widthMinus).tooltip, '已是最小值');
+
+    await tester.enterText(height, '88');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    expect(workspace.findWidget('main-sessions')!.options['itemHeight'], 88.0);
+    expect(tester.widget<IconButton>(heightMinus).onPressed, isNull);
+    expect(tester.widget<IconButton>(heightMinus).tooltip, '已是最小值');
+    expect(tester.takeException(), isNull);
+  });
   for (final size in [const Size(360, 640), const Size(800, 360)]) {
     for (final brightness in [Brightness.light, Brightness.dark]) {
       testWidgets(
@@ -395,7 +434,6 @@ void main() {
     addTearDown(workspace.dispose);
     await launch(tester, workspace, editor: false, size: const Size(360, 640));
     expect(find.byKey(const ValueKey('editor-inspector')), findsNothing);
-    expect(find.text('保存并同步'), findsNothing);
     final background = find.byKey(
       const ValueKey('page-edit-background-page-main'),
     );
@@ -621,6 +659,9 @@ void main() {
       await open('shortcut');
       expect(selected('已授权来源'), 'host.shortcuts');
       expect(selected('显示范围'), 'shortcut');
+      expect(selected('图标尺寸'), 'fixed');
+      expect(selected('行数'), 'auto');
+      expect(selected('对齐方式'), 'spaceEvenly');
       expect(inspectorScroll().position.pixels, 0);
       await open('session-b');
       expect(selected('会话信息'), 'normal');
@@ -797,7 +838,7 @@ void main() {
     },
   );
   testWidgets(
-    'save error retains draft, retry saves it, save locks back and gestures',
+    'debounced auto-save retains draft on error and retries without leaving edit mode',
     (tester) async {
       final workspace = LayoutWorkspace();
       final repository = MemoryLayouts()..fail = true;
@@ -805,24 +846,26 @@ void main() {
       await launch(tester, workspace, repository: repository);
       workspace.beginEdit();
       workspace.renamePage('page-main', '保存测试');
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('保存并同步'));
-      await tester.tap(find.text('保存并同步'));
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
       expect(workspace.editing, isTrue);
-      expect(find.textContaining('草稿仍保留'), findsOneWidget);
+      expect(find.textContaining('布局更新失败'), findsOneWidget);
       repository.fail = false;
       repository.pending = Completer<void>();
-      await tester.tap(find.text('保存并同步'));
-      await tester.pump();
-      expect(find.text('保存中…'), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await tester.pump();
+      workspace.renamePage('page-main', '再次更新');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('更新中…'), findsOneWidget);
       expect(workspace.editing, isTrue);
+      workspace.renamePage('page-main', '持续编辑');
       repository.pending!.complete();
       await tester.pumpAndSettle();
+      expect(workspace.editing, isTrue);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(repository.saved!.pages.first.name, '持续编辑');
+      await tester.tap(find.text('完成'));
+      await tester.pumpAndSettle();
       expect(workspace.editing, isFalse);
-      expect(repository.saved!.pages.first.name, '保存测试');
       expect(workspace.committed.toJson(), repository.saved!.toJson());
       expect(tester.takeException(), isNull);
     },

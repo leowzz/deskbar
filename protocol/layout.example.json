@@ -38,6 +38,44 @@
           }
         }
       ]
+    },
+    {
+      "id": "shortcuts",
+      "name": "快捷入口",
+      "widgets": [
+        {
+          "id": "shortcuts-1",
+          "title": "快捷入口",
+          "type": "shortcuts",
+          "visible": true,
+          "binding": {
+            "source": "host.shortcuts"
+          },
+          "options": {
+            "iconSize": "max",
+            "gapX": 16.0,
+            "gapY": 16.0,
+            "labels": true,
+            "columns": "auto",
+            "rows": 2,
+            "alignment": "spaceEvenly"
+          },
+          "placements": {
+            "wide": {
+              "x": 0,
+              "y": 0,
+              "w": 48,
+              "h": 24
+            },
+            "portrait": {
+              "x": 0,
+              "y": 0,
+              "w": 16,
+              "h": 48
+            }
+          }
+        }
+      ]
     }
   ]
 }

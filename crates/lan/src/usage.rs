@@ -1,41 +1,11 @@
-use super::Agent;
+use super::{credentials::credential_account, Agent};
 use anyhow::{ensure, Context, Result};
 use deskbar_host::{
     now,
     usage::{Error, Source, UsageConfig},
 };
-use sha2::{Digest, Sha256};
 use std::{sync::atomic::Ordering, time::Duration};
 
-fn credential_account(host: &str, config: &UsageConfig) -> String {
-    let identity =
-        serde_json::to_vec(&(&config.base_url, &config.email)).expect("strings serialize");
-    format!("{host}:{:x}", Sha256::digest(identity))
-}
-fn credentials(host: &str, config: &UsageConfig) -> Result<keyring::Entry> {
-    keyring::Entry::new(
-        "app.deskbar.agent.sub2api",
-        &credential_account(host, config),
-    )
-    .context("无法访问用量账号，请检查系统钥匙串权限")
-}
-fn read_password(entry: &keyring::Entry) -> Result<Option<String>> {
-    match entry.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(_) => anyhow::bail!("无法读取用量账号，请解锁系统钥匙串后重试"),
-    }
-}
-fn restore(entry: &keyring::Entry, old: Option<&str>) {
-    match old {
-        Some(v) => {
-            let _ = entry.set_password(v);
-        }
-        None => {
-            let _ = entry.delete_credential();
-        }
-    }
-}
 impl Agent {
     fn usage_source_snapshot(
         &self,
@@ -43,7 +13,7 @@ impl Agent {
         expected: &UsageConfig,
         read: impl FnOnce(&str) -> Result<Option<String>>,
     ) -> Result<Option<Source>> {
-        // Account updates hold the same lock while replacing the keychain secret.
+        // Account updates hold the same lock while replacing the local secret.
         // Read the config and password together so a new password can never be
         // combined with a previously captured account or endpoint.
         let host = self.host.lock().unwrap();
@@ -60,8 +30,9 @@ impl Agent {
         ensure!(password.len() <= 4096, "密码过长");
         let mut host = self.host.lock().unwrap();
         let previous_config = host.usage_config.clone();
-        let entry = credentials(&host.id, &config)?;
-        let old = read_password(&entry)?;
+        let account = credential_account(&host.id, &config);
+        let mut credentials = self.credentials.lock().unwrap();
+        let old = credentials.password(&account);
         if password.is_empty() {
             ensure!(
                 host.usage_config
@@ -71,12 +42,12 @@ impl Agent {
                 "首次设置或更换账号时请输入密码"
             );
         } else {
-            entry
-                .set_password(&password)
-                .map_err(|_| anyhow::anyhow!("无法保存用量账号，请允许系统钥匙串访问后重试"))?;
+            credentials.set_password(&account, Some(&password))?;
         }
         if let Err(e) = host.set_usage_config(Some(config.clone())) {
-            restore(&entry, old.as_deref());
+            if !password.is_empty() {
+                credentials.set_password(&account, old.as_deref())?;
+            }
             return Err(e);
         }
         // The old config always points at its own secret, including if the
@@ -85,9 +56,7 @@ impl Agent {
         // attached to the wrong endpoint. Remove it on the normal success path.
         if let Some(previous) = previous_config {
             if credential_account(&host.id, &previous) != credential_account(&host.id, &config) {
-                if let Ok(entry) = credentials(&host.id, &previous) {
-                    let _ = entry.delete_credential();
-                }
+                let _ = credentials.set_password(&credential_account(&host.id, &previous), None);
             }
         }
         self.usage_generation.fetch_add(1, Ordering::SeqCst);
@@ -101,15 +70,16 @@ impl Agent {
         let Some(config) = host.usage_config.as_ref() else {
             return Ok(());
         };
-        let entry = credentials(&host.id, config)?;
-        let old = read_password(&entry)?;
+        let account = credential_account(&host.id, config);
+        let mut credentials = self.credentials.lock().unwrap();
+        let old = credentials.password(&account);
         if old.is_some() {
-            entry
-                .delete_credential()
-                .map_err(|_| anyhow::anyhow!("无法移除用量账号，请允许系统钥匙串访问后重试"))?;
+            credentials.set_password(&account, None)?;
         }
         if let Err(e) = host.set_usage_config(None) {
-            restore(&entry, old.as_deref());
+            if old.is_some() {
+                credentials.set_password(&account, old.as_deref())?;
+            }
             return Err(e);
         }
         self.usage_generation.fetch_add(1, Ordering::SeqCst);
@@ -141,7 +111,11 @@ impl Agent {
                     let loading = agent.clone();
                     let loaded = tokio::task::spawn_blocking(move || {
                         loading.usage_source_snapshot(generation, &config, |id| {
-                            read_password(&credentials(id, &config)?)
+                            Ok(loading
+                                .credentials
+                                .lock()
+                                .unwrap()
+                                .password(&credential_account(id, &config)))
                         })
                     })
                     .await;
@@ -152,11 +126,13 @@ impl Agent {
                             Ok(())
                         }
                         Ok(Ok(None)) => continue,
+                        Ok(Err(error)) => {
+                            source = None;
+                            Err(error)
+                        }
                         _ => {
                             source = None;
-                            Err(anyhow::anyhow!(
-                                "无法读取用量账号，请检查系统钥匙串或重新保存账号"
-                            ))
+                            Err(anyhow::anyhow!("无法读取用量账号，请在设置中重新保存账号"))
                         }
                     }
                 } else {
@@ -164,7 +140,7 @@ impl Agent {
                 };
                 let mut delay = Duration::from_secs(60);
                 let mut rate_limited = false;
-                // Reconfiguration may have completed while the blocking keychain
+                // Reconfiguration may have completed while the blocking credential
                 // task returned. Discard it before making any network request.
                 if agent.usage_generation.load(Ordering::SeqCst) != generation {
                     continue;
@@ -216,6 +192,106 @@ impl Agent {
 mod tests {
     use super::*;
 
+    async fn local_agent(path: &std::path::Path) -> Agent {
+        let host = deskbar_host::Host::load(path.into(), "fixture".into()).unwrap();
+        let identity =
+            super::super::Identity::from_key(rcgen::KeyPair::generate().unwrap().serialize_pem())
+                .unwrap();
+        Agent::with_identity(host, identity, 0).await.unwrap()
+    }
+
+    fn config() -> UsageConfig {
+        UsageConfig {
+            base_url: "https://usage.example.com".into(),
+            email: "fixture@example.com".into(),
+            timezone: "Asia/Shanghai".into(),
+        }
+    }
+
+    fn saved_password(agent: &Agent, config: &UsageConfig) -> Option<String> {
+        let host = agent.host.lock().unwrap();
+        super::super::Credentials::load(&host, true)
+            .unwrap()
+            .password(&credential_account(&host.id, config))
+    }
+
+    #[tokio::test]
+    async fn local_account_save_keep_replace_and_remove_persist_without_exposing_passwords() {
+        let dir = tempfile::tempdir().unwrap();
+        let agent = local_agent(dir.path()).await;
+        let old = config();
+        assert!(agent.save_usage_source(old.clone(), String::new()).is_err());
+        agent
+            .save_usage_source(old.clone(), "old-password".into())
+            .unwrap();
+        assert_eq!(
+            saved_password(&agent, &old).as_deref(),
+            Some("old-password")
+        );
+        let mut next = old.clone();
+        next.timezone = "UTC".into();
+        agent
+            .save_usage_source(next.clone(), String::new())
+            .unwrap();
+        assert_eq!(
+            saved_password(&agent, &next).as_deref(),
+            Some("old-password")
+        );
+        next.email = "another@example.com".into();
+        assert!(agent
+            .save_usage_source(next.clone(), String::new())
+            .is_err());
+        agent
+            .save_usage_source(next.clone(), "new-password".into())
+            .unwrap();
+        assert!(saved_password(&agent, &old).is_none());
+        assert_eq!(
+            saved_password(&agent, &next).as_deref(),
+            Some("new-password")
+        );
+        let status = serde_json::to_string(&agent.status()).unwrap();
+        assert!(!status.contains("new-password"));
+        assert!(!status.contains("PRIVATE KEY"));
+        let host_config = std::fs::read_to_string(dir.path().join("host.yaml")).unwrap();
+        assert!(!host_config.contains("new-password"));
+        agent.remove_usage_source().unwrap();
+        assert!(agent.status().usage_config.is_none());
+        assert!(saved_password(&agent, &next).is_none());
+    }
+
+    #[tokio::test]
+    async fn failed_config_commit_restores_local_password_and_account() {
+        let dir = tempfile::tempdir().unwrap();
+        let agent = local_agent(dir.path()).await;
+        let old = config();
+        agent
+            .save_usage_source(old.clone(), "old-password".into())
+            .unwrap();
+        let generation = agent.usage_generation.load(Ordering::SeqCst);
+        // Host's atomic configuration replacement cannot create its temp file.
+        std::fs::create_dir(dir.path().join("host.yaml.tmp")).unwrap();
+        assert!(agent
+            .save_usage_source(old.clone(), "replacement-password".into())
+            .is_err());
+        assert_eq!(
+            saved_password(&agent, &old).as_deref(),
+            Some("old-password")
+        );
+        let mut next = old.clone();
+        next.base_url = "https://another.example.com".into();
+        assert!(agent
+            .save_usage_source(next.clone(), "new-password".into())
+            .is_err());
+        assert!(saved_password(&agent, &next).is_none());
+        assert!(agent.remove_usage_source().is_err());
+        assert_eq!(agent.status().usage_config, Some(old.clone()));
+        assert_eq!(
+            saved_password(&agent, &old).as_deref(),
+            Some("old-password")
+        );
+        assert_eq!(agent.usage_generation.load(Ordering::SeqCst), generation);
+    }
+
     #[test]
     fn secret_identity_survives_config_commit_interruptions() {
         let old = UsageConfig {
@@ -228,7 +304,7 @@ mod tests {
         next.base_url = "https://new.example.com".into();
         let new_key = credential_account("host", &next);
         assert_ne!(old_key, new_key);
-        // Simulate new keychain write before the YAML switches accounts.
+        // Simulate a new credential write before the YAML switches accounts.
         let secrets = std::collections::HashMap::from([
             (old_key.clone(), "old-password"),
             (new_key, "new-password"),

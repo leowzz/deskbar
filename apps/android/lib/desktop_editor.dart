@@ -32,12 +32,24 @@ class _DesktopEditorState extends State<DesktopEditor> {
   late final repository = _DesktopRepository(_save);
   final Map<int, Completer<void>> requests = {};
   int requestId = 0, revision = 0;
-  bool ready = false, debug = false, followDevice = true, dark = false;
+  bool ready = false, debug = false, dark = false;
   bool lastEditing = false, previewFit = true;
-  double width = 1280, height = 720, textScale = 1;
+  LayoutOrientation previewOrientation = LayoutOrientation.wide;
+  bool orientationChosen = false;
+  double deviceWidth = 1280, deviceHeight = 720, textScale = 1;
   String? error;
-  Timer? clock;
   Map<String, dynamic>? latest;
+
+  double get previewWidth => previewOrientation == LayoutOrientation.wide
+      ? _deviceLongSide
+      : _deviceShortSide;
+  double get previewHeight => previewOrientation == LayoutOrientation.wide
+      ? _deviceShortSide
+      : _deviceLongSide;
+  double get _deviceLongSide =>
+      deviceWidth >= deviceHeight ? deviceWidth : deviceHeight;
+  double get _deviceShortSide =>
+      deviceWidth >= deviceHeight ? deviceHeight : deviceWidth;
 
   @override
   void initState() {
@@ -45,9 +57,6 @@ class _DesktopEditorState extends State<DesktopEditor> {
     workspace.addListener(_changed);
     registerEditor(((JSString value) => _receive(value.toDart)).toJS);
     sendEditor(jsonEncode({'type': 'ready'}).toJS);
-    clock = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
   }
 
   void _changed() {
@@ -106,16 +115,26 @@ class _DesktopEditorState extends State<DesktopEditor> {
       revision = data.layoutRevision;
       workspace.replaceDocument(data.layout);
     }
-    if (!workspace.editing && followDevice && display != null) {
+    if (!workspace.editing && display != null) {
       final page = display['page_id'] as String;
       if (workspace.pages.any((p) => p.id == page)) {
         workspace.setActivePage(page);
       }
     }
-    if (followDevice && display != null) {
-      width = (display['width'] as num).toDouble();
-      height = (display['height'] as num).toDouble();
-      textScale = (display['text_scale'] as num).toDouble();
+    if (display != null) {
+      final width = display['width'];
+      final height = display['height'];
+      if (width is num && height is num && width > 0 && height > 0) {
+        deviceWidth = width.toDouble();
+        deviceHeight = height.toDouble();
+        if (!orientationChosen) {
+          previewOrientation = deviceWidth >= deviceHeight
+              ? LayoutOrientation.wide
+              : LayoutOrientation.portrait;
+        }
+      }
+      final scale = display['text_scale'];
+      textScale = scale is num && scale > 0 ? scale.toDouble() : 1;
       dark = display['dark'] == true;
     }
     // Only authorized public snapshot fields cross the iframe boundary.
@@ -145,7 +164,6 @@ class _DesktopEditorState extends State<DesktopEditor> {
 
   @override
   void dispose() {
-    clock?.cancel();
     workspace.removeListener(_changed);
     workspace.dispose();
     connection.dispose();
@@ -171,73 +189,24 @@ class _DesktopEditorState extends State<DesktopEditor> {
                     spacing: 12,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      DropdownButton<String>(
-                        value: followDevice ? 'device' : 'custom',
+                      DropdownButton<LayoutOrientation>(
+                        value: previewOrientation,
                         items: const [
                           DropdownMenuItem(
-                            value: 'device',
-                            child: Text('跟随设备'),
+                            value: LayoutOrientation.wide,
+                            child: Text('横屏'),
                           ),
                           DropdownMenuItem(
-                            value: 'wide',
-                            child: Text('横屏 1280 × 720'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'portrait',
-                            child: Text('竖屏 400 × 800'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'custom',
-                            child: Text('自定义尺寸'),
+                            value: LayoutOrientation.portrait,
+                            child: Text('竖屏'),
                           ),
                         ],
                         onChanged: (v) => setState(() {
-                          followDevice = v == 'device';
-                          if (v == 'wide') {
-                            width = 1280;
-                            height = 720;
-                          }
-                          if (v == 'portrait') {
-                            width = 400;
-                            height = 800;
-                          }
-                          if (followDevice && latest != null) _apply(latest!);
+                          if (v == null) return;
+                          previewOrientation = v;
+                          orientationChosen = true;
                         }),
                       ),
-                      if (followDevice)
-                        Text(
-                          '${width.round()} × ${height.round()} dp · 字号 ${textScale.toStringAsFixed(2)}×',
-                        )
-                      else ...[
-                        _dimension(
-                          '宽',
-                          width,
-                          (v) => setState(() => width = v),
-                        ),
-                        _dimension(
-                          '高',
-                          height,
-                          (v) => setState(() => height = v),
-                        ),
-                        IconButton(
-                          tooltip: '旋转预览',
-                          onPressed: () => setState(() {
-                            final old = width;
-                            width = height;
-                            height = old;
-                          }),
-                          icon: const Icon(Icons.screen_rotation),
-                        ),
-                        IconButton(
-                          tooltip: '切换预览主题',
-                          onPressed: () => setState(() => dark = !dark),
-                          icon: Icon(
-                            dark
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
-                          ),
-                        ),
-                      ],
                       FilterChip(
                         label: const Text('原始尺寸'),
                         selected: !previewFit,
@@ -262,7 +231,7 @@ class _DesktopEditorState extends State<DesktopEditor> {
                     workspace: workspace,
                     repository: repository,
                     allowEditing: true,
-                    previewSize: Size(width, height),
+                    previewSize: Size(previewWidth, previewHeight),
                     previewFit: previewFit,
                     previewTextScale: textScale,
                     debugLayout: debug,
@@ -291,26 +260,6 @@ class _DesktopEditorState extends State<DesktopEditor> {
       ),
     );
   }
-
-  Widget _dimension(
-    String label,
-    double value,
-    ValueChanged<double> onChanged,
-  ) => SizedBox(
-    width: 100,
-    child: TextFormField(
-      key: ValueKey('$label-$value'),
-      initialValue: value.round().toString(),
-      decoration: InputDecoration(labelText: '$label (dp)'),
-      keyboardType: TextInputType.number,
-      onFieldSubmitted: (v) {
-        final number = double.tryParse(v);
-        if (number != null && number >= 200 && number <= 8192) {
-          onChanged(number);
-        }
-      },
-    ),
-  );
 }
 
 class _DesktopRepository extends LayoutRepository {

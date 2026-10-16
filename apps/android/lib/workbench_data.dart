@@ -2,6 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'layout_workspace.dart';
 
+// Device snapshots are polled frequently; keep MemoryImage cache keys stable
+// when an icon has not changed between snapshots.
+const _shortcutIconCacheLimit = 128;
+final _shortcutIconCache = <String, Uint8List>{};
+
 class SourceState {
   SourceState(Map<String, dynamic> v)
     : id = v['source_id'] as String,
@@ -73,6 +78,11 @@ Uint8List? _shortcutIcon(dynamic encoded) {
   if (encoded is! String || encoded.isEmpty || encoded.length > 43692) {
     return null;
   }
+  final cached = _shortcutIconCache.remove(encoded);
+  if (cached != null) {
+    _shortcutIconCache[encoded] = cached;
+    return cached;
+  }
   try {
     final bytes = base64Decode(encoded);
     if (bytes.length > 32768 || bytes.length < 24) return null;
@@ -83,6 +93,10 @@ Uint8List? _shortcutIcon(dynamic encoded) {
     final dimensions = ByteData.sublistView(bytes);
     final width = dimensions.getUint32(16), height = dimensions.getUint32(20);
     if (width < 1 || height < 1 || width > 256 || height > 256) return null;
+    if (_shortcutIconCache.length >= _shortcutIconCacheLimit) {
+      _shortcutIconCache.remove(_shortcutIconCache.keys.first);
+    }
+    _shortcutIconCache[encoded] = bytes;
     return bytes;
   } on FormatException {
     return null;

@@ -113,6 +113,7 @@ pub struct Host {
     pub shortcuts: Vec<ShortcutConfig>,
     pub usage_config: Option<usage::UsageConfig>,
     commands: std::collections::HashMap<(String, String), (Command, CommandResult)>,
+    completed_claims: std::collections::HashMap<(String, String), (String, u64)>,
     path: PathBuf,
     invitation: Option<Invitation>,
     pending: Option<Pending>,
@@ -144,6 +145,12 @@ pub struct Snapshot {
 }
 
 impl Host {
+    pub fn data_directory(&self) -> &std::path::Path {
+        self.path
+            .parent()
+            .expect("host configuration has a directory")
+    }
+
     pub fn load(directory: PathBuf, default_name: String) -> Result<Self> {
         fs::create_dir_all(&directory)?;
         let lock = fs::OpenOptions::new()
@@ -192,6 +199,7 @@ impl Host {
             shortcuts,
             usage_config: settings.usage_config,
             commands: Default::default(),
+            completed_claims: Default::default(),
             path,
             invitation: None,
             pending: None,
@@ -245,6 +253,30 @@ impl Host {
         };
         self.invitation = Some(invitation.clone());
         invitation
+    }
+
+    /// Return the invitation used by automatic LAN discovery.
+    ///
+    /// Discovery can run repeatedly while the app is open, so it must reuse a
+    /// still-valid invitation instead of invalidating a request that is already
+    /// waiting for approval. Once the invitation expires, create a fresh one.
+    pub fn discovery_invitation(&mut self, time: u64) -> Option<Invitation> {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| time < pending.info.expires_at)
+        {
+            return None;
+        }
+        // A client may disappear after requesting approval. Do not let its
+        // expired one-time request block discovery indefinitely.
+        self.pending = None;
+        if let Some(invitation) = &self.invitation {
+            if time < invitation.expires_at {
+                return Some(invitation.clone());
+            }
+        }
+        Some(self.invite(time))
     }
 
     pub fn cancel_pairing(&mut self) {
@@ -333,17 +365,34 @@ impl Host {
         Ok(())
     }
 
-    pub fn claim(&self, id: &str, claim: &str, time: u64) -> Result<Option<String>> {
-        let p = self
-            .pending
-            .as_ref()
-            .filter(|p| {
-                p.info.id == id
-                    && time < p.info.expires_at
-                    && matches(&p.claim_hash, &digest(claim))
-            })
-            .context("连接请求已失效，请重新连接")?;
-        Ok(p.approved.then(|| p.token.clone()))
+    pub fn claim(&mut self, id: &str, claim: &str, time: u64) -> Result<Option<String>> {
+        let key = (id.to_owned(), digest(claim));
+        if let Some((token, expires_at)) = self.completed_claims.get(&key) {
+            if time < *expires_at {
+                return Ok(Some(token.clone()));
+            }
+        }
+        self.completed_claims
+            .retain(|_, (_, expires_at)| time < *expires_at);
+        let (approved, token, expires_at) = {
+            let p = self
+                .pending
+                .as_ref()
+                .filter(|p| {
+                    p.info.id == id
+                        && time < p.info.expires_at
+                        && matches(&p.claim_hash, &digest(claim))
+                })
+                .context("连接请求已失效，请重新连接")?;
+            (p.approved, p.token.clone(), p.info.expires_at)
+        };
+        if !approved {
+            return Ok(None);
+        }
+        self.completed_claims
+            .insert(key, (token.clone(), expires_at));
+        self.pending = None;
+        Ok(Some(token))
     }
 
     pub fn authenticate(&self, token: &str) -> bool {
@@ -457,5 +506,41 @@ mod tests {
             .is_err());
         host.cancel_pairing();
         assert!(host.pending(222).is_none());
+    }
+
+    #[test]
+    fn discovery_reuses_invitation_until_a_request_is_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let first = host.discovery_invitation(100).unwrap();
+        assert_eq!(
+            host.discovery_invitation(101).unwrap().session_id,
+            first.session_id
+        );
+        let claim = secret();
+        let pending = host
+            .request_pairing(&first.session_id, &first.secret, &claim, "屏幕", 102)
+            .unwrap();
+        assert!(host.discovery_invitation(103).is_none());
+        assert_eq!(host.pending(103).unwrap().id, pending.id);
+    }
+
+    #[test]
+    fn expired_pending_request_does_not_block_discovery() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let invitation = host.discovery_invitation(100).unwrap();
+        host.request_pairing(
+            &invitation.session_id,
+            &invitation.secret,
+            &secret(),
+            "屏幕",
+            101,
+        )
+        .unwrap();
+
+        let next = host.discovery_invitation(invitation.expires_at).unwrap();
+        assert_ne!(next.session_id, invitation.session_id);
+        assert!(host.pending(invitation.expires_at).is_none());
     }
 }

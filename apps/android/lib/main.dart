@@ -170,7 +170,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('在电脑上的 DeskBar 连接助手点击「连接设备」，复制完整邀请。'),
+                const Text('在电脑上的 DeskBar 连接助手点击「显示备用二维码」，复制备用邀请。'),
                 const SizedBox(height: 20),
                 TextField(
                   controller: invitation,
@@ -495,17 +495,59 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                               child: const Text('取消连接'),
                             ),
                           ] else ...[
-                            Text('电脑旁的另一块屏幕', style: text.headlineSmall),
+                            Text('选择附近的电脑', style: text.headlineSmall),
+                            const SizedBox(height: 12),
+                            const Text('连接同一局域网后，点击电脑名称，电脑确认一次即可。'),
+                            const SizedBox(height: 20),
+                            if (connection.nearby.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                child: Text(
+                                  connection.searching
+                                      ? '正在查找电脑…'
+                                      : '暂时没有找到电脑，请确认两端在同一 Wi-Fi。',
+                                  style: text.bodyMedium,
+                                ),
+                              ),
+                            for (final computer in connection.nearby)
+                              Card(
+                                clipBehavior: Clip.antiAlias,
+                                child: ListTile(
+                                  leading: const Icon(Icons.computer_outlined),
+                                  title: Text(computer.name),
+                                  subtitle: const Text('点击发起连接，等待电脑确认'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: connection.busy
+                                      ? null
+                                      : () => connection.pair(
+                                          computer.invitation,
+                                          'Android 工作台',
+                                        ),
+                                ),
+                              ),
                             const SizedBox(height: 16),
-                            const Text('在电脑上打开 DeskBar 连接助手，连接同一 Wi-Fi，即可开始。'),
+                            OutlinedButton.icon(
+                              onPressed: connection.searching
+                                  ? null
+                                  : connection.discover,
+                              icon: const Icon(Icons.refresh),
+                              label: Text(
+                                connection.searching ? '正在查找…' : '重新查找',
+                              ),
+                            ),
                             const SizedBox(height: 24),
+                            const Divider(),
+                            Text('其他连接方式', style: text.titleMedium),
+                            const SizedBox(height: 8),
                             Wrap(
                               spacing: 12,
                               runSpacing: 12,
                               children: [
-                                FilledButton(
+                                OutlinedButton(
                                   onPressed: scan,
-                                  child: const Text('扫码连接电脑'),
+                                  child: const Text('扫码连接'),
                                 ),
                                 OutlinedButton(
                                   onPressed: () => paste(),
@@ -513,44 +555,11 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 32),
-                            const Divider(),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text('附近的电脑', style: text.titleLarge),
-                                ),
-                                TextButton(
-                                  onPressed: connection.searching
-                                      ? null
-                                      : connection.discover,
-                                  child: Text(
-                                    connection.searching ? '正在搜索…' : '搜索',
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (connection.nearby.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Text('可以直接扫码连接；自动搜索需要允许访问本地网络。'),
-                              ),
-                            for (final name in connection.nearby)
-                              ListTile(
-                                title: Text(name),
-                                subtitle: const Text('在电脑上生成邀请后连接'),
-                                onTap: () => paste(),
-                              ),
                             if (connection.phase == ConnectionPhase.offline)
                               TextButton(
                                 onPressed: connection.restore,
                                 child: const Text('重试读取连接'),
                               ),
-                            const SizedBox(height: 24),
-                            Text(
-                              '连接邀请仅在短时间内有效，且需要电脑确认。',
-                              style: text.bodySmall,
-                            ),
                           ],
                         ],
                       ),

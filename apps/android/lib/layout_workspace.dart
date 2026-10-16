@@ -438,6 +438,19 @@ class LayoutWorkspace extends ChangeNotifier {
     return _committed;
   }
 
+  /// Mark a persisted draft without leaving edit mode.
+  ///
+  /// If [draft] is still the current draft, replace it with the persisted
+  /// document as well (for example after binding a newly created component).
+  /// A newer draft made while persistence was in flight is kept intact.
+  void markSaved(LayoutDocument document, {LayoutDocument? draft}) {
+    document.validate();
+    _committed = document;
+    if (editing && (draft == null || identical(_draft, draft))) {
+      _draft = document;
+    }
+  }
+
   bool setActivePage(String id) {
     if (!pages.any((page) => page.id == id)) return _fail('找不到页面');
     if (document.activePageId == id) return true;
@@ -889,6 +902,8 @@ class LayoutWorkspace extends ChangeNotifier {
       'gapY': 16.0,
       'labels': true,
       'columns': 'auto',
+      'rows': 'auto',
+      'alignment': 'spaceEvenly',
     },
     'usage' => {'showTitle': true, 'content': 'quota'},
     _ => {'showTitle': true},
@@ -1103,14 +1118,7 @@ void _validateOptions(String type, Map<String, dynamic> options) {
       throw const FormatException('组件开关参数无效');
     }
   }
-  for (final key in [
-    'itemWidth',
-    'itemHeight',
-    'iconSize',
-    'gap',
-    'gapX',
-    'gapY',
-  ]) {
+  for (final key in ['itemWidth', 'itemHeight', 'gap', 'gapX', 'gapY']) {
     if (!options.containsKey(key)) continue;
     final value = options[key];
     final allowsZero = const {'gap', 'gapX', 'gapY'}.contains(key);
@@ -1119,5 +1127,32 @@ void _validateOptions(String type, Map<String, dynamic> options) {
         (allowsZero ? value < 0 : value <= 0)) {
       throw const FormatException('组件尺寸和间距无效');
     }
+  }
+  if (options.containsKey('iconSize')) {
+    final value = options['iconSize'];
+    final valid =
+        value == 'max' ||
+        (value is num && value.isFinite && value > 0 && value <= 200);
+    if (!valid) throw const FormatException('图标尺寸需为正数或自适应最大');
+  }
+  if (options.containsKey('rows')) {
+    final value = options['rows'];
+    final valid =
+        value == 'auto' ||
+        (value is num &&
+            value.isFinite &&
+            value == value.round() &&
+            value >= 1 &&
+            value <= 12);
+    if (!valid) throw const FormatException('行数需为自动或 1 到 12 的整数');
+  }
+  if (options.containsKey('alignment') &&
+      !const {
+        'left',
+        'center',
+        'spaceEvenly',
+        'right',
+      }.contains(options['alignment'])) {
+    throw const FormatException('对齐方式无效');
   }
 }

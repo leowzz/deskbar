@@ -1,4 +1,5 @@
 //! Embedded TLS listener and untrusted LAN discovery. No independent service.
+mod credentials;
 pub mod icons;
 mod usage;
 pub mod website_icon;
@@ -12,6 +13,7 @@ use axum::{
 };
 use axum_server::tls_rustls::RustlsConfig;
 use base64::{engine::general_purpose::STANDARD, Engine};
+use credentials::Credentials;
 use deskbar_host::{
     now,
     workbench::{Command, OpenTarget, Permissions, ShortcutConfig},
@@ -30,6 +32,9 @@ use tokio::sync::watch;
 
 pub const DISCOVERY_GROUP: Ipv4Addr = Ipv4Addr::new(239, 77, 68, 76);
 pub const PORT: u16 = 42831;
+// A device snapshot can contain the authorized shortcut catalog and PNG icons.
+// Keep a bounded frame size while leaving room for the configured 64 entries.
+const MAX_EVENT_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 
 pub struct Identity {
     pub key_pem: String,
@@ -38,22 +43,6 @@ pub struct Identity {
 }
 
 impl Identity {
-    pub fn load(host_id: &str) -> Result<Self> {
-        let entry = keyring::Entry::new("app.deskbar.agent", host_id)?;
-        let key_pem = match entry.get_password() {
-            Ok(value) => value,
-            Err(keyring::Error::NoEntry) => {
-                let value = KeyPair::generate()?.serialize_pem();
-                entry
-                    .set_password(&value)
-                    .context("无法保存电脑身份，请允许 DeskBar 连接助手访问系统钥匙串后重试")?;
-                value
-            }
-            Err(e) => return Err(e).context("无法读取电脑身份，请解锁系统钥匙串后重试"),
-        };
-        Self::from_key(key_pem)
-    }
-
     pub fn from_key(key_pem: String) -> Result<Self> {
         let key = KeyPair::from_pem(&key_pem)?;
         let pin = format!(
@@ -80,6 +69,7 @@ pub struct Agent {
     refresh: Arc<tokio::sync::Notify>,
     usage_refresh: Arc<tokio::sync::Notify>,
     usage_generation: Arc<std::sync::atomic::AtomicU64>,
+    credentials: Arc<Mutex<Credentials>>,
 }
 
 #[derive(Serialize)]
@@ -103,10 +93,12 @@ pub struct PairingInvitation {
 
 impl Agent {
     pub async fn start(directory: PathBuf, name: String) -> Result<Self> {
+        let existing_host = directory.join("host.yaml").try_exists()?;
         let host = Host::load(directory, name)
             .context("无法读取电脑配置，请检查是否已在运行或配置目录不可访问")?;
-        let identity = Identity::load(&host.id)?;
-        let agent = Self::with_identity(host, identity, PORT).await?;
+        let credentials = Credentials::load(&host, existing_host)?;
+        let identity = credentials.identity()?;
+        let agent = Self::with_credentials(host, identity, credentials, PORT).await?;
         agent.start_sources();
         agent.start_usage();
         agent.start_shortcut_icons();
@@ -116,6 +108,16 @@ impl Agent {
     pub async fn with_identity(
         host: Host,
         identity: Identity,
+        preferred_port: u16,
+    ) -> Result<Self> {
+        let credentials = Credentials::with_identity(&host, &identity)?;
+        Self::with_credentials(host, identity, credentials, preferred_port).await
+    }
+
+    async fn with_credentials(
+        host: Host,
+        identity: Identity,
+        credentials: Credentials,
         preferred_port: u16,
     ) -> Result<Self> {
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -140,6 +142,7 @@ impl Agent {
             refresh: Arc::new(tokio::sync::Notify::new()),
             usage_refresh: Arc::new(tokio::sync::Notify::new()),
             usage_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            credentials: Arc::new(Mutex::new(credentials)),
         };
         // Discovery failure leaves the QR/manual invitation path usable.
         match discovery_socket() {
@@ -461,7 +464,9 @@ async fn events(State(agent): State<Agent>, headers: HeaderMap, ws: WebSocketUpg
     };
     // Subscribe before reading the initial snapshot so no update is lost.
     let mut changes = agent.changed.subscribe();
-    ws.max_message_size(2048).max_frame_size(2048).on_upgrade(move |mut socket| async move {
+    ws.max_message_size(MAX_EVENT_MESSAGE_BYTES)
+        .max_frame_size(MAX_EVENT_MESSAGE_BYTES)
+        .on_upgrade(move |mut socket| async move {
         let mut heartbeat = tokio::time::interval(Duration::from_secs(10));
         loop {
             let json = {
@@ -607,9 +612,18 @@ async fn discovery(socket: tokio::net::UdpSocket, agent: Agent) {
         }
         last.insert(source.ip(), instant);
         let offer = {
-            let host = agent.host.lock().unwrap();
-            serde_json::json!({"product":"deskbar", "version":1, "type":"offer", "nonce":nonce,
-                "host_id":host.id, "name":host.name, "port":agent.port, "pin":agent.pin})
+            let mut host = agent.host.lock().unwrap();
+            let Some(invitation) = host.discovery_invitation(now()) else {
+                // A request is already waiting for approval. Keep advertising
+                // the computer, but do not replace the one-time invitation.
+                continue;
+            };
+            serde_json::json!({
+                "product":"deskbar", "version":1, "type":"offer", "nonce":nonce,
+                "host_id":host.id, "name":host.name, "port":agent.port, "pin":agent.pin,
+                "session":invitation.session_id, "secret":invitation.secret,
+                "expires":invitation.expires_at
+            })
         };
         let _ = socket
             .send_to(&serde_json::to_vec(&offer).unwrap(), source)

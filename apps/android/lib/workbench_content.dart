@@ -13,6 +13,121 @@ String workbenchTime(int seconds) {
   return '${d.month}/${d.day} ${two(d.hour)}:${two(d.minute)}';
 }
 
+class _ShortcutLayout {
+  const _ShortcutLayout({
+    required this.iconSize,
+    required this.tileWidth,
+    required this.tileHeight,
+    required this.columns,
+    required this.rows,
+  });
+
+  final double iconSize;
+  final double tileWidth;
+  final double tileHeight;
+  final int columns;
+  final int rows;
+}
+
+int? _shortcutRows(Map<String, dynamic> options) {
+  final value = options['rows'];
+  if (value is num && value.isFinite && value == value.round()) {
+    return value.round().clamp(1, 12).toInt();
+  }
+  return null;
+}
+
+String _shortcutAlignment(Map<String, dynamic> options) {
+  const values = {'left', 'center', 'spaceEvenly', 'right'};
+  final value = options['alignment'];
+  return value is String && values.contains(value) ? value : 'spaceEvenly';
+}
+
+String _shortcutAlignmentLabel(String alignment) => switch (alignment) {
+  'left' => '左对齐',
+  'center' => '居中对齐',
+  'right' => '右对齐',
+  _ => '均匀分布',
+};
+
+MainAxisAlignment _shortcutMainAxisAlignment(String alignment) =>
+    switch (alignment) {
+      'left' => MainAxisAlignment.start,
+      'center' => MainAxisAlignment.center,
+      'right' => MainAxisAlignment.end,
+      _ => MainAxisAlignment.spaceEvenly,
+    };
+
+_ShortcutLayout _calculateShortcutLayout({
+  required int count,
+  required double width,
+  required double height,
+  required double gapX,
+  required double gapY,
+  required bool labels,
+  required double labelHeight,
+  required bool maximize,
+  required int? configuredRows,
+  double fixedIconSize = 56,
+}) {
+  final horizontalPadding = labels ? 32.0 : 8.0;
+  final verticalPadding = labels ? labelHeight + 8.0 : 8.0;
+  if (!maximize) {
+    final iconSize = fixedIconSize.clamp(24, 200).toDouble();
+    final tileWidth = math.max(48.0, iconSize + horizontalPadding).toDouble();
+    final tileHeight = math.max(48.0, iconSize + verticalPadding).toDouble();
+    final maxColumns = math
+        .max(1, ((width + gapX) / (tileWidth + gapX)).floor())
+        .toInt();
+    final requestedRows = configuredRows ?? (count / maxColumns).ceil();
+    final columns = math.max(
+      1,
+      math.min(maxColumns, (count / requestedRows).ceil()).toInt(),
+    );
+    final rows = (count / columns).ceil();
+    return _ShortcutLayout(
+      iconSize: iconSize,
+      tileWidth: tileWidth,
+      tileHeight: tileHeight,
+      columns: columns,
+      rows: rows,
+    );
+  }
+
+  final firstCandidate = math.min(configuredRows ?? 1, count);
+  final candidates = Iterable<int>.generate(
+    count - firstCandidate + 1,
+    (index) => firstCandidate + index,
+  );
+  var bestRows = configuredRows ?? 1;
+  var bestColumns = count;
+  var bestIcon = 24.0;
+  var bestRawIcon = -double.infinity;
+  for (final candidateRows in candidates) {
+    final columns = math.max(1, (count / candidateRows).ceil()).toInt();
+    final iconByWidth =
+        (width - gapX * (columns - 1)) / columns - horizontalPadding;
+    final iconByHeight =
+        (height - gapY * (candidateRows - 1)) / candidateRows - verticalPadding;
+    final rawIcon = math.min(iconByWidth, iconByHeight);
+    if (rawIcon > bestRawIcon ||
+        (rawIcon == bestRawIcon && candidateRows < bestRows)) {
+      bestRows = candidateRows;
+      bestColumns = columns;
+      bestRawIcon = rawIcon;
+      bestIcon = rawIcon.clamp(24, 200).toDouble();
+    }
+  }
+  final iconSize = bestIcon;
+  return _ShortcutLayout(
+    iconSize: iconSize,
+    tileWidth: math.max(48.0, iconSize + horizontalPadding).toDouble(),
+    tileHeight: math.max(48.0, iconSize + verticalPadding).toDouble(),
+    columns: bestColumns,
+    rows: bestRows,
+  );
+}
+
 class WorkbenchWidgetBody extends StatelessWidget {
   const WorkbenchWidgetBody({
     super.key,
@@ -30,8 +145,11 @@ class WorkbenchWidgetBody extends StatelessWidget {
   final Map<String, dynamic> options, binding;
   final bool editing, debugLayout;
   final VoidCallback? onEditRequested;
-  double number(String key, double fallback) =>
-      (options[key] as num?)?.toDouble() ?? fallback;
+  double number(String key, double fallback) {
+    final value = options[key];
+    return value is num ? value.toDouble() : fallback;
+  }
+
   bool get online => connection.phase == ConnectionPhase.online;
   Future<void> open(
     BuildContext context,
@@ -333,7 +451,8 @@ class WorkbenchWidgetBody extends StatelessWidget {
             : '请在电脑端添加入口并开启共享。',
       );
     }
-    final iconSize = number('iconSize', 56).clamp(24, 200).toDouble();
+    final maximize = options['iconSize'] == 'max';
+    final fixedIconSize = number('iconSize', 56);
     final gapX = number(
       'gapX',
       number('horizontalGap', 8),
@@ -343,6 +462,8 @@ class WorkbenchWidgetBody extends StatelessWidget {
       number('verticalGap', 8),
     ).clamp(0, 64).toDouble();
     final labels = options['labels'] != false;
+    final configuredRows = _shortcutRows(options);
+    final alignment = _shortcutAlignment(options);
     final allowed = data.capabilities.contains('open_shortcut');
     final canOpen = !editing && online && allowed && !connection.opening;
     final labelStyle = Theme.of(
@@ -357,14 +478,12 @@ class WorkbenchWidgetBody extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       child: LayoutBuilder(
         builder: (context, box) {
-          final tileWidth = math.max(48.0, iconSize + (labels ? 32 : 8));
           final labelHeight = labels
               ? MediaQuery.textScalerOf(context).scale(labelStyle.fontSize!) *
                         (labelStyle.height ?? 1.5) *
                         2 +
                     4
               : 0.0;
-          final tileHeight = math.max(48.0, iconSize + labelHeight + 8);
           final noticePainter = TextPainter(
             text: TextSpan(
               text: notice,
@@ -375,16 +494,116 @@ class WorkbenchWidgetBody extends StatelessWidget {
           )..layout(maxWidth: math.max(1, box.maxWidth));
           final noticeHeight = notice.isEmpty ? 0.0 : noticePainter.height + 4;
           noticePainter.dispose();
-          if (box.maxWidth < tileWidth ||
-              box.maxHeight - noticeHeight < tileHeight) {
+          final availableHeight = math.max(1.0, box.maxHeight - noticeHeight);
+          final layout = _calculateShortcutLayout(
+            count: entries.length,
+            width: box.maxWidth,
+            height: availableHeight,
+            gapX: gapX,
+            gapY: gapY,
+            labels: labels,
+            labelHeight: labelHeight,
+            maximize: maximize,
+            configuredRows: configuredRows,
+            fixedIconSize: fixedIconSize,
+          );
+          if (box.maxWidth < layout.tileWidth ||
+              availableHeight < layout.tileHeight) {
             return _Message(
               '${notice.isEmpty ? '' : '$notice。'}入口区域太小，请在电脑端调整大小。',
             );
           }
-          final columns = math.max(
-            1,
-            ((box.maxWidth + gapX) / (tileWidth + gapX)).floor(),
-          );
+          Widget tile(WorkShortcut entry) {
+            final c = deskbarColors(context);
+            Widget fallback() => Container(
+              width: layout.iconSize,
+              height: layout.iconSize,
+              decoration: BoxDecoration(
+                color: c.raised,
+                borderRadius: BorderRadius.circular(layout.iconSize * .2),
+              ),
+              child: Icon(
+                entry.kind == 'app'
+                    ? Icons.apps_outlined
+                    : Icons.language_outlined,
+                size: layout.iconSize * .65,
+                color: c.muted,
+              ),
+            );
+            return SizedBox(
+              width: layout.tileWidth,
+              height: layout.tileHeight,
+              child: Tooltip(
+                message: entry.name,
+                child: Semantics(
+                  label: entry.name,
+                  button: !editing,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: canOpen
+                        ? () => open(
+                            context,
+                            'open_shortcut',
+                            entry.id,
+                            entry.version,
+                          )
+                        : null,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (entry.iconBytes != null)
+                          Image.memory(
+                            entry.iconBytes!,
+                            width: layout.iconSize,
+                            height: layout.iconSize,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                            filterQuality: FilterQuality.medium,
+                            errorBuilder: (context, error, stack) => fallback(),
+                          )
+                        else
+                          fallback(),
+                        if (labels) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            entry.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: labelStyle,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final rows = <Widget>[];
+          for (var row = 0; row < layout.rows; row++) {
+            final start = row * layout.columns;
+            if (start >= entries.length) break;
+            final end = math.min(start + layout.columns, entries.length);
+            final children = <Widget>[];
+            for (var index = start; index < end; index++) {
+              if (children.isNotEmpty) children.add(SizedBox(width: gapX));
+              children.add(tile(entries[index]));
+            }
+            rows.add(
+              SizedBox(
+                height: layout.tileHeight,
+                child: Row(
+                  mainAxisAlignment: _shortcutMainAxisAlignment(alignment),
+                  children: children,
+                ),
+              ),
+            );
+            if (row + 1 < layout.rows && end < entries.length) {
+              rows.add(SizedBox(height: gapY));
+            }
+          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -401,81 +620,11 @@ class WorkbenchWidgetBody extends StatelessWidget {
                 child: LayoutDebugOverlay(
                   enabled: debugLayout,
                   label:
-                      '$columns 列 · 单元 ${((box.maxWidth - gapX * (columns - 1)) / columns).toStringAsFixed(1)} × ${tileHeight.toStringAsFixed(1)} dp · 图标 $iconSize dp · 间距 $gapX / $gapY dp',
-                  child: GridView.builder(
+                      '${layout.columns} 列 × ${layout.rows} 行 · 单元 ${layout.tileWidth.toStringAsFixed(1)} × ${layout.tileHeight.toStringAsFixed(1)} dp · 图标 ${maximize ? '自适应最大 ' : ''}${layout.iconSize.toStringAsFixed(1)} dp · 间距 $gapX / $gapY dp · ${_shortcutAlignmentLabel(alignment)}',
+                  child: SingleChildScrollView(
                     key: PageStorageKey('shortcuts-$id'),
                     padding: EdgeInsets.zero,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: gapX,
-                      mainAxisSpacing: gapY,
-                      mainAxisExtent: tileHeight,
-                    ),
-                    itemCount: entries.length,
-                    itemBuilder: (context, index) {
-                      final entry = entries[index];
-                      final c = deskbarColors(context);
-                      Widget fallback() => Container(
-                        width: iconSize,
-                        height: iconSize,
-                        decoration: BoxDecoration(
-                          color: c.raised,
-                          borderRadius: BorderRadius.circular(iconSize * .2),
-                        ),
-                        child: Icon(
-                          entry.kind == 'app'
-                              ? Icons.apps_outlined
-                              : Icons.language_outlined,
-                          size: iconSize * .65,
-                          color: c.muted,
-                        ),
-                      );
-                      return Tooltip(
-                        message: entry.name,
-                        child: Semantics(
-                          label: entry.name,
-                          button: !editing,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(4),
-                            onTap: canOpen
-                                ? () => open(
-                                    context,
-                                    'open_shortcut',
-                                    entry.id,
-                                    entry.version,
-                                  )
-                                : null,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (entry.iconBytes != null)
-                                  Image.memory(
-                                    entry.iconBytes!,
-                                    width: iconSize,
-                                    height: iconSize,
-                                    fit: BoxFit.contain,
-                                    filterQuality: FilterQuality.medium,
-                                    errorBuilder: (context, error, stack) =>
-                                        fallback(),
-                                  )
-                                else
-                                  fallback(),
-                                if (labels) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    entry.name,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    style: labelStyle,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                    child: Column(children: rows),
                   ),
                 ),
               ),

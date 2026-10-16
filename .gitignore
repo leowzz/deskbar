@@ -12,6 +12,8 @@
 *.pfx
 *.jks
 *.keystore
+**/deskbar-release.properties
+credentials/
 local.properties
 
 # Desktop and Rust outputs

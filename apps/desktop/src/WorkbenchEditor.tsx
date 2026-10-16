@@ -1,5 +1,28 @@
 import { useEffect, useRef, useState } from "react";
-import { call, type Status } from "./api";
+import { call, type DeviceDisplay, type Status } from "./api";
+
+type CachedDeviceSize = Pick<DeviceDisplay, "width" | "height">;
+
+function deviceSizeKey(id: string) {
+  return `deskbar.device-size.${id}`;
+}
+
+function readDeviceSize(id: string): CachedDeviceSize | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(deviceSizeKey(id)) ?? "null");
+    if (
+      !value ||
+      !Number.isFinite(value.width) ||
+      !Number.isFinite(value.height) ||
+      value.width <= 0 ||
+      value.height <= 0
+    )
+      return null;
+    return { width: value.width, height: value.height };
+  } catch {
+    return null;
+  }
+}
 
 export function WorkbenchEditor({ status }: { status: Status }) {
   const [deviceId, setDeviceId] = useState(status.devices[0]?.id ?? "");
@@ -8,8 +31,48 @@ export function WorkbenchEditor({ status }: { status: Status }) {
   const [loading, setLoading] = useState(true);
   const frame = useRef<HTMLIFrameElement>(null);
   const selected = status.devices.find((d) => d.id === deviceId);
-  const selectedRef = useRef(selected);
-  selectedRef.current = selected;
+  const [cachedSize, setCachedSize] = useState<CachedDeviceSize | null>(null);
+  const displayRef = useRef<DeviceDisplay | null>(null);
+
+  useEffect(() => {
+    setCachedSize(deviceId ? readDeviceSize(deviceId) : null);
+  }, [deviceId]);
+
+  useEffect(() => {
+    const display = selected?.display;
+    if (
+      !display ||
+      !Number.isFinite(display.width) ||
+      !Number.isFinite(display.height)
+    )
+      return;
+    const size = { width: display.width, height: display.height };
+    try {
+      localStorage.setItem(deviceSizeKey(deviceId), JSON.stringify(size));
+    } catch {
+      // A private browser storage failure should not block editing.
+    }
+    setCachedSize((previous) =>
+      previous?.width === size.width && previous.height === size.height
+        ? previous
+        : size,
+    );
+  }, [deviceId, selected?.display]);
+
+  const display =
+    selected?.display ??
+    (cachedSize
+      ? {
+          width: cachedSize.width,
+          height: cachedSize.height,
+          text_scale: 1,
+          dark: false,
+          page_id: "",
+          layout_revision: selected?.layout_revision ?? 0,
+          seen_at: 0,
+        }
+      : null);
+  displayRef.current = display;
 
   useEffect(() => {
     if (!selected && !editing) setDeviceId(status.devices[0]?.id ?? "");
@@ -38,7 +101,7 @@ export function WorkbenchEditor({ status }: { status: Status }) {
           send({
             type: "state",
             snapshot,
-            display: selectedRef.current?.display ?? null,
+            display: displayRef.current,
           });
           setLoading(false);
           setError("");
@@ -125,12 +188,12 @@ export function WorkbenchEditor({ status }: { status: Status }) {
         </label>
         <span className={`status-tag ${online ? "success" : "warning"}`}>
           {!online
-            ? "设备离线 · 可编辑已保存布局"
+            ? "设备离线 · 可编辑当前布局"
             : selected.display?.layout_revision === selected.layout_revision
-              ? "设备已同步"
-              : "等待设备接收布局"}
+              ? "设备已更新"
+              : "等待设备应用布局"}
         </span>
-        {editing && <span>更改尚未同步</span>}
+        {editing && <span>编辑中 · 更改会自动应用</span>}
       </div>
       {error && (
         <p className="notice error" role="alert">

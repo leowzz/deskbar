@@ -299,6 +299,40 @@ void main() {
     },
   );
 
+  test(
+    'shortcut display options support adaptive size, rows and alignment',
+    () {
+      final workspace = emptyWorkspace();
+      final id = workspace.addWidget('shortcuts')!;
+      expect(workspace.findWidget(id)!.options['rows'], 'auto');
+      expect(workspace.findWidget(id)!.options['alignment'], 'spaceEvenly');
+      expect(
+        workspace.updateWidget(
+          id,
+          options: {'iconSize': 'max', 'rows': 3, 'alignment': 'left'},
+        ),
+        true,
+      );
+      expect(workspace.findWidget(id)!.options['iconSize'], 'max');
+      workspace.document.validate();
+      for (final alignment in ['left', 'center', 'spaceEvenly', 'right']) {
+        expect(
+          workspace.updateWidget(id, options: {'alignment': alignment}),
+          true,
+        );
+      }
+      expect(workspace.updateWidget(id, options: {'rows': 13}), false);
+      expect(
+        workspace.updateWidget(id, options: {'alignment': 'justify'}),
+        false,
+      );
+      expect(
+        workspace.updateWidget(id, options: {'iconSize': 'largest'}),
+        false,
+      );
+    },
+  );
+
   test('mixed random edits always leave the complete draft valid', () {
     final workspace = emptyWorkspace();
     final random = Random(42);

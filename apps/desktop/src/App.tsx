@@ -277,7 +277,7 @@ export function App() {
                 disabled={!status || busy}
                 onClick={invite}
               >
-                连接设备
+                显示备用二维码
               </button>
             )}
           </header>
@@ -395,11 +395,11 @@ export function App() {
               <section className="empty-state">
                 <h2>为电脑添一块屏幕</h2>
                 <p>
-                  在 Android 上打开 DeskBar
-                  工作台，扫描连接邀请，再回到这里确认。
+                  打开 Android 上的 DeskBar
+                  工作台，点击附近的电脑名称；连接请求会出现在这里，确认一次即可。
                 </p>
                 <button className="secondary" disabled={busy} onClick={invite}>
-                  连接第一台设备
+                  找不到电脑？显示备用二维码
                 </button>
               </section>
             )}
@@ -488,7 +488,9 @@ export function App() {
               确认两端已连接同一 Wi-Fi，并允许 DeskBar
               连接助手访问本地网络。访客网络可能禁止设备互相连接。
             </p>
-            <p>自动发现不可用时，可以扫描或粘贴完整连接邀请。</p>
+            <p>
+              两端会自动查找同一局域网内的电脑；找不到时，可以扫描或粘贴备用邀请。
+            </p>
             {status?.addresses.map((address) => (
               <code key={address}>{address}</code>
             ))}
@@ -506,7 +508,7 @@ export function App() {
           aria-labelledby="pair-title"
         >
           <div className="modal-toolbar">
-            <span>连接设备</span>
+            <span>备用连接</span>
             <button
               className="text-button"
               aria-label="关闭连接邀请"
@@ -543,8 +545,11 @@ export function App() {
             </>
           ) : (
             <>
-              <h2 id="pair-title">在 Android 上扫码连接</h2>
-              <p>打开 DeskBar 工作台，点击「扫码连接电脑」。</p>
+              <h2 id="pair-title">备用连接方式</h2>
+              <p>
+                默认方式是 Android
+                自动发现这台电脑；找不到时再扫描下面的二维码。
+              </p>
               <div className="qr">
                 {remaining > 0 && qr ? (
                   <img src={qr} alt="DeskBar 一次性连接邀请二维码" />
@@ -570,7 +575,7 @@ export function App() {
               </p>
               <div className="divider" />
               <h3>设备没有摄像头？</h3>
-              <p>复制完整邀请，在 Android 的「粘贴邀请」中输入。</p>
+              <p>复制备用邀请，在 Android 的「粘贴邀请」中输入。</p>
               <button
                 className="secondary full"
                 disabled={!remaining}

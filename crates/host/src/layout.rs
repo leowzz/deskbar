@@ -91,8 +91,11 @@ impl LayoutDocument {
                     let valid = match key.as_str() {
                         "showTitle" | "fitRows" | "labels" => value.is_boolean(),
                         "maxSessions" => value.as_u64().is_some_and(|n| (1..=40).contains(&n)),
-                        "itemWidth" | "itemHeight" | "iconSize" => {
+                        "itemWidth" | "itemHeight" => {
                             value.as_f64().is_some_and(|n| n > 0.0 && n <= 2000.0)
+                        }
+                        "iconSize" => {
+                            value == "max" || value.as_f64().is_some_and(|n| n > 0.0 && n <= 200.0)
                         }
                         "gap" | "gapX" | "gapY" => {
                             value.as_f64().is_some_and(|n| (0.0..=128.0).contains(&n))
@@ -100,6 +103,13 @@ impl LayoutDocument {
                         "density" => matches!(value.as_str(), Some("normal" | "compact")),
                         "content" => matches!(value.as_str(), Some("quota" | "api")),
                         "columns" => value == "auto",
+                        "rows" => {
+                            value == "auto" || value.as_u64().is_some_and(|n| (1..=12).contains(&n))
+                        }
+                        "alignment" => matches!(
+                            value.as_str(),
+                            Some("left" | "center" | "spaceEvenly" | "right")
+                        ),
                         _ => false,
                     };
                     ensure!(valid, "组件参数无效：{key}");
@@ -259,6 +269,16 @@ mod tests {
         invalid.pages[0].widgets[0]
             .binding
             .insert("hostId".into(), "another-computer".into());
+        assert!(host.save_layout(&id, 1, invalid).is_err());
+        let mut invalid = document();
+        invalid.pages[1].widgets[0]
+            .options
+            .insert("rows".into(), serde_json::json!(13));
+        assert!(host.save_layout(&id, 1, invalid).is_err());
+        let mut invalid = document();
+        invalid.pages[1].widgets[0]
+            .options
+            .insert("alignment".into(), serde_json::json!("justify"));
         assert!(host.save_layout(&id, 1, invalid).is_err());
         assert_eq!(host.authorized_snapshot(&token).unwrap().layout_revision, 1);
         // A failed atomic write also leaves the in-memory layout unchanged.

@@ -44,7 +44,7 @@ void main() {
         );
   });
   testWidgets(
-    'desktop keyboard, numeric properties and save retain draft semantics',
+    'desktop keyboard, numeric properties and debounced auto-save retain drafts',
     (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
@@ -114,6 +114,12 @@ void main() {
         2,
       );
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(workspace.editing, isTrue);
+      expect(repository.saved, isNull);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
@@ -151,10 +157,8 @@ void main() {
         5,
       );
       repository.fail = true;
-      // Saving from a numeric field must include the still-focused input.
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      // The debounce flushes the focused numeric field without a save button.
+      await tester.tap(find.text('完成'));
       await tester.pumpAndSettle();
       expect(workspace.editing, isTrue);
       expect(
@@ -163,7 +167,7 @@ void main() {
       );
       expect(repository.saved, isNull);
       repository.fail = false;
-      await tester.tap(find.text('保存并同步'));
+      await tester.tap(find.text('完成'));
       await tester.pumpAndSettle();
       expect(workspace.editing, isFalse);
       expect(
@@ -182,7 +186,7 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
       expect(workspace.findWidget('quota'), isNotNull);
-      await tester.tap(find.text('放弃更改'));
+      await tester.tap(find.text('完成'));
       await tester.pumpAndSettle();
       expect(workspace.document.toJson(), repository.saved!.toJson());
       expect(tester.takeException(), isNull);
@@ -228,10 +232,7 @@ void main() {
       );
       expect(y.top, x.top);
       expect(y.left, greaterThan(x.right));
-      expect(
-        tester.getRect(find.text('保存并同步')).right,
-        lessThanOrEqualTo(width),
-      );
+      expect(tester.getRect(find.text('完成')).right, lessThanOrEqualTo(width));
       await tester.tap(find.text('页面与组件'));
       await tester.pumpAndSettle();
       expect(
