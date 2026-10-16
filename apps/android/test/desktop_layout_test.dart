@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -480,7 +481,7 @@ void main() {
   );
 
   testWidgets(
-    'desktop edit overlays and debug labels preserve device content dimensions',
+    'desktop debug overlays stay quiet until hover and preserve dimensions',
     (tester) async {
       final connection = Connection()
         ..phase = ConnectionPhase.online
@@ -507,9 +508,18 @@ void main() {
       await tester.pumpWidget(screen(true));
       await tester.pumpAndSettle();
       expect(tester.getSize(find.byType(WorkbenchWidgetBody)), before);
+      expect(find.textContaining('区域 1274.0 × 714.0 dp'), findsNothing);
+      expect(find.textContaining('4 列 · 卡片 307.5 × 107.7 dp'), findsNothing);
+      expect(find.textContaining('卡片 307.5 × 107.7 dp'), findsNothing);
+      final frame = find.byKey(const ValueKey('widget-edit-frame-sessions-1'));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(frame));
+      await tester.pumpAndSettle();
       expect(find.textContaining('区域 1274.0 × 714.0 dp'), findsOneWidget);
-      expect(find.textContaining('4 列 · 卡片 307.5 × 107.7 dp'), findsOneWidget);
-      expect(find.textContaining('卡片 307.5 × 107.7 dp'), findsWidgets);
+      await mouse.moveTo(Offset.zero);
+      await mouse.removePointer();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('区域 1274.0 × 714.0 dp'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       connection.dispose();

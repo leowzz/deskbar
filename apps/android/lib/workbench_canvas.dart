@@ -89,6 +89,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   String? _remoteKey, _lastReport;
   bool loading = true, saving = false, _syncing = false, readOnly = false;
   String? warning, _activeId;
+  String? layoutDebugInteractionId;
   DateTime _lastWheel = DateTime.fromMillisecondsSinceEpoch(0);
   LayoutOrientation orientation = LayoutOrientation.portrait;
   Map<String, GridPlacement>? placementPreview;
@@ -232,6 +233,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     placementPreview = null;
     _scheduleBinding();
     if (!workspace.editing) {
+      layoutDebugInteractionId = null;
       panel = null;
       inspectedId = null;
     }
@@ -1043,9 +1045,12 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 exactPreview: widget.previewSize != null,
                 editable: widget.allowEditing,
                 debugLayout: widget.debugLayout,
+                debugInteractionId: layoutDebugInteractionId,
                 preview: placementPreview?[w.id],
                 onPreview: (preview) =>
                     setState(() => placementPreview = preview),
+                onInteraction: (id) =>
+                    setState(() => layoutDebugInteractionId = id),
               ),
           ],
         ),
@@ -2183,20 +2188,101 @@ class _DesktopNumberFieldState extends State<_DesktopNumberField> {
     required String tooltip,
     required VoidCallback? onPressed,
     required IconData icon,
-  }) => IconButton(
-    key: key,
+  }) => _RepeatingStepButton(
+    buttonKey: key,
     tooltip: tooltip,
     onPressed: onPressed,
-    style: IconButton.styleFrom(
-      minimumSize: Size.zero,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    icon: icon,
+  );
+}
+
+/// A compact number stepper button that repeats while its pointer is held.
+class _RepeatingStepButton extends StatefulWidget {
+  const _RepeatingStepButton({
+    required this.buttonKey,
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final Key buttonKey;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final IconData icon;
+
+  @override
+  State<_RepeatingStepButton> createState() => _RepeatingStepButtonState();
+}
+
+class _RepeatingStepButtonState extends State<_RepeatingStepButton> {
+  static const _initialDelay = Duration(milliseconds: 450);
+  static const _repeatInterval = Duration(milliseconds: 80);
+  Timer? _repeatTimer;
+  bool _repeated = false;
+
+  void _startRepeat(PointerDownEvent event) {
+    if (widget.onPressed == null) return;
+    _repeatTimer?.cancel();
+    _repeated = false;
+    _repeatTimer = Timer(_initialDelay, () {
+      _repeatOnce();
+      _repeatTimer = Timer.periodic(_repeatInterval, (_) => _repeatOnce());
+    });
+  }
+
+  void _repeatOnce() {
+    final onPressed = widget.onPressed;
+    if (onPressed == null) {
+      _stopRepeat();
+      return;
+    }
+    _repeated = true;
+    onPressed();
+  }
+
+  void _stopRepeat([PointerEvent? event]) {
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+  }
+
+  void _tap() {
+    // A long press already applied its steps; avoid an extra increment when
+    // the underlying IconButton emits its tap callback on pointer release.
+    if (!_repeated) widget.onPressed?.call();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RepeatingStepButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onPressed == null) _stopRepeat();
+  }
+
+  @override
+  void dispose() {
+    _stopRepeat();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: _startRepeat,
+    onPointerUp: _stopRepeat,
+    onPointerCancel: _stopRepeat,
+    child: IconButton(
+      key: widget.buttonKey,
+      tooltip: widget.tooltip,
+      onPressed: widget.onPressed == null ? null : _tap,
+      style: IconButton.styleFrom(
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: EdgeInsets.zero,
+      ),
       padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 28, height: 17),
+      iconSize: 18,
+      icon: Icon(widget.icon),
     ),
-    padding: EdgeInsets.zero,
-    visualDensity: VisualDensity.compact,
-    constraints: const BoxConstraints.tightFor(width: 28, height: 17),
-    iconSize: 18,
-    icon: Icon(icon),
   );
 }
 
@@ -2262,9 +2348,11 @@ class _PlacedWidget extends StatefulWidget {
     required this.onEditRequested,
     required this.preview,
     required this.onPreview,
+    required this.onInteraction,
     this.exactPreview = false,
     this.editable = false,
     this.debugLayout = false,
+    this.debugInteractionId,
   });
   final LayoutWidget widget;
   final LayoutOrientation orientation;
@@ -2275,8 +2363,10 @@ class _PlacedWidget extends StatefulWidget {
   final VoidCallback onSettings;
   final VoidCallback onEditRequested;
   final bool exactPreview, debugLayout, editable;
+  final String? debugInteractionId;
   final GridPlacement? preview;
   final ValueChanged<Map<String, GridPlacement>?> onPreview;
+  final ValueChanged<String?> onInteraction;
   @override
   State<_PlacedWidget> createState() => _PlacedWidgetState();
 }
@@ -2288,10 +2378,12 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
   LayoutDocument? gestureDocument;
   Offset delta = Offset.zero;
   bool valid = true;
+  bool hovered = false;
   bool get editing => widget.workspace.editing;
 
   void _start() {
     widget.onSettings();
+    widget.onInteraction(widget.widget.id);
     gestureDocument = widget.workspace.document;
     original = widget.widget.placementFor(widget.orientation);
     candidate = null;
@@ -2383,7 +2475,13 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
       gestureDocument = null;
       valid = true;
     });
+    widget.onInteraction(null);
     widget.onPreview(null);
+  }
+
+  void _setHovered(bool value) {
+    if (hovered == value) return;
+    setState(() => hovered = value);
   }
 
   Widget _dragArea(_LayoutDrag kind, Widget child, String label) => Semantics(
@@ -2432,6 +2530,11 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
     const gap = 2.0;
     final selected =
         editing && widget.workspace.selectedWidgetId == widget.widget.id;
+    final interactionId = widget.debugInteractionId;
+    final showPeerDebug =
+        widget.debugLayout &&
+        (interactionId != null || widget.workspace.selectedWidgetId != null);
+    final showInteractionLabel = interactionId == widget.widget.id;
     final body = WorkbenchWidgetBody(
       connection: widget.connection,
       id: widget.widget.id,
@@ -2440,6 +2543,9 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
       binding: widget.widget.binding,
       editing: widget.editable || widget.exactPreview,
       debugLayout: widget.debugLayout,
+      debugHovered: hovered,
+      debugForceBorder: showPeerDebug,
+      debugForceLabel: showInteractionLabel,
       onEditRequested: widget.onEditRequested,
     );
     return AnimatedPositioned(
@@ -2451,74 +2557,79 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
       top: r.y * ch + gap / 2,
       width: math.max(0, r.w * cw - gap),
       height: math.max(0, r.h * ch - gap),
-      child: widget.editable
-          ? Tooltip(
-              message: '设置${widgetTypeName(widget.widget.type)}',
-              child: DecoratedBox(
-                key: ValueKey('widget-edit-frame-${widget.widget.id}'),
-                position: DecorationPosition.foreground,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: !valid
-                        ? c.danger
-                        : selected
-                        ? c.focus
-                        : Colors.transparent,
-                    width: 2,
+      child: MouseRegion(
+        opaque: false,
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: widget.editable
+            ? Tooltip(
+                message: '设置${widgetTypeName(widget.widget.type)}',
+                child: DecoratedBox(
+                  key: ValueKey('widget-edit-frame-${widget.widget.id}'),
+                  position: DecorationPosition.foreground,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: !valid
+                          ? c.danger
+                          : selected
+                          ? c.focus
+                          : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _dragArea(
+                        _LayoutDrag.move,
+                        IgnorePointer(child: body),
+                        '移动${widgetTypeName(widget.widget.type)}',
+                      ),
+                      if (selected) ...[
+                        _resizeHandle(
+                          _LayoutDrag.left,
+                          left: 0,
+                          top: 0,
+                          bottom: 16,
+                          width: 12,
+                        ),
+                        _resizeHandle(
+                          _LayoutDrag.right,
+                          right: 0,
+                          top: 0,
+                          bottom: 16,
+                          width: 12,
+                        ),
+                        _resizeHandle(
+                          _LayoutDrag.bottom,
+                          left: 16,
+                          right: 16,
+                          bottom: 0,
+                          height: 12,
+                        ),
+                        _resizeHandle(
+                          _LayoutDrag.bottomLeft,
+                          left: 0,
+                          bottom: 0,
+                          width: 16,
+                          height: 16,
+                        ),
+                        _resizeHandle(
+                          _LayoutDrag.bottomRight,
+                          right: 0,
+                          bottom: 0,
+                          width: 16,
+                          height: 16,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _dragArea(
-                      _LayoutDrag.move,
-                      IgnorePointer(child: body),
-                      '移动${widgetTypeName(widget.widget.type)}',
-                    ),
-                    if (selected) ...[
-                      _resizeHandle(
-                        _LayoutDrag.left,
-                        left: 0,
-                        top: 0,
-                        bottom: 16,
-                        width: 12,
-                      ),
-                      _resizeHandle(
-                        _LayoutDrag.right,
-                        right: 0,
-                        top: 0,
-                        bottom: 16,
-                        width: 12,
-                      ),
-                      _resizeHandle(
-                        _LayoutDrag.bottom,
-                        left: 16,
-                        right: 16,
-                        bottom: 0,
-                        height: 12,
-                      ),
-                      _resizeHandle(
-                        _LayoutDrag.bottomLeft,
-                        left: 0,
-                        bottom: 0,
-                        width: 16,
-                        height: 16,
-                      ),
-                      _resizeHandle(
-                        _LayoutDrag.bottomRight,
-                        right: 0,
-                        bottom: 0,
-                        width: 16,
-                        height: 16,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            )
-          : widget.exactPreview
-          ? IgnorePointer(child: body)
-          : body,
+              )
+            : widget.exactPreview
+            ? IgnorePointer(child: body)
+            : body,
+      ),
     );
   }
 

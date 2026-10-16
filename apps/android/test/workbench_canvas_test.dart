@@ -8,6 +8,7 @@ import 'package:deskbar/workbench_canvas.dart';
 import 'package:deskbar/workbench_content.dart';
 import 'package:deskbar/workbench_data.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'workbench_fixture.dart';
 
@@ -248,66 +249,96 @@ void main() {
       }
     }
   }
-  testWidgets('number controls step by one and disable at card minimums', (
-    tester,
-  ) async {
-    final workspace = LayoutWorkspace();
-    addTearDown(workspace.dispose);
-    await launch(tester, workspace);
-    workspace.beginEdit();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('设置会话').first);
-    await tester.pumpAndSettle();
+  testWidgets(
+    'number controls step, repeat while held and disable at minimums',
+    (tester) async {
+      final workspace = LayoutWorkspace();
+      addTearDown(workspace.dispose);
+      await launch(tester, workspace);
+      workspace.beginEdit();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('设置会话').first);
+      await tester.pumpAndSettle();
 
-    final density = find.byKey(const ValueKey('density-main-sessions-compact'));
-    await tester.ensureVisible(density);
-    await tester.pumpAndSettle();
-    await tester.tap(density);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('标准').last);
-    await tester.pumpAndSettle();
-    expect(workspace.findWidget('main-sessions')!.options['itemHeight'], 96.0);
+      final density = find.byKey(
+        const ValueKey('density-main-sessions-compact'),
+      );
+      await tester.ensureVisible(density);
+      await tester.pumpAndSettle();
+      await tester.tap(density);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('标准').last);
+      await tester.pumpAndSettle();
+      expect(
+        workspace.findWidget('main-sessions')!.options['itemHeight'],
+        96.0,
+      );
 
-    final width = find.widgetWithText(TextField, '卡片目标宽度');
-    final height = find.widgetWithText(TextField, '卡片目标高度');
-    final widthMinus = find.byKey(const ValueKey('number-decrement-卡片目标宽度'));
-    final widthPlus = find.byKey(const ValueKey('number-increment-卡片目标宽度'));
-    final heightMinus = find.byKey(const ValueKey('number-decrement-卡片目标高度'));
-    expect(tester.widget<IconButton>(widthMinus).onPressed, isNotNull);
-    expect(
-      (tester.widget<IconButton>(widthPlus).icon as Icon).icon,
-      Icons.keyboard_arrow_up,
-    );
-    expect(
-      (tester.widget<IconButton>(widthMinus).icon as Icon).icon,
-      Icons.keyboard_arrow_down,
-    );
-    expect(
-      tester.getCenter(widthPlus).dy,
-      lessThan(tester.getCenter(widthMinus).dy),
-    );
-    await tester.tap(widthMinus);
-    await tester.pumpAndSettle();
-    expect(workspace.findWidget('main-sessions')!.options['itemWidth'], 279.0);
-    await tester.tap(widthPlus);
-    await tester.pumpAndSettle();
-    expect(workspace.findWidget('main-sessions')!.options['itemWidth'], 280.0);
+      final width = find.widgetWithText(TextField, '卡片目标宽度');
+      final height = find.widgetWithText(TextField, '卡片目标高度');
+      final widthMinus = find.byKey(const ValueKey('number-decrement-卡片目标宽度'));
+      final widthPlus = find.byKey(const ValueKey('number-increment-卡片目标宽度'));
+      final heightMinus = find.byKey(const ValueKey('number-decrement-卡片目标高度'));
+      expect(tester.widget<IconButton>(widthMinus).onPressed, isNotNull);
+      expect(
+        (tester.widget<IconButton>(widthPlus).icon as Icon).icon,
+        Icons.keyboard_arrow_up,
+      );
+      expect(
+        (tester.widget<IconButton>(widthMinus).icon as Icon).icon,
+        Icons.keyboard_arrow_down,
+      );
+      expect(
+        tester.getCenter(widthPlus).dy,
+        lessThan(tester.getCenter(widthMinus).dy),
+      );
+      await tester.tap(widthMinus);
+      await tester.pumpAndSettle();
+      expect(
+        workspace.findWidget('main-sessions')!.options['itemWidth'],
+        279.0,
+      );
+      await tester.tap(widthPlus);
+      await tester.pumpAndSettle();
+      expect(
+        workspace.findWidget('main-sessions')!.options['itemWidth'],
+        280.0,
+      );
 
-    await tester.enterText(width, '120');
-    FocusManager.instance.primaryFocus?.unfocus();
-    await tester.pumpAndSettle();
-    expect(workspace.findWidget('main-sessions')!.options['itemWidth'], 120.0);
-    expect(tester.widget<IconButton>(widthMinus).onPressed, isNull);
-    expect(tester.widget<IconButton>(widthMinus).tooltip, '已是最小值');
+      final beforeRepeat =
+          workspace.findWidget('main-sessions')!.options['itemWidth'] as double;
+      final heldPlus = await tester.startGesture(tester.getCenter(widthPlus));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pump(const Duration(milliseconds: 240));
+      await heldPlus.up();
+      await tester.pumpAndSettle();
+      expect(
+        workspace.findWidget('main-sessions')!.options['itemWidth'],
+        greaterThan(beforeRepeat + 1),
+      );
 
-    await tester.enterText(height, '88');
-    FocusManager.instance.primaryFocus?.unfocus();
-    await tester.pumpAndSettle();
-    expect(workspace.findWidget('main-sessions')!.options['itemHeight'], 96.0);
-    expect(tester.widget<IconButton>(heightMinus).onPressed, isNull);
-    expect(tester.widget<IconButton>(heightMinus).tooltip, '已是最小值');
-    expect(tester.takeException(), isNull);
-  });
+      await tester.enterText(width, '120');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(
+        workspace.findWidget('main-sessions')!.options['itemWidth'],
+        120.0,
+      );
+      expect(tester.widget<IconButton>(widthMinus).onPressed, isNull);
+      expect(tester.widget<IconButton>(widthMinus).tooltip, '已是最小值');
+
+      await tester.enterText(height, '88');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(
+        workspace.findWidget('main-sessions')!.options['itemHeight'],
+        96.0,
+      );
+      expect(tester.widget<IconButton>(heightMinus).onPressed, isNull);
+      expect(tester.widget<IconButton>(heightMinus).tooltip, '已是最小值');
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final size in [const Size(360, 640), const Size(800, 360)]) {
     for (final brightness in [Brightness.light, Brightness.dark]) {
       testWidgets(
@@ -957,14 +988,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('USD 12.34'), findsOneWidget);
       expect(find.text('上次实际成本 · 等待刷新'), findsOneWidget);
-      expect(find.text('item 主指标标题'), findsOneWidget);
-      expect(find.text('item 主指标数值'), findsOneWidget);
+      expect(find.text('item 主指标标题'), findsNothing);
+      expect(find.text('item 主指标数值'), findsNothing);
       expect(find.text('item Token'), findsNothing);
       expect(find.text('item TPM'), findsNothing);
       expect(find.text('item 统计窗口'), findsNothing);
       final tooltip = tester.widget<Tooltip>(find.byType(Tooltip).first);
       expect(tooltip.message, contains('Token 1.2M · TPM 4.5K'));
       expect(tooltip.message, contains('统计窗口'));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(
+        location: tester.getCenter(find.text('USD 12.34')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('item 主指标数值'), findsOneWidget);
+      await mouse.removePointer();
       await tester.longPress(find.text('USD 12.34'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Token 1.2M · TPM 4.5K'), findsOneWidget);

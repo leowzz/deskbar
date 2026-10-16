@@ -179,11 +179,15 @@ class WorkbenchWidgetBody extends StatelessWidget {
     this.editing = false,
     this.onEditRequested,
     this.debugLayout = false,
+    this.debugHovered = false,
+    this.debugForceBorder = false,
+    this.debugForceLabel = false,
   });
   final Connection connection;
   final String id, type;
   final Map<String, dynamic> options, binding;
   final bool editing, debugLayout;
+  final bool debugHovered, debugForceBorder, debugForceLabel;
   final VoidCallback? onEditRequested;
   double number(String key, double fallback) {
     final value = options[key];
@@ -211,6 +215,8 @@ class WorkbenchWidgetBody extends StatelessWidget {
     child: LayoutBuilder(
       builder: (context, box) => LayoutDebugOverlay(
         enabled: debugLayout,
+        forceBorder: debugForceBorder || debugHovered || debugForceLabel,
+        forceLabel: debugForceLabel || debugHovered,
         label:
             '区域 ${box.maxWidth.toStringAsFixed(1)} × ${box.maxHeight.toStringAsFixed(1)} dp',
         top: true,
@@ -945,25 +951,79 @@ class LayoutDebugOverlay extends StatelessWidget {
     required this.label,
     required this.child,
     this.top = false,
+    this.forceBorder = false,
+    this.forceLabel = false,
   });
-  final bool enabled, top;
+  final bool enabled, top, forceBorder, forceLabel;
   final String label;
   final Widget child;
   @override
-  Widget build(BuildContext context) => !enabled
-      ? child
-      : Stack(
-          // Keep the child's intrinsic height when an item sits in a
-          // scrolling column; StackFit.expand would pass an infinite height
-          // constraint through to Text during layout.
-          fit: StackFit.passthrough,
-          children: [
-            child,
+  Widget build(BuildContext context) => _LayoutDebugOverlayStateful(
+    enabled: enabled,
+    top: top,
+    label: label,
+    forceBorder: forceBorder,
+    forceLabel: forceLabel,
+    child: child,
+  );
+}
+
+class _LayoutDebugOverlayStateful extends StatefulWidget {
+  const _LayoutDebugOverlayStateful({
+    required this.enabled,
+    required this.top,
+    required this.label,
+    required this.child,
+    required this.forceBorder,
+    required this.forceLabel,
+  });
+
+  final bool enabled, top, forceBorder, forceLabel;
+  final String label;
+  final Widget child;
+
+  @override
+  State<_LayoutDebugOverlayStateful> createState() =>
+      _LayoutDebugOverlayStatefulState();
+}
+
+class _LayoutDebugOverlayStatefulState
+    extends State<_LayoutDebugOverlayStateful> {
+  bool hovered = false;
+
+  void _setHovered(bool value) {
+    if (hovered == value || !widget.enabled) return;
+    setState(() => hovered = value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LayoutDebugOverlayStateful oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled && hovered) hovered = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    final showBorder = hovered || widget.forceBorder;
+    final showLabel = hovered || widget.forceLabel;
+    return MouseRegion(
+      opaque: false,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: Stack(
+        // Keep the child's intrinsic height when an item sits in a
+        // scrolling column; StackFit.expand would pass an infinite height
+        // constraint through to Text during layout.
+        fit: StackFit.passthrough,
+        children: [
+          widget.child,
+          if (showBorder)
             Positioned.fill(
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: const Color(0x14527bc2),
+                    color: hovered ? const Color(0x14527bc2) : null,
                     border: Border.all(
                       color: const Color(0xaa527bc2),
                       width: 1,
@@ -972,11 +1032,12 @@ class LayoutDebugOverlay extends StatelessWidget {
                 ),
               ),
             ),
+          if (showLabel)
             Positioned(
               left: 0,
               right: 0,
-              top: top ? 0 : null,
-              bottom: top ? null : 0,
+              top: widget.top ? 0 : null,
+              bottom: widget.top ? null : 0,
               child: IgnorePointer(
                 child: ColoredBox(
                   color: const Color(0xb8303e52),
@@ -987,7 +1048,7 @@ class LayoutDebugOverlay extends StatelessWidget {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          label,
+                          widget.label,
                           maxLines: 1,
                           softWrap: false,
                           style: const TextStyle(
@@ -1002,6 +1063,8 @@ class LayoutDebugOverlay extends StatelessWidget {
                 ),
               ),
             ),
-          ],
-        );
+        ],
+      ),
+    );
+  }
 }
