@@ -1,13 +1,126 @@
-import { useEffect, useRef, useState } from "react";
-import { WorkbenchSettings, Sharing } from "./WorkbenchSettings";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { WorkbenchSettings, Sharing, UsageSettings } from "./WorkbenchSettings";
 import QRCode from "qrcode";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { call, type Invitation, type Status } from "./api";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+type View = "devices" | "shortcuts" | "settings";
+type Theme = "light" | "dark";
+const themeKey = "desklet.theme";
+
+function initialTheme(): Theme {
+  try {
+    return localStorage.getItem(themeKey) === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+function Icon({
+  name,
+}: {
+  name: "desk" | "devices" | "grid" | "settings" | "tablet";
+}) {
+  const paths = {
+    desk: (
+      <>
+        <rect x="3" y="4" width="18" height="12" rx="2" />
+        <path d="M8 21h8m-4-5v5" />
+      </>
+    ),
+    devices: (
+      <>
+        <rect x="3" y="4" width="12" height="13" rx="2" />
+        <path d="M7 21h4m-2-4v4" />
+        <rect x="17" y="8" width="5" height="12" rx="1.5" />
+      </>
+    ),
+    grid: (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      </>
+    ),
+    settings: (
+      <>
+        <path d="M4 7h16M4 17h16" />
+        <circle cx="9" cy="7" r="3" />
+        <circle cx="15" cy="17" r="3" />
+      </>
+    ),
+    tablet: (
+      <>
+        <rect x="5" y="2" width="14" height="20" rx="2" />
+        <path d="M11 18h2" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      className="icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.65"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
 export function App() {
+  const [view, setView] = useState<View>("devices");
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [themeError, setThemeError] = useState("");
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", theme === "dark" ? "#191A1C" : "#F6F7F9");
+  }, [theme]);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let active = true;
+    async function syncWindowTheme() {
+      try {
+        const nativeWindow = getCurrentWindow();
+        await Promise.all([
+          nativeWindow.setTheme(theme),
+          nativeWindow.setBackgroundColor(
+            theme === "dark" ? "#191A1C" : "#F6F7F9",
+          ),
+        ]);
+      } catch {
+        if (active)
+          setThemeError(
+            "主题已应用，但窗口外观未能同步。可退出并重新打开连接助手后重试。",
+          );
+      }
+    }
+    void syncWindowTheme();
+    return () => {
+      active = false;
+    };
+  }, [theme]);
+  function chooseTheme(value: Theme) {
+    setTheme(value);
+    try {
+      localStorage.setItem(themeKey, value);
+      setThemeError("");
+    } catch {
+      setThemeError("主题已应用，但未能保存。下次启动可能恢复浅色。");
+    }
+  }
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -100,37 +213,75 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#" aria-label="Desklet 连接助手">
-          Desklet<span className="brand-role">连接助手</span>
-        </a>
-        <div className="nav-label">这台电脑</div>
-        <div className="nav-item">
-          我的设备<span>{status?.devices.length ?? "—"}</span>
+        <div className="brand">
+          <Icon name="desk" />
+          <span>
+            Desklet<span className="brand-role">连接助手</span>
+          </span>
         </div>
+        <nav aria-label="主导航">
+          {(
+            [
+              ["devices", "我的设备", "devices"],
+              ["shortcuts", "快捷入口", "grid"],
+              ["settings", "设置", "settings"],
+            ] as const
+          ).map(([id, label, icon]) => (
+            <button
+              key={id}
+              className={`nav-item${view === id ? " active" : ""}`}
+              aria-current={view === id ? "page" : undefined}
+              onClick={() => setView(id)}
+            >
+              <Icon name={icon} />
+              <span>{label}</span>
+              {id === "devices" && (
+                <span className="nav-count">
+                  {status?.devices.length ?? "—"}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
         <div className="sidebar-bottom">
-          局域网直连<p>让身旁的屏幕，成为工作台。</p>
+          <strong>{status?.name ?? "这台电脑"}</strong>
+          <span>
+            {status
+              ? "连接助手正在运行"
+              : loadError
+                ? "连接暂不可用"
+                : "正在连接…"}
+          </span>
+          <p>关闭窗口后仍在菜单栏运行</p>
         </div>
       </aside>
       <main>
         <header>
           <div>
-            <p className="eyebrow">我的设备</p>
             <h1>
-              把工作台
-              <br />
-              放在身旁
+              {view === "devices"
+                ? "我的设备"
+                : view === "shortcuts"
+                  ? "快捷入口"
+                  : "设置"}
             </h1>
             <p className="subtitle">
-              连接 Android 设备，在另一块屏幕上查看这台电脑。
+              {view === "devices"
+                ? "连接 Android 设备，将身旁的屏幕变成工作台。"
+                : view === "shortcuts"
+                  ? "管理设备可以在这台电脑上打开的网页和应用。"
+                  : "管理这台电脑上的连接助手偏好。"}
             </p>
           </div>
-          <button
-            className="primary"
-            disabled={!status || busy}
-            onClick={invite}
-          >
-            连接设备
-          </button>
+          {view === "devices" && (
+            <button
+              className="primary"
+              disabled={!status || busy}
+              onClick={invite}
+            >
+              连接设备
+            </button>
+          )}
         </header>
         {(error || loadError) && (
           <div className="notice error" role="alert">
@@ -144,100 +295,178 @@ export function App() {
             </button>
           </div>
         )}
-        <section className="computer-card">
-          <div className="computer-info">
-            <p className="eyebrow">这台电脑</p>
-            <h2>{status?.name ?? "这台电脑"}</h2>
-            <p>
-              {status
-                ? "连接助手正在运行"
-                : loadError
-                  ? "连接暂不可用"
-                  : "正在读取连接状态"}
-            </p>
-          </div>
-          <span className={`status-tag${status ? " success" : ""}`}>
-            {status ? "可连接" : "未连接"}
-          </span>
-        </section>
-        {status?.discovery_warning && (
-          <div className="notice">
-            <strong>自动发现</strong>
-            <span>{status.discovery_warning}</span>
-          </div>
+        {view === "devices" && (
+          <>
+            <section className="computer-card">
+              <div className="computer-info">
+                <p className="eyebrow">这台电脑</p>
+                <h2>{status?.name ?? "这台电脑"}</h2>
+                <p>
+                  {status
+                    ? "连接助手正在运行"
+                    : loadError
+                      ? "连接暂不可用"
+                      : "正在读取连接状态"}
+                </p>
+              </div>
+              <span className={`status-tag${status ? " success" : ""}`}>
+                {status ? "可连接" : "未连接"}
+              </span>
+            </section>
+            {status?.discovery_warning && (
+              <div className="notice">
+                <strong>自动发现</strong>
+                <span>{status.discovery_warning}</span>
+              </div>
+            )}
+            <div className="section-title">
+              <h2>已配对设备</h2>
+              <span>{status?.devices.length ?? "—"} 台</span>
+            </div>
+            {!status ? (
+              <section className="empty-state">
+                <h2>{loadError ? "连接尚未就绪" : "正在读取设备"}</h2>
+                <p>
+                  {loadError
+                    ? "请处理上方提示后重试。"
+                    : "稍等片刻，即可管理你的设备。"}
+                </p>
+              </section>
+            ) : status.devices.length ? (
+              <div className="device-list">
+                {status.devices.map((device) => (
+                  <article className="device-card" key={device.id}>
+                    <div className="device-info">
+                      <div className="device-heading">
+                        <span className="device-icon">
+                          <Icon name="tablet" />
+                        </span>
+                        <div>
+                          <h3>{device.name}</h3>
+                          <span className="device-state">已配对</span>
+                        </div>
+                      </div>
+                      <p>
+                        {new Date(device.paired_at * 1000).toLocaleDateString(
+                          "zh-CN",
+                        )}{" "}
+                        配对
+                      </p>
+                      <Sharing device={device} busy={busy} run={run} />
+                    </div>
+                    {removeId === device.id ? (
+                      <div className="remove-confirm">
+                        <p>移除后需要重新配对</p>
+                        <button
+                          className="destructive"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              await call("revoke_device", { id: device.id });
+                              setRemoveId(null);
+                            })
+                          }
+                        >
+                          确认移除
+                        </button>
+                        <button
+                          className="secondary"
+                          onClick={() => setRemoveId(null)}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="text-button"
+                        onClick={() => setRemoveId(device.id)}
+                      >
+                        移除
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <section className="empty-state">
+                <h2>为电脑添一块屏幕</h2>
+                <p>
+                  在 Android 上打开 Desklet
+                  工作台，扫描连接邀请，再回到这里确认。
+                </p>
+                <button className="secondary" disabled={busy} onClick={invite}>
+                  连接第一台设备
+                </button>
+              </section>
+            )}
+          </>
         )}
-        <div className="section-title">
-          <h2>已配对设备</h2>
-          <span>{status?.devices.length ?? "—"} 台</span>
-        </div>
-        {!status ? (
+        {status && view !== "settings" && (
+          <WorkbenchSettings
+            status={status}
+            busy={busy}
+            run={run}
+            mode={view === "shortcuts" ? "shortcuts" : "sources"}
+          />
+        )}
+        {!status && view === "shortcuts" && (
           <section className="empty-state">
-            <h2>{loadError ? "连接尚未就绪" : "正在读取设备"}</h2>
+            <h2>{loadError ? "未能读取快捷入口" : "正在读取快捷入口"}</h2>
             <p>
               {loadError
                 ? "请处理上方提示后重试。"
-                : "稍等片刻，即可管理你的设备。"}
+                : "稍等片刻，即可管理常用网页和应用。"}
             </p>
-          </section>
-        ) : status.devices.length ? (
-          <div className="device-list">
-            {status.devices.map((device) => (
-              <article className="device-card" key={device.id}>
-                <div className="device-info">
-                  <h3>{device.name}</h3>
-                  <p>
-                    {new Date(device.paired_at * 1000).toLocaleDateString(
-                      "zh-CN",
-                    )}{" "}
-                    配对
-                  </p>
-                  <Sharing device={device} busy={busy} run={run} />
-                </div>
-                {removeId === device.id ? (
-                  <div className="remove-confirm">
-                    <p>移除后需要重新配对</p>
-                    <button
-                      className="destructive"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(async () => {
-                          await call("revoke_device", { id: device.id });
-                          setRemoveId(null);
-                        })
-                      }
-                    >
-                      确认移除
-                    </button>
-                    <button
-                      className="secondary"
-                      onClick={() => setRemoveId(null)}
-                    >
-                      取消
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    className="text-button"
-                    onClick={() => setRemoveId(device.id)}
-                  >
-                    移除
-                  </button>
-                )}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <section className="empty-state">
-            <h2>为电脑添一块屏幕</h2>
-            <p>
-              在 Android 上打开 Desklet 工作台，扫描连接邀请，再回到这里确认。
-            </p>
-            <button className="secondary" disabled={busy} onClick={invite}>
-              连接第一台设备
-            </button>
           </section>
         )}
-        {status && <WorkbenchSettings status={status} busy={busy} run={run} />}
+        {view === "settings" && (
+          <section
+            className="settings-panel"
+            aria-labelledby="appearance-title"
+          >
+            <h2 id="appearance-title">外观</h2>
+            <p>选择连接助手的主题，立即生效并保存在这台电脑上。</p>
+            <div className="theme-options" role="group" aria-label="应用主题">
+              {(
+                [
+                  ["light", "铂银", "浅色"],
+                  ["dark", "墨黑", "暗色"],
+                ] as const
+              ).map(([value, label, description]) => (
+                <button
+                  key={value}
+                  className={`theme-option ${value}`}
+                  aria-pressed={theme === value}
+                  onClick={() => chooseTheme(value)}
+                >
+                  <span className="theme-preview" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <span>
+                    <strong>{label}</strong>
+                    <small>
+                      {description}
+                      {value === "light" ? " · 默认" : ""}
+                    </small>
+                  </span>
+                  <span className="theme-selected" aria-hidden="true">
+                    {theme === value ? "✓" : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {themeError && (
+              <p className="notice error" role="alert">
+                {themeError}
+              </p>
+            )}
+          </section>
+        )}
+        {view === "settings" && status && (
+          <UsageSettings status={status} busy={busy} run={run} />
+        )}
         <footer>
           <span>电脑和设备需要连接同一局域网。</span>
           <button
@@ -284,11 +513,7 @@ export function App() {
           </div>
           {pending ? (
             <>
-              <h2 id="pair-title">
-                允许连接
-                <br />
-                这台设备？
-              </h2>
+              <h2 id="pair-title">允许连接这台设备？</h2>
               <p className="request-name">{pending.name}</p>
               <p>
                 只确认你正在操作的设备。连接后，请在设备卡片中选择共享内容；你随时可以修改权限或移除设备。
@@ -313,10 +538,7 @@ export function App() {
             </>
           ) : (
             <>
-              <h2 id="pair-title">
-                在 Android 上<br />
-                扫码连接
-              </h2>
+              <h2 id="pair-title">在 Android 上扫码连接</h2>
               <p>打开 Desklet 工作台，点击「扫码连接电脑」。</p>
               <div className="qr">
                 {remaining > 0 && qr ? (

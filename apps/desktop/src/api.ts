@@ -15,6 +15,7 @@ export interface Status {
   pending: { id: string; name: string; expires_at: number } | null;
   addresses: string[];
   discovery_warning: string | null;
+  usage_config: UsageConfig | null;
 }
 export interface Invitation {
   uri: string;
@@ -35,6 +36,7 @@ export function call<T>(
 export interface Permissions {
   sessions: boolean;
   quota: boolean;
+  api_usage: boolean;
   shortcuts: boolean;
   open: boolean;
 }
@@ -51,7 +53,23 @@ export interface SourceState {
   observed_at: number;
   fresh_until: number;
 }
+export interface UsageConfig {
+  base_url: string;
+  email: string;
+  timezone: string;
+}
+export interface ApiUsage {
+  id: string;
+  label: string;
+  actual_cost_micros: number;
+  currency: string;
+  token_count: number;
+  tpm: number;
+  window_start: number;
+  window_end: number;
+}
 export interface WorkbenchData {
+  api_usage: ApiUsage[];
   sources: SourceState[];
   session_total: number;
   sessions: {
