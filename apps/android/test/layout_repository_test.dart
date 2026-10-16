@@ -171,12 +171,12 @@ void main() {
       expect(widget.toJson()['providerData'], ['retained']);
       expect(
         widget.placementFor(LayoutOrientation.wide),
-        const GridPlacement(x: 0, y: 0, w: 6, h: 6),
+        const GridPlacement(x: 0, y: 0, w: 24, h: 24),
       );
       expect(await File(migrated.backupPath!).readAsString(), legacy);
       expect(
         (jsonDecode(await primary().readAsString()) as Map)['schemaVersion'],
-        2,
+        LayoutDocument.currentSchemaVersion,
       );
       expect(
         (await LayoutRepository(directory: directory).load()).migrated,
@@ -210,11 +210,15 @@ void main() {
       final widget = migrated.document.activePage.widgets.single;
       expect(
         widget.placementFor(LayoutOrientation.wide).toJson(),
-        wide['rect'],
+        GridPlacement.fromJson(
+          wide['rect'] as Map<String, dynamic>,
+        ).scaled(4).toJson(),
       );
       expect(
         widget.placementFor(LayoutOrientation.portrait).toJson(),
-        portrait['rect'],
+        GridPlacement.fromJson(
+          portrait['rect'] as Map<String, dynamic>,
+        ).scaled(4).toJson(),
       );
     },
   );
@@ -254,4 +258,35 @@ void main() {
     );
     expect(await primary().readAsString(), future);
   });
+
+  test(
+    'v2 migration scales both profiles, preserves every page and backs up exact bytes',
+    () async {
+      final old = LayoutDocument.initial().toJson();
+      old['schemaVersion'] = 2;
+      old['futureField'] = {'keep': true};
+      for (final page in old['pages'] as List) {
+        for (final widget in page['widgets'] as List) {
+          for (final rect in (widget['placements'] as Map).values) {
+            for (final key in ['x', 'y', 'w', 'h']) {
+              rect[key] = (rect[key] as int) ~/ 4;
+            }
+          }
+        }
+      }
+      final bytes = jsonEncode(old);
+      await primary().writeAsString(bytes);
+      final loaded = await repository.load();
+      expect(loaded.migrated, true);
+      final expected = LayoutDocument.initial().toJson()
+        ..['futureField'] = {'keep': true};
+      expect(loaded.document.toJson(), expected);
+      expect(await File(loaded.backupPath!).readAsString(), bytes);
+      expect(await backup().readAsString(), bytes);
+      expect(
+        (await LayoutRepository(directory: directory).load()).document.toJson(),
+        expected,
+      );
+    },
+  );
 }

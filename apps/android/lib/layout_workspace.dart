@@ -16,8 +16,8 @@ int sessionDisplayLimit(Map<String, dynamic> options) {
 enum LayoutOrientation { wide, portrait }
 
 extension LayoutOrientationGrid on LayoutOrientation {
-  int get columns => this == LayoutOrientation.wide ? 12 : 4;
-  int get rows => this == LayoutOrientation.wide ? 12 : 24;
+  int get columns => this == LayoutOrientation.wide ? 48 : 16;
+  int get rows => this == LayoutOrientation.wide ? 48 : 96;
 }
 
 /// Integer grid coordinates, independent of the current viewport and safe area.
@@ -55,6 +55,9 @@ class GridPlacement {
     w: w ?? this.w,
     h: h ?? this.h,
   );
+
+  GridPlacement scaled(int factor) =>
+      GridPlacement(x: x * factor, y: y * factor, w: w * factor, h: h * factor);
 
   Map<String, dynamic> toJson() => {'x': x, 'y': y, 'w': w, 'h': h};
 
@@ -212,7 +215,7 @@ class LayoutDocument {
     Map<String, dynamic> extra = const {},
   }) : pages = List.unmodifiable(pages),
        extra = _frozenMap(extra);
-  static const currentSchemaVersion = 2;
+  static const currentSchemaVersion = 3;
   int get schemaVersion => currentSchemaVersion;
   final String activePageId;
   final List<LayoutPage> pages;
@@ -301,8 +304,8 @@ class LayoutDocument {
       binding: {'source': 'codex'},
       options: {...LayoutWorkspace.defaultOptions(type), ...options},
       placements: {
-        LayoutOrientation.wide: wide,
-        LayoutOrientation.portrait: portrait,
+        LayoutOrientation.wide: wide.scaled(4),
+        LayoutOrientation.portrait: portrait.scaled(4),
       },
     );
     return LayoutDocument(
@@ -647,11 +650,34 @@ class LayoutWorkspace extends ChangeNotifier {
   bool setPlacement(
     String id,
     LayoutOrientation orientation,
-    GridPlacement placement,
-  ) {
+    GridPlacement placement, {
+    bool displace = false,
+  }) {
     if (!_requireEditing()) return false;
     final widget = findWidget(id);
     if (widget == null) return _fail('找不到组件');
+    if (displace && widget.visible) {
+      final preview = previewPlacement(id, orientation, placement);
+      if (preview == null) return _fail('没有足够空间，请缩小组件或调整位置');
+      return _apply(
+        document.copyWith(
+          pages: [
+            for (final page in pages)
+              page.copyWith(
+                widgets: [
+                  for (final widget in page.widgets)
+                    if (preview[widget.id] case final rect?)
+                      widget.copyWith(
+                        placements: {...widget.placements, orientation: rect},
+                      )
+                    else
+                      widget,
+                ],
+              ),
+          ],
+        ),
+      );
+    }
     final page = pages.firstWhere(
       (page) => page.widgets.any((item) => item.id == id),
     );
@@ -677,6 +703,22 @@ class LayoutWorkspace extends ChangeNotifier {
       }
     }
     return false;
+  }
+
+  /// A pure preview: displaced widgets and the active rectangle commit together
+  /// on release, so a whole gesture occupies one undo entry.
+  Map<String, GridPlacement>? previewPlacement(
+    String id,
+    LayoutOrientation orientation,
+    GridPlacement placement,
+  ) {
+    if (!placement.fits(orientation)) return null;
+    for (final page in pages) {
+      if (page.widgets.any((widget) => widget.id == id && widget.visible)) {
+        return _displace(page, id, orientation, placement);
+      }
+    }
+    return null;
   }
 
   bool moveWidgetToPage(String id, String pageId) {
@@ -857,12 +899,12 @@ class LayoutWorkspace extends ChangeNotifier {
     LayoutOrientation orientation,
   ) {
     if (orientation == LayoutOrientation.portrait) {
-      return GridPlacement(x: 0, y: 0, w: 4, h: type == 'sessions' ? 12 : 6);
+      return GridPlacement(x: 0, y: 0, w: 16, h: type == 'sessions' ? 48 : 24);
     }
     return switch (type) {
-      'sessions' => const GridPlacement(x: 0, y: 0, w: 8, h: 6),
-      'usage' => const GridPlacement(x: 0, y: 0, w: 4, h: 6),
-      _ => const GridPlacement(x: 0, y: 0, w: 6, h: 4),
+      'sessions' => const GridPlacement(x: 0, y: 0, w: 32, h: 24),
+      'usage' => const GridPlacement(x: 0, y: 0, w: 16, h: 24),
+      _ => const GridPlacement(x: 0, y: 0, w: 24, h: 16),
     };
   }
 }
@@ -880,6 +922,89 @@ bool _fits(
           !widget.visible ||
           !rect.overlaps(widget.placementFor(orientation)),
     );
+
+/// Keep the active widget fixed and relocate collisions to the nearest gap.
+/// If a gap is occupied, recursively push that widget too. Locked ancestors
+/// prevent cycles; a bounded search keeps crowded-page gestures responsive.
+Map<String, GridPlacement>? _displace(
+  LayoutPage page,
+  String id,
+  LayoutOrientation orientation,
+  GridPlacement target,
+) {
+  final originals = {
+    for (final widget in page.widgets)
+      if (widget.visible) widget.id: widget.placementFor(orientation),
+  };
+  if (originals.values.fold<int>(0, (sum, rect) => sum + rect.w * rect.h) -
+          originals[id]!.w * originals[id]!.h +
+          target.w * target.h >
+      orientation.columns * orientation.rows) {
+    return null;
+  }
+  var positions = {...originals, id: target};
+  var attempts = 2000;
+  var probes = 30000;
+
+  Map<String, GridPlacement>? resolve(Set<String> locked) {
+    // Only widgets overlapping an already settled rectangle need to move.
+    final collisions =
+        originals.keys
+            .where(
+              (other) =>
+                  !locked.contains(other) &&
+                  locked.any(
+                    (fixed) => positions[other]!.overlaps(positions[fixed]!),
+                  ),
+            )
+            .toList()
+          ..sort(
+            (a, b) => (originals[b]!.w * originals[b]!.h).compareTo(
+              originals[a]!.w * originals[a]!.h,
+            ),
+          );
+    if (collisions.isEmpty) return {...positions};
+    final moving = collisions.first;
+    final old = originals[moving]!;
+    final candidates = <GridPlacement>[];
+    for (var y = 0; y <= orientation.rows - old.h; y++) {
+      for (var x = 0; x <= orientation.columns - old.w; x++) {
+        if (--probes < 0) return null;
+        final rect = old.copyWith(x: x, y: y);
+        if (locked.every((fixed) => !rect.overlaps(positions[fixed]!))) {
+          candidates.add(rect);
+        }
+      }
+    }
+    bool free(GridPlacement rect) => positions.entries.every(
+      (entry) => entry.key == moving || !rect.overlaps(entry.value),
+    );
+    final freeCandidates = candidates.where(free).toSet();
+    candidates.sort((a, b) {
+      final occupied = (freeCandidates.contains(a) ? 0 : 1).compareTo(
+        freeCandidates.contains(b) ? 0 : 1,
+      );
+      if (occupied != 0) return occupied;
+      final distance = ((a.x - old.x).abs() + (a.y - old.y).abs()).compareTo(
+        (b.x - old.x).abs() + (b.y - old.y).abs(),
+      );
+      if (distance != 0) return distance;
+      final row = a.y.compareTo(b.y);
+      return row != 0 ? row : a.x.compareTo(b.x);
+    });
+    final before = {...positions};
+    for (final candidate in candidates) {
+      if (--attempts < 0) return null;
+      positions[moving] = candidate;
+      final result = resolve({...locked, moving});
+      if (result != null) return result;
+      positions = {...before};
+    }
+    return null;
+  }
+
+  return resolve({id});
+}
 
 GridPlacement? _findSpace(
   List<LayoutWidget> widgets,

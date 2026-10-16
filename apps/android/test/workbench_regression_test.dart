@@ -57,18 +57,18 @@ LayoutDocument _pages({bool hidden = false, String? hostId}) => LayoutDocument(
               'fitRows': false,
             },
             placements: {
-              LayoutOrientation.wide: const GridPlacement(
+              LayoutOrientation.wide: GridPlacement(
                 x: 0,
                 y: 0,
                 w: 12,
                 h: 12,
-              ),
-              LayoutOrientation.portrait: const GridPlacement(
+              ).scaled(4),
+              LayoutOrientation.portrait: GridPlacement(
                 x: 0,
                 y: 0,
                 w: 4,
                 h: 24,
-              ),
+              ).scaled(4),
             },
           ),
         ],

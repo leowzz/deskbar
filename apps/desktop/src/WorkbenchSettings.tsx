@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ShortcutCatalog, ShortcutIcon } from "./ShortcutCatalog";
 import {
   call,
   type Device,
@@ -59,6 +60,16 @@ export function WorkbenchSettings({
   const [saving, setSaving] = useState(false);
   const [picking, setPicking] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const editorRef = useRef<HTMLDialogElement>(null);
+  const removeRef = useRef<HTMLDialogElement>(null);
+  const editing = draft !== null;
+  const removing = removeId !== null;
+  useEffect(() => {
+    if (editing) editorRef.current?.showModal();
+  }, [editing]);
+  useEffect(() => {
+    if (removing) removeRef.current?.showModal();
+  }, [removing]);
   const data = status.workbench;
   async function save() {
     if (!draft || saving) return;
@@ -200,282 +211,260 @@ export function WorkbenchSettings({
               添加入口
             </button>
           </div>
-          <p>选择要在电脑上打开的网页或应用，再向设备共享。</p>
           {status.shortcuts.length === 0 && !draft && (
             <p className="source-card">
               还没有入口，添加一个常用网页或应用吧。
             </p>
           )}
-          {status.shortcuts.map((item) => (
-            <article className="shortcut-row" key={item.id}>
-              <ShortcutIcon
-                key={item.icon_png}
-                icon={item.icon_png}
-                kind={item.kind}
-              />
-              <div className="shortcut-info">
-                <h3>{item.name}</h3>
-                <small>
-                  {item.kind === "app" ? "应用" : "网页"} · {item.target}
-                </small>
-              </div>
-              {removeId === item.id ? (
-                <div className="remove-confirm">
-                  <span>移除这个入口？</span>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        await call("remove_shortcut", { id: item.id });
-                        setRemoveId(null);
-                      })
-                    }
-                  >
-                    移除
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => setRemoveId(null)}
-                  >
-                    取消
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <button
-                    className="text-button"
-                    disabled={busy || saving || picking}
-                    onClick={() => {
-                      setDraft({ ...item });
-                      setFormError("");
-                    }}
-                  >
-                    编辑
-                  </button>
-                  <button
-                    className="text-button"
-                    disabled={busy || saving || picking}
-                    onClick={() => setRemoveId(item.id)}
-                  >
-                    移除
-                  </button>
-                </>
-              )}
-            </article>
-          ))}
-          {draft && (
-            <form
-              className="shortcut-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void save();
+          <ShortcutCatalog
+            items={status.shortcuts}
+            disabled={busy || saving || picking || editing || removing}
+            onEdit={(item) => {
+              setDraft({ ...item });
+              setFormError("");
+            }}
+            onDelete={(id) => {
+              setRemoveId(id);
+              setFormError("");
+            }}
+            onReorder={(ids) =>
+              void run(async () => {
+                await call("reorder_shortcuts", { ids });
+              })
+            }
+          />
+          {removeId && (
+            <dialog
+              ref={removeRef}
+              className="modal"
+              aria-labelledby="remove-shortcut-title"
+              onCancel={(event) => {
+                if (saving) event.preventDefault();
+                else setRemoveId(null);
               }}
             >
-              <fieldset disabled={saving || picking}>
-                <h3>
-                  {status.shortcuts.some((s) => s.id === draft.id)
-                    ? "编辑入口"
-                    : "新入口"}
-                </h3>
-                <label>
-                  名称
-                  <input
-                    required
-                    maxLength={64}
-                    value={draft.name}
-                    onChange={(e) =>
-                      setDraft({ ...draft, name: e.target.value })
+              <h2 id="remove-shortcut-title">删除入口？</h2>
+              <p>
+                「{status.shortcuts.find((item) => item.id === removeId)?.name}
+                」将从工作台移除，电脑上的应用或网页不受影响。
+              </p>
+              {formError && (
+                <p role="alert" className="notice error">
+                  {formError}
+                </p>
+              )}
+              <div className="modal-actions">
+                <button disabled={saving} onClick={() => setRemoveId(null)}>
+                  取消
+                </button>
+                <button
+                  className="danger-button"
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    setFormError("");
+                    try {
+                      await call("remove_shortcut", { id: removeId });
+                      setRemoveId(null);
+                      await run(async () => {});
+                    } catch (error) {
+                      setFormError(String(error));
+                    } finally {
+                      setSaving(false);
                     }
-                  />
-                </label>
-                <label>
-                  类型
-                  <select
-                    value={draft.kind}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        kind: e.target.value,
-                        target: "",
-                        icon_png: "",
-                      })
-                    }
-                  >
-                    <option value="url">网页</option>
-                    <option value="app">应用</option>
-                  </select>
-                </label>
-                <label>
-                  {draft.kind === "app" ? "应用的完整路径" : "网址"}
-                  <input
-                    required
-                    maxLength={4096}
-                    placeholder={
-                      draft.kind === "app"
-                        ? "/Applications/Notes.app"
-                        : "https://example.com"
-                    }
-                    value={draft.target}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        target: e.target.value,
-                        icon_png: "",
-                      })
-                    }
-                  />
-                </label>
-                {draft.kind === "app" && (
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={async () => {
-                      setFormError("");
-                      try {
-                        setPicking(true);
-                        const selected = await call<ApplicationMetadata | null>(
-                          "choose_application",
-                        );
-                        if (selected)
-                          setDraft((current) =>
-                            current && current.id === draft.id
-                              ? {
-                                  ...current,
-                                  target: selected.target,
-                                  name: current.name || selected.name,
-                                  icon_png: selected.icon_png,
-                                }
-                              : current,
-                          );
-                      } catch (e) {
-                        setFormError(String(e));
-                      } finally {
-                        setPicking(false);
+                  }}
+                >
+                  {saving ? "删除中…" : "删除"}
+                </button>
+              </div>
+            </dialog>
+          )}
+          {draft && (
+            <dialog
+              ref={editorRef}
+              className="modal shortcut-editor"
+              aria-labelledby="shortcut-editor-title"
+              onCancel={(event) => {
+                if (saving || picking) event.preventDefault();
+                else setDraft(null);
+              }}
+            >
+              <form
+                className="shortcut-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void save();
+                }}
+              >
+                <fieldset disabled={saving || picking}>
+                  <h2 id="shortcut-editor-title">
+                    {status.shortcuts.some((s) => s.id === draft.id)
+                      ? "编辑入口"
+                      : "新入口"}
+                  </h2>
+                  <label>
+                    名称
+                    <input
+                      autoFocus
+                      required
+                      maxLength={64}
+                      value={draft.name}
+                      onChange={(e) =>
+                        setDraft({ ...draft, name: e.target.value })
                       }
-                    }}
-                  >
-                    选择应用
-                  </button>
-                )}
-                {draft.kind === "app" && (
-                  <p>选择电脑上的应用即可；路径只保存在这台电脑。</p>
-                )}
-                <div className="shortcut-icon-field">
-                  <ShortcutIcon
-                    key={draft.icon_png}
-                    icon={draft.icon_png}
-                    kind={draft.kind}
-                  />
-                  <div>
-                    <strong>入口图标</strong>
-                    <p>
-                      {draft.icon_png
-                        ? "已选择图标，保存后共享到设备。"
-                        : "保存时自动读取应用或系统网页图标。"}
-                    </p>
-                    <div className="icon-actions">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setFormError("");
+                    />
+                  </label>
+                  <label>
+                    类型
+                    <select
+                      value={draft.kind}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          kind: e.target.value,
+                          target: "",
+                          icon_png: "",
+                        })
+                      }
+                    >
+                      <option value="url">网页</option>
+                      <option value="app">应用</option>
+                    </select>
+                  </label>
+                  <label>
+                    {draft.kind === "app" ? "应用的完整路径" : "网址"}
+                    <input
+                      required
+                      maxLength={4096}
+                      placeholder={
+                        draft.kind === "app"
+                          ? "/Applications/Notes.app"
+                          : "https://example.com"
+                      }
+                      value={draft.target}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          target: e.target.value,
+                          icon_png: "",
+                        })
+                      }
+                    />
+                  </label>
+                  {draft.kind === "app" && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={async () => {
+                        setFormError("");
+                        try {
                           setPicking(true);
-                          try {
-                            const icon = await call<string | null>(
-                              "choose_shortcut_icon",
+                          const selected =
+                            await call<ApplicationMetadata | null>(
+                              "choose_application",
                             );
-                            if (icon)
-                              setDraft((current) =>
-                                current && current.id === draft.id
-                                  ? { ...current, icon_png: icon }
-                                  : current,
-                              );
-                          } catch (error) {
-                            setFormError(
-                              error instanceof Error
-                                ? error.message
-                                : String(error),
+                          if (selected)
+                            setDraft((current) =>
+                              current && current.id === draft.id
+                                ? {
+                                    ...current,
+                                    target: selected.target,
+                                    name: current.name || selected.name,
+                                    icon_png: selected.icon_png,
+                                  }
+                                : current,
                             );
-                          } finally {
-                            setPicking(false);
-                          }
-                        }}
-                      >
-                        {picking ? "正在读取…" : "选择图片"}
-                      </button>
-                      {draft.icon_png && (
+                        } catch (e) {
+                          setFormError(String(e));
+                        } finally {
+                          setPicking(false);
+                        }
+                      }}
+                    >
+                      选择应用
+                    </button>
+                  )}
+                  {draft.kind === "app" && (
+                    <p>选择电脑上的应用即可；路径只保存在这台电脑。</p>
+                  )}
+                  <div className="shortcut-icon-field">
+                    <ShortcutIcon
+                      key={draft.icon_png}
+                      icon={draft.icon_png}
+                      kind={draft.kind}
+                    />
+                    <div>
+                      <strong>入口图标</strong>
+                      <p>
+                        {draft.icon_png
+                          ? "已选择图标，保存后共享到设备。"
+                          : "保存时自动读取应用或系统网页图标。"}
+                      </p>
+                      <div className="icon-actions">
                         <button
                           type="button"
-                          className="text-button"
-                          onClick={() => setDraft({ ...draft, icon_png: "" })}
+                          onClick={async () => {
+                            setFormError("");
+                            setPicking(true);
+                            try {
+                              const icon = await call<string | null>(
+                                "choose_shortcut_icon",
+                              );
+                              if (icon)
+                                setDraft((current) =>
+                                  current && current.id === draft.id
+                                    ? { ...current, icon_png: icon }
+                                    : current,
+                                );
+                            } catch (error) {
+                              setFormError(
+                                error instanceof Error
+                                  ? error.message
+                                  : String(error),
+                              );
+                            } finally {
+                              setPicking(false);
+                            }
+                          }}
                         >
-                          使用自动图标
+                          {picking ? "正在读取…" : "选择图片"}
                         </button>
-                      )}
+                        {draft.icon_png && (
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => setDraft({ ...draft, icon_png: "" })}
+                          >
+                            使用自动图标
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-                {formError && (
-                  <p role="alert" className="notice error">
-                    {formError}
-                  </p>
-                )}
-                <div className="modal-actions">
-                  <button className="primary" disabled={saving}>
-                    {saving ? "保存中…" : "保存入口"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => setDraft(null)}
-                  >
-                    取消
-                  </button>
-                </div>
-              </fieldset>
-            </form>
+                  {formError && (
+                    <p role="alert" className="notice error">
+                      {formError}
+                    </p>
+                  )}
+                  <div className="modal-actions">
+                    <button className="primary" disabled={saving}>
+                      {saving ? "保存中…" : "保存入口"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => setDraft(null)}
+                    >
+                      取消
+                    </button>
+                  </div>
+                </fieldset>
+              </form>
+            </dialog>
           )}
         </>
       )}
     </>
-  );
-}
-
-function ShortcutIcon({ icon, kind }: { icon: string; kind: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <span className="shortcut-icon" aria-hidden="true">
-      {icon && !failed ? (
-        <img
-          src={`data:image/png;base64,${icon}`}
-          alt=""
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.65"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {kind === "app" ? (
-            <>
-              <rect x="3" y="3" width="7" height="7" rx="1.5" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <rect x="14" y="14" width="7" height="7" rx="1.5" />
-            </>
-          ) : (
-            <>
-              <circle cx="12" cy="12" r="9" />
-              <ellipse cx="12" cy="12" rx="4" ry="9" />
-              <path d="M3 12h18" />
-            </>
-          )}
-        </svg>
-      )}
-    </span>
   );
 }
 

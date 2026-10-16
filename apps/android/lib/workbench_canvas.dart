@@ -55,6 +55,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   String? warning, _activeId;
   DateTime _lastWheel = DateTime.fromMillisecondsSinceEpoch(0);
   LayoutOrientation orientation = LayoutOrientation.portrait;
+  Map<String, GridPlacement>? placementPreview;
   int get _pageIndex =>
       workspace.pages.indexWhere((p) => p.id == workspace.activePage.id);
   @override
@@ -177,6 +178,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
 
   void _changed() {
     if (!mounted) return;
+    placementPreview = null;
     _scheduleBinding();
     if (!workspace.editing) {
       panel = null;
@@ -332,14 +334,27 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, box) {
-                  orientation =
+                  final nextOrientation =
                       MediaQuery.orientationOf(context) == Orientation.landscape
                       ? LayoutOrientation.wide
                       : LayoutOrientation.portrait;
+                  if (orientation != nextOrientation) placementPreview = null;
+                  orientation = nextOrientation;
                   final canvas = loading
                       ? const Center(child: CircularProgressIndicator())
                       : _canvas();
                   if (!workspace.editing || panel == null) return canvas;
+                  if (panel == 'widget') {
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        canvas,
+                        _FloatingEditorWindow(
+                          builder: (onDrag) => _editorPanel(onDrag: onDrag),
+                        ),
+                      ],
+                    );
+                  }
                   final inspector = _editorPanel();
                   if (box.maxWidth > box.maxHeight) {
                     return Row(
@@ -462,6 +477,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
   );
   Widget _canvas() => LayoutBuilder(
     builder: (context, box) {
+      if (viewport != box.biggest) placementPreview = null;
       viewport = box.biggest;
       return Listener(
         onPointerSignal: (event) {
@@ -547,6 +563,9 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 onError: _toast,
                 onSettings: () => _inspect(w.id),
                 onEditRequested: _begin,
+                preview: placementPreview?[w.id],
+                onPreview: (preview) =>
+                    setState(() => placementPreview = preview),
               ),
           ],
         ),
@@ -554,7 +573,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     );
   }
 
-  Widget _editorPanel() {
+  Widget _editorPanel({GestureDragUpdateCallback? onDrag}) {
     final title = switch (panel) {
       'widget' =>
         '${widgetTypeName(workspace.findWidget(inspectedId)?.type ?? '')}设置',
@@ -578,6 +597,25 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       ),
       _ => _displayBody(),
     };
+    final heading = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          if (onDrag != null) ...[
+            const Icon(Icons.drag_handle, size: 18),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ],
+      ),
+    );
     return Material(
       color: deskletColors(context).surface,
       child: Column(
@@ -585,17 +623,21 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           SizedBox(
             height: 48,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
+                  child: onDrag == null
+                      ? heading
+                      : MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: GestureDetector(
+                            key: const ValueKey('floating-editor-titlebar'),
+                            behavior: HitTestBehavior.opaque,
+                            dragStartBehavior: DragStartBehavior.down,
+                            onPanUpdate: saving ? null : onDrag,
+                            child: heading,
+                          ),
+                        ),
                 ),
                 IconButton(
                   tooltip: '关闭设置',
@@ -895,14 +937,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             onChanged: (v) => _result(workspace.setWidgetVisible(id, v)),
           ),
           _bindingControls(w),
-          const SizedBox(height: 16),
-          Text(
-            orientation == LayoutOrientation.wide ? '横屏摆放' : '竖屏摆放',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const Text('拖动组件把手移动，拖动缩放把手调整大小。'),
-          for (final field in ['w', 'h', 'x', 'y']) _placementSlider(w, field),
-          const Divider(),
           if (w.type == 'sessions') ...[
             _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
             _optionSlider(w, 'itemHeight', '卡片目标高度', 64, 400, 96),
@@ -1109,64 +1143,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     );
   }
 
-  Widget _placementSlider(LayoutWidget w, String field) {
-    final r = w.placementFor(orientation);
-    final max = field == 'w'
-        ? orientation.columns - r.x
-        : field == 'h'
-        ? orientation.rows - r.y
-        : field == 'x'
-        ? orientation.columns - r.w
-        : orientation.rows - r.h;
-    final rawMin = field == 'w' && viewport.width > 0
-        ? ((math.min(viewport.width, w.type == 'sessions' ? 180.0 : 110.0) +
-                      8) /
-                  (viewport.width / orientation.columns))
-              .ceil()
-        : field == 'h' && viewport.height > 0
-        ? ((math.min(viewport.height, 112.0) + 8) /
-                  (viewport.height / orientation.rows))
-              .ceil()
-        : 0;
-    final minimum = field == 'w' || field == 'h'
-        ? math.min(math.max(1, max), math.max(1, rawMin))
-        : 0;
-    final value = switch (field) {
-      'w' => r.w,
-      'h' => r.h,
-      'x' => r.x,
-      _ => r.y,
-    };
-    return _slider(
-      switch (field) {
-        'w' => '区域宽度',
-        'h' => '区域高度',
-        'x' => '左侧位置',
-        _ => '顶部位置',
-      },
-      value.toDouble(),
-      minimum.toDouble(),
-      math.max(minimum + 1, max).toDouble(),
-      (v) {
-        final n = v.round().clamp(minimum, max);
-        _result(
-          workspace.setPlacement(
-            w.id,
-            orientation,
-            r.copyWith(
-              w: field == 'w' ? n : null,
-              h: field == 'h' ? n : null,
-              x: field == 'x' ? n : null,
-              y: field == 'y' ? n : null,
-            ),
-          ),
-        );
-      },
-      suffix: ' 格',
-      enabled: max > minimum,
-    );
-  }
-
   Widget _optionSlider(
     LayoutWidget w,
     String key,
@@ -1202,6 +1178,66 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         onChanged: enabled ? onChanged : null,
       ),
     ],
+  );
+}
+
+class _FloatingEditorWindow extends StatefulWidget {
+  const _FloatingEditorWindow({required this.builder});
+  final Widget Function(GestureDragUpdateCallback onDrag) builder;
+
+  @override
+  State<_FloatingEditorWindow> createState() => _FloatingEditorWindowState();
+}
+
+class _FloatingEditorWindowState extends State<_FloatingEditorWindow> {
+  Offset? position;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      const margin = 8.0;
+      final verticalMargin = box.maxHeight >= 64 ? margin : 0.0;
+      final width = math.min(360.0, math.max(0.0, box.maxWidth - margin * 2));
+      final height = math.min(
+        math.max(0.0, box.maxHeight - verticalMargin * 2),
+        math.min(460.0, math.max(48.0, box.maxHeight * .72)),
+      );
+      final maxX = math.max(margin, box.maxWidth - width - margin);
+      final maxY = math.max(
+        verticalMargin,
+        box.maxHeight - height - verticalMargin,
+      );
+      Offset bounded(Offset value) => Offset(
+        value.dx.clamp(margin, maxX),
+        value.dy.clamp(verticalMargin, maxY),
+      );
+      // Clamp the displayed position after rotation or keyboard resizing without
+      // losing the user's preferred position when the viewport grows again.
+      final offset = bounded(position ?? Offset(maxX, maxY));
+      return Stack(
+        children: [
+          Positioned(
+            left: offset.dx,
+            top: offset.dy,
+            width: width,
+            height: height,
+            child: Material(
+              key: const ValueKey('floating-editor-window'),
+              elevation: 12,
+              color: deskletColors(context).surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: deskletColors(context).edge),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: widget.builder((details) {
+                setState(() => position = bounded(offset + details.delta));
+              }),
+            ),
+          ),
+        ],
+      );
+    },
   );
 }
 
@@ -1265,6 +1301,8 @@ class _PlacedWidget extends StatefulWidget {
     required this.onError,
     required this.onSettings,
     required this.onEditRequested,
+    required this.preview,
+    required this.onPreview,
   });
   final LayoutWidget widget;
   final LayoutOrientation orientation;
@@ -1274,91 +1312,158 @@ class _PlacedWidget extends StatefulWidget {
   final ValueChanged<String> onError;
   final VoidCallback onSettings;
   final VoidCallback onEditRequested;
+  final GridPlacement? preview;
+  final ValueChanged<Map<String, GridPlacement>?> onPreview;
   @override
   State<_PlacedWidget> createState() => _PlacedWidgetState();
 }
 
+enum _LayoutDrag { move, left, right, bottom, bottomLeft, bottomRight }
+
 class _PlacedWidgetState extends State<_PlacedWidget> {
   GridPlacement? candidate, original;
+  LayoutDocument? gestureDocument;
   Offset delta = Offset.zero;
   bool valid = true;
   bool get editing => widget.workspace.editing;
+
   void _start() {
-    original = widget.widget.placementFor(widget.orientation);
-    delta = Offset.zero;
     widget.workspace.selectWidget(widget.widget.id);
+    gestureDocument = widget.workspace.document;
+    original = widget.widget.placementFor(widget.orientation);
+    candidate = null;
+    delta = Offset.zero;
+    valid = true;
   }
 
-  void _update(DragUpdateDetails d, bool resize) {
+  @override
+  void didUpdateWidget(covariant _PlacedWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.size != widget.size ||
+        oldWidget.orientation != widget.orientation ||
+        !editing ||
+        (gestureDocument != null &&
+            !identical(gestureDocument, widget.workspace.document))) {
+      original = candidate = null;
+      gestureDocument = null;
+      valid = true;
+    }
+  }
+
+  void _update(DragUpdateDetails details, _LayoutDrag kind) {
     final r = original;
     if (r == null) return;
-    delta += d.delta;
-    final dx = (delta.dx / (widget.size.width / widget.orientation.columns))
-        .round();
-    final dy = (delta.dy / (widget.size.height / widget.orientation.rows))
-        .round();
+    delta += details.delta;
     final cols = widget.orientation.columns, rows = widget.orientation.rows;
-    GridPlacement next;
-    if (resize) {
-      final minW = math.min(
-        cols,
-        math.max(
-          1,
-          (math.min(
-                    widget.size.width,
-                    widget.widget.type == 'sessions' ? 180.0 : 100.0,
-                  ) /
-                  (widget.size.width / cols))
-              .ceil(),
-        ),
-      );
-      final minH = math.min(
-        rows,
-        math.max(
-          1,
-          (math.min(widget.size.height, 112.0) / (widget.size.height / rows))
-              .ceil(),
-        ),
-      );
-      next = r.copyWith(
-        w: (r.w + dx).clamp(math.min(minW, cols - r.x), cols - r.x),
-        h: (r.h + dy).clamp(math.min(minH, rows - r.y), rows - r.y),
-      );
-    } else {
+    final cw = widget.size.width / cols, ch = widget.size.height / rows;
+    final dx = (delta.dx / cw).round(), dy = (delta.dy / ch).round();
+    final minW = math.min(cols, ((96 + 4) / cw).ceil());
+    final minH = math.min(rows, ((48 + 4) / ch).ceil());
+    var next = r;
+    if (kind == _LayoutDrag.move) {
       next = r.copyWith(
         x: (r.x + dx).clamp(0, cols - r.w),
         y: (r.y + dy).clamp(0, rows - r.h),
       );
+    } else {
+      if (kind == _LayoutDrag.left || kind == _LayoutDrag.bottomLeft) {
+        final right = r.x + r.w;
+        final left = (r.x + dx).clamp(0, right - math.min(minW, right)).toInt();
+        next = next.copyWith(x: left, w: right - left);
+      }
+      if (kind == _LayoutDrag.right || kind == _LayoutDrag.bottomRight) {
+        next = next.copyWith(
+          w: (r.w + dx).clamp(math.min(minW, cols - r.x), cols - r.x),
+        );
+      }
+      if (kind == _LayoutDrag.bottom ||
+          kind == _LayoutDrag.bottomLeft ||
+          kind == _LayoutDrag.bottomRight) {
+        next = next.copyWith(
+          h: (r.h + dy).clamp(math.min(minH, rows - r.y), rows - r.y),
+        );
+      }
     }
+    if (next == candidate) return;
+    final preview = widget.workspace.previewPlacement(
+      widget.widget.id,
+      widget.orientation,
+      next,
+    );
     setState(() {
       candidate = next;
-      valid = widget.workspace.canPlace(
-        widget.widget.id,
-        widget.orientation,
-        next,
-      );
+      valid = preview != null;
     });
+    widget.onPreview(preview);
   }
 
   void _end() {
     final r = candidate;
-    if (r != null) {
+    if (r != null && original != null) {
       if (valid) {
-        widget.workspace.setPlacement(widget.widget.id, widget.orientation, r);
+        widget.workspace.setPlacement(
+          widget.widget.id,
+          widget.orientation,
+          r,
+          displace: true,
+        );
       } else {
-        widget.onError('位置与其他组件重叠，已回到原位。');
+        widget.onError('没有足够空间，已保留原布局。请缩小组件或调整位置。');
       }
     }
-    setState(() {
-      candidate = null;
-      original = null;
-    });
+    _cancel();
   }
+
+  void _cancel() {
+    setState(() {
+      original = candidate = null;
+      gestureDocument = null;
+      valid = true;
+    });
+    widget.onPreview(null);
+  }
+
+  Widget _dragArea(_LayoutDrag kind, Widget child, String label) => Semantics(
+    label: label,
+    child: MouseRegion(
+      cursor: switch (kind) {
+        _LayoutDrag.move => SystemMouseCursors.move,
+        _LayoutDrag.left ||
+        _LayoutDrag.right => SystemMouseCursors.resizeLeftRight,
+        _LayoutDrag.bottom => SystemMouseCursors.resizeUpDown,
+        _LayoutDrag.bottomLeft => SystemMouseCursors.resizeUpRightDownLeft,
+        _LayoutDrag.bottomRight => SystemMouseCursors.resizeUpLeftDownRight,
+      },
+      child: Listener(
+        // Flutter may deliver onPanEnd for an accepted drag after a system
+        // pointer cancellation. Clear the preview before the recognizer ends.
+        onPointerCancel: (_) {
+          if (original != null) _cancel();
+        },
+        child: GestureDetector(
+          key: ValueKey('widget-${kind.name}-${widget.widget.id}'),
+          behavior: HitTestBehavior.opaque,
+          dragStartBehavior: DragStartBehavior.down,
+          onTap: kind == _LayoutDrag.move
+              ? widget.onSettings
+              : () => widget.workspace.selectWidget(widget.widget.id),
+          onPanStart: (_) => _start(),
+          onPanUpdate: (details) => _update(details, kind),
+          onPanEnd: (_) => _end(),
+          onPanCancel: _cancel,
+          child: child,
+        ),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final c = deskletColors(context);
-    final r = candidate ?? widget.widget.placementFor(widget.orientation);
+    final r =
+        candidate ??
+        widget.preview ??
+        widget.widget.placementFor(widget.orientation);
     final cw = widget.size.width / widget.orientation.columns,
         ch = widget.size.height / widget.orientation.rows;
     final gap = editing ? 4.0 : 2.0;
@@ -1373,7 +1478,11 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
       editing: editing,
       onEditRequested: widget.onEditRequested,
     );
-    return Positioned(
+    return AnimatedPositioned(
+      duration: original != null
+          ? Duration.zero
+          : const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
       left: r.x * cw + gap / 2,
       top: r.y * ch + gap / 2,
       width: math.max(0, r.w * cw - gap),
@@ -1398,7 +1507,7 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
                 child: LayoutBuilder(
                   builder: (context, box) {
                     final name = widgetTypeName(widget.widget.type);
-                    if (box.maxWidth < 96 || box.maxHeight < 48) {
+                    if (box.maxWidth < 64 || box.maxHeight < 48) {
                       return Tooltip(
                         message: '设置$name',
                         child: InkWell(
@@ -1418,23 +1527,18 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
                         ),
                       );
                     }
-                    final header = Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: widget.onSettings,
-                            onPanStart: (_) => _start(),
-                            onPanUpdate: (d) => _update(d, false),
-                            onPanEnd: (_) => _end(),
-                            onPanCancel: () => setState(() => candidate = null),
+                    final header = SizedBox(
+                      height: 48,
+                      child: Row(
+                        children: [
+                          Expanded(
                             child: Tooltip(
                               message: '设置$name',
-                              child: SizedBox(
-                                height: 48,
-                                child: Padding(
+                              child: _dragArea(
+                                _LayoutDrag.move,
+                                Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
+                                    horizontal: 16,
                                   ),
                                   child: Row(
                                     children: [
@@ -1442,10 +1546,13 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
                                         Icons.drag_indicator,
                                         size: 18,
                                       ),
-                                      if (box.maxWidth >= 156)
+                                      if (box.maxWidth >= 128) ...[
+                                        const SizedBox(width: 4),
                                         Expanded(
                                           child: Text(
-                                            name,
+                                            widget.widget.title.isEmpty
+                                                ? name
+                                                : widget.widget.title,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: Theme.of(
@@ -1453,47 +1560,104 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
                                             ).textTheme.bodySmall,
                                           ),
                                         ),
+                                      ],
                                     ],
                                   ),
                                 ),
+                                '拖动移动$name',
                               ),
                             ),
                           ),
-                        ),
-                        if (box.maxWidth >= 192)
-                          IconButton(
-                            tooltip: '设置$name',
-                            onPressed: widget.onSettings,
-                            icon: const Icon(Icons.tune, size: 18),
-                          ),
-                        Semantics(
-                          label: '拖动缩放$name',
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onPanStart: (_) => _start(),
-                            onPanUpdate: (d) => _update(d, true),
-                            onPanEnd: (_) => _end(),
-                            onPanCancel: () => setState(() => candidate = null),
-                            child: SizedBox(
-                              width: 48,
-                              height: 48,
-                              child: Icon(
-                                Icons.open_in_full,
-                                size: 18,
-                                color: c.selectedText,
+                          if (box.maxWidth >= 192)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 16),
+                              child: IconButton(
+                                tooltip: '设置$name',
+                                onPressed: widget.onSettings,
+                                icon: const Icon(Icons.tune, size: 18),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     );
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(height: 48, child: header),
-                        if (box.maxHeight > 48)
-                          Expanded(child: IgnorePointer(child: body)),
-                      ],
+                    Widget grip(bool vertical) => Center(
+                      child: Container(
+                        width: vertical ? 3 : 24,
+                        height: vertical ? 24 : 3,
+                        decoration: BoxDecoration(
+                          color: selected ? c.selectedText : c.edge,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    );
+                    return ClipRect(
+                      child: Stack(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              header,
+                              if (box.maxHeight >= 80)
+                                Expanded(child: IgnorePointer(child: body)),
+                            ],
+                          ),
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 16,
+                            width: 16,
+                            child: _dragArea(
+                              _LayoutDrag.left,
+                              grip(true),
+                              '拖动左边缘缩放$name',
+                            ),
+                          ),
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            bottom: 16,
+                            width: 16,
+                            child: _dragArea(
+                              _LayoutDrag.right,
+                              grip(true),
+                              '拖动右边缘缩放$name',
+                            ),
+                          ),
+                          Positioned(
+                            left: 24,
+                            right: 24,
+                            bottom: 0,
+                            height: 16,
+                            child: _dragArea(
+                              _LayoutDrag.bottom,
+                              grip(false),
+                              '拖动下边缘缩放$name',
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            bottom: 0,
+                            width: 24,
+                            height: 16,
+                            child: _dragArea(
+                              _LayoutDrag.bottomLeft,
+                              const SizedBox(),
+                              '拖动左下角缩放$name',
+                            ),
+                          ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            width: 24,
+                            height: 16,
+                            child: _dragArea(
+                              _LayoutDrag.bottomRight,
+                              const SizedBox(),
+                              '拖动右下角缩放$name',
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -1513,8 +1677,8 @@ class _GridPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..strokeWidth = 1;
-    for (var x = 0; x <= orientation.columns; x++) {
-      for (var y = 0; y <= orientation.rows; y++) {
+    for (var x = 0; x <= orientation.columns; x += 4) {
+      for (var y = 0; y <= orientation.rows; y += 4) {
         canvas.drawCircle(
           Offset(
             x * size.width / orientation.columns,

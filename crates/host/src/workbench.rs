@@ -314,6 +314,28 @@ impl Host {
         self.revision += 1;
         Ok(())
     }
+    pub fn reorder_shortcuts(&mut self, ids: &[String]) -> Result<()> {
+        ensure!(
+            ids.len() == self.shortcuts.len(),
+            "入口已变化，请刷新后重新排序"
+        );
+        let mut remaining = self.shortcuts.clone();
+        let mut ordered = Vec::with_capacity(ids.len());
+        for id in ids {
+            let index = remaining
+                .iter()
+                .position(|item| &item.id == id)
+                .context("入口已变化，请刷新后重新排序")?;
+            ordered.push(remaining.remove(index));
+        }
+        let previous = std::mem::replace(&mut self.shortcuts, ordered);
+        if let Err(error) = self.save(&self.devices) {
+            self.shortcuts = previous;
+            return Err(error);
+        }
+        self.revision += 1;
+        Ok(())
+    }
     pub fn authorized_snapshot(&self, token: &str) -> Option<crate::Snapshot> {
         let id = self.device_id(token)?;
         let permissions = &self.devices.iter().find(|d| d.id == id)?.permissions;
@@ -457,6 +479,105 @@ mod tests {
             host.claim(&pending.id, &claim, 103).unwrap().unwrap(),
         )
     }
+    #[test]
+    fn shortcut_order_is_persisted_and_projected_without_changing_actions() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "测试电脑".into()).unwrap();
+        let (device, token) = paired(&mut host);
+        host.set_permissions(
+            &device,
+            Permissions {
+                shortcuts: true,
+                open: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        for name in ["一", "二", "三"] {
+            host.save_shortcut(ShortcutConfig {
+                id: uuid::Uuid::new_v4().to_string(),
+                name: name.into(),
+                kind: "url".into(),
+                target: format!("https://example.com/{name}"),
+                icon_png: String::new(),
+            })
+            .unwrap();
+        }
+        let original = host.shortcuts.clone();
+        let ids = vec![
+            original[2].id.clone(),
+            original[0].id.clone(),
+            original[1].id.clone(),
+        ];
+        let revision = host.revision;
+        host.reorder_shortcuts(&ids).unwrap();
+        assert_eq!(host.revision, revision + 1);
+        let snapshot = host.authorized_snapshot(&token).unwrap();
+        assert_eq!(
+            snapshot
+                .shortcuts
+                .iter()
+                .map(|item| item.shortcut_id.clone())
+                .collect::<Vec<_>>(),
+            ids
+        );
+        assert_eq!(snapshot.shortcuts[0].version, original[2].public().version);
+        assert!(host
+            .authorized_snapshot(&token)
+            .unwrap()
+            .capabilities
+            .contains(&"open_shortcut".into()));
+        drop(host);
+        let restarted = Host::load(dir.path().into(), "unused".into()).unwrap();
+        assert_eq!(
+            restarted
+                .shortcuts
+                .iter()
+                .map(|item| item.id.clone())
+                .collect::<Vec<_>>(),
+            ids
+        );
+        assert_eq!(restarted.shortcuts[0].target, original[2].target);
+    }
+
+    #[test]
+    fn invalid_or_unsaved_shortcut_order_preserves_the_catalog() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "测试电脑".into()).unwrap();
+        for name in ["一", "二"] {
+            host.save_shortcut(ShortcutConfig {
+                id: uuid::Uuid::new_v4().to_string(),
+                name: name.into(),
+                kind: "url".into(),
+                target: "https://example.com".into(),
+                icon_png: String::new(),
+            })
+            .unwrap();
+        }
+        let original = serde_json::to_value(&host.shortcuts).unwrap();
+        let a = host.shortcuts[0].id.clone();
+        let b = host.shortcuts[1].id.clone();
+        let revision = host.revision;
+        for ids in [
+            vec![a.clone()],
+            vec![a.clone(), a.clone()],
+            vec![a.clone(), "unknown".into()],
+            vec![a.clone(), b.clone(), "extra".into()],
+        ] {
+            assert!(host.reorder_shortcuts(&ids).is_err());
+            assert_eq!(serde_json::to_value(&host.shortcuts).unwrap(), original);
+            assert_eq!(host.revision, revision);
+        }
+        // A file at the storage-directory path makes the atomic save fail.
+        let blocked = tempfile::tempdir().unwrap();
+        let path = blocked.path().join("blocked");
+        std::fs::write(&path, b"occupied").unwrap();
+        host.path = path.join("host.yaml");
+        assert!(host.reorder_shortcuts(&[b, a]).is_err());
+        assert_eq!(serde_json::to_value(&host.shortcuts).unwrap(), original);
+        assert_eq!(host.revision, revision);
+    }
+
     #[test]
     fn device_projection_persistence_and_command_at_most_once() {
         let dir = tempfile::tempdir().unwrap();

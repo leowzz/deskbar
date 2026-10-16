@@ -65,6 +65,13 @@ fn remove_shortcut(state: State<AgentState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
+fn reorder_shortcuts(state: State<AgentState>, ids: Vec<String>) -> Result<(), String> {
+    state
+        .agent()?
+        .reorder_shortcuts(&ids)
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
 fn refresh_sources(state: State<AgentState>) -> Result<(), String> {
     state.agent()?.refresh_sources();
     Ok(())
@@ -206,6 +213,7 @@ fn main() {
             set_permissions,
             save_shortcut,
             remove_shortcut,
+            reorder_shortcuts,
             refresh_sources,
             save_usage_source,
             remove_usage_source,

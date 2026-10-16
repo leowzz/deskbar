@@ -69,7 +69,237 @@ Future<void> launch(
   await tester.pumpAndSettle();
 }
 
+LayoutWorkspace editableWorkspace({bool pair = false}) => LayoutWorkspace(
+  document: LayoutDocument(
+    activePageId: 'edit-page',
+    pages: [
+      LayoutPage(
+        id: 'edit-page',
+        name: '编辑',
+        widgets: [
+          for (final id in pair ? ['a', 'b'] : ['a'])
+            LayoutWidget(
+              id: id,
+              type: 'usage',
+              title: '用量 $id',
+              placements: {
+                for (final orientation in LayoutOrientation.values)
+                  orientation: GridPlacement(
+                    x: pair ? (id == 'a' ? 0 : 8) : 4,
+                    y: pair ? 0 : 8,
+                    w: 8,
+                    h: 32,
+                  ),
+              },
+            ),
+        ],
+      ),
+    ],
+  ),
+)..beginEdit();
+
 void main() {
+  for (final size in [
+    const Size(360, 640),
+    const Size(800, 360),
+    const Size(320, 480),
+  ]) {
+    testWidgets('floating form drags, scrolls and stays on screen at $size', (
+      tester,
+    ) async {
+      final workspace = LayoutWorkspace()..beginEdit();
+      addTearDown(workspace.dispose);
+      await launch(tester, workspace, size: size, scale: 1.8);
+      final canvas = tester.getRect(find.byType(PageView));
+      final original = workspace.document.toJson();
+      await tester.tap(find.byTooltip('设置会话').first);
+      await tester.pumpAndSettle();
+      final window = find.byKey(const ValueKey('floating-editor-window'));
+      final titlebar = find.byKey(const ValueKey('floating-editor-titlebar'));
+      expect(tester.getSize(titlebar).height, 48);
+      expect(tester.getRect(find.byType(PageView)), canvas);
+      final initial = tester.getRect(window);
+      await tester.drag(titlebar, const Offset(-1000, -1000));
+      await tester.pumpAndSettle();
+      final moved = tester.getRect(window);
+      expect(moved.top, lessThan(initial.top));
+      expect(moved.topLeft, canvas.topLeft + const Offset(8, 8));
+      expect(workspace.document.toJson(), original);
+      expect(workspace.canUndo, false);
+      final scroll = find.byKey(
+        const PageStorageKey('widget-inspector-main-sessions'),
+      );
+      final position = tester
+          .state<ScrollableState>(
+            find
+                .descendant(of: scroll, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      await tester.drag(scroll, const Offset(0, -180));
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(0));
+      expect(tester.getRect(window), moved);
+      await tester.drag(titlebar, const Offset(1000, 1000));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(window).bottomRight,
+        canvas.bottomRight - const Offset(8, 8),
+      );
+      expect(tester.getRect(find.byType(PageView)), canvas);
+      await tester.tap(find.byTooltip('关闭设置'));
+      await tester.pumpAndSettle();
+      expect(window, findsNothing);
+      expect(workspace.editing, isTrue);
+      expect(workspace.document.toJson(), original);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'floating form remains reachable with keyboard and after rotation',
+    (tester) async {
+      final workspace = LayoutWorkspace()..beginEdit();
+      addTearDown(workspace.dispose);
+      await launch(tester, workspace);
+      await tester.tap(find.byTooltip('设置会话').first);
+      await tester.pumpAndSettle();
+      final window = find.byKey(const ValueKey('floating-editor-window'));
+      final original = tester.getRect(window);
+      await tester.enterText(
+        find.byKey(const ValueKey('title-main-sessions')),
+        '调整后的组件',
+      );
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      final canvas = tester.getRect(find.byType(PageView));
+      expect(canvas.contains(tester.getRect(window).topLeft), isTrue);
+      expect(canvas.contains(tester.getRect(window).bottomRight), isTrue);
+      expect(find.byTooltip('关闭设置').hitTestable(), findsOneWidget);
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(window), original);
+      tester.view.physicalSize = const Size(800, 360);
+      await tester.pumpAndSettle();
+      final wideCanvas = tester.getRect(find.byType(PageView));
+      expect(wideCanvas.contains(tester.getRect(window).topLeft), isTrue);
+      expect(wideCanvas.contains(tester.getRect(window).bottomRight), isTrue);
+      expect(workspace.findWidget('main-sessions')!.title, '调整后的组件');
+      expect(find.text('完成').hitTestable(), findsOneWidget);
+      expect(find.text('取消').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'title drag previews displacement, commits once and undo restores both',
+    (tester) async {
+      final workspace = editableWorkspace(pair: true);
+      addTearDown(workspace.dispose);
+      await launch(tester, workspace);
+      final before = workspace.document.toJson();
+      final b = find.byKey(const ValueKey('widget-edit-frame-b'));
+      final originalB = tester.getRect(b);
+      final move = find.byKey(const ValueKey('widget-move-a'));
+      final gesture = await tester.startGesture(tester.getCenter(move));
+      await gesture.moveBy(Offset(originalB.width + 4, 0));
+      await tester.pumpAndSettle();
+      expect(workspace.document.toJson(), before);
+      expect(workspace.canUndo, false);
+      expect(tester.getRect(b).left, lessThan(originalB.left));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+        workspace.findWidget('a')!.placementFor(LayoutOrientation.portrait).x,
+        8,
+      );
+      expect(
+        workspace.findWidget('b')!.placementFor(LayoutOrientation.portrait).x,
+        0,
+      );
+      workspace.document.validate();
+      workspace.undo();
+      await tester.pumpAndSettle();
+      expect(workspace.document.toJson(), before);
+      expect(workspace.canUndo, false);
+      expect(tester.getRect(b), originalB);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'cancelled drag clears preview without a draft or history change',
+    (tester) async {
+      final workspace = editableWorkspace(pair: true);
+      addTearDown(workspace.dispose);
+      await launch(tester, workspace);
+      final before = workspace.document.toJson();
+      final b = find.byKey(const ValueKey('widget-edit-frame-b'));
+      final originalB = tester.getRect(b);
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('widget-move-a'))),
+      );
+      await gesture.moveBy(Offset(originalB.width + 4, 0));
+      await tester.pumpAndSettle();
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(workspace.document.toJson(), before);
+      expect(workspace.canUndo, false);
+      expect(tester.getRect(b), originalB);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final edge in ['left', 'right', 'bottom', 'bottomLeft', 'bottomRight']) {
+    testWidgets(
+      '$edge edge resizes with fine steps and a button-height minimum',
+      (tester) async {
+        final workspace = editableWorkspace();
+        addTearDown(workspace.dispose);
+        await launch(tester, workspace);
+        final before = workspace
+            .findWidget('a')!
+            .placementFor(LayoutOrientation.portrait);
+        final frame = find.byKey(const ValueKey('widget-edit-frame-a'));
+        final rect = tester.getRect(frame);
+        final horizontal = edge == 'left' || edge == 'bottomLeft'
+            ? 22.0
+            : -22.0;
+        await tester.drag(
+          find.byKey(ValueKey('widget-$edge-a')),
+          Offset(
+            edge == 'bottom' ? 0 : horizontal,
+            edge == 'left' || edge == 'right' ? 0 : -1000,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final after = workspace
+            .findWidget('a')!
+            .placementFor(LayoutOrientation.portrait);
+        if (edge != 'bottom') {
+          expect(after.w, before.w - 1);
+          if (edge == 'left' || edge == 'bottomLeft') {
+            expect(after.x + after.w, before.x + before.w);
+          } else {
+            expect(after.x, before.x);
+          }
+        }
+        if (edge != 'left' && edge != 'right') {
+          expect(tester.getRect(frame).height, inInclusiveRange(48, 60));
+          expect(after.y, before.y);
+        }
+        workspace.document.validate();
+        workspace.undo();
+        await tester.pumpAndSettle();
+        expect(tester.getRect(frame), rect);
+        expect(workspace.canUndo, false);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final size in [
     const Size(360, 640),
     const Size(800, 360),
@@ -280,7 +510,7 @@ void main() {
   );
   for (final scale in [1.0, 1.8]) {
     testWidgets(
-      'landscape inspector leaves canvas and finish/cancel reachable scale $scale',
+      'floating inspector keeps full canvas and finish/cancel reachable scale $scale',
       (tester) async {
         final workspace = LayoutWorkspace()..beginEdit();
         addTearDown(workspace.dispose);
@@ -290,6 +520,7 @@ void main() {
           size: const Size(480, 280),
           scale: scale,
         );
+        final before = tester.getRect(find.byType(PageView));
         await tester.tap(find.byTooltip('设置会话').first);
         await tester.pumpAndSettle();
         expect(find.text('完成').hitTestable(), findsOneWidget);
@@ -297,11 +528,13 @@ void main() {
         expect(find.byTooltip('关闭设置').hitTestable(), findsOneWidget);
         final canvas = tester.getRect(find.byType(PageView));
         final inspector = tester.getRect(
-          find.byType(SingleChildScrollView).last,
+          find.byKey(const ValueKey('floating-editor-window')),
         );
         expect(canvas.width, greaterThan(100));
         expect(canvas.height, greaterThan(100));
-        expect(canvas.right, lessThanOrEqualTo(inspector.left + 1));
+        expect(canvas, before);
+        expect(canvas.contains(inspector.topLeft), isTrue);
+        expect(canvas.contains(inspector.bottomRight), isTrue);
         expect(find.text('显示标题'), findsNothing);
         expect(find.text('临时铺满'), findsNothing);
         expect(tester.takeException(), isNull);
@@ -424,13 +657,13 @@ void main() {
                 y: (i ~/ 3) * 6,
                 w: 4,
                 h: 6,
-              ),
+              ).scaled(4),
               LayoutOrientation.portrait: GridPlacement(
                 x: 0,
                 y: i * 4,
                 w: 4,
                 h: 4,
-              ),
+              ).scaled(4),
             },
           ),
         );
@@ -594,19 +827,19 @@ void main() {
                     'fitRows': false,
                     'itemHeight': 140.0,
                   },
-                  placements: const {
+                  placements: {
                     LayoutOrientation.wide: GridPlacement(
                       x: 0,
                       y: 0,
                       w: 12,
                       h: 12,
-                    ),
+                    ).scaled(4),
                     LayoutOrientation.portrait: GridPlacement(
                       x: 0,
                       y: 0,
                       w: 4,
                       h: 24,
-                    ),
+                    ).scaled(4),
                   },
                 ),
               ],

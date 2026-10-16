@@ -302,6 +302,12 @@ impl Agent {
         Ok(())
     }
 
+    pub fn reorder_shortcuts(&self, ids: &[String]) -> Result<()> {
+        self.host.lock().unwrap().reorder_shortcuts(ids)?;
+        self.changed.send_modify(|r| *r += 1);
+        Ok(())
+    }
+
     pub fn invite(&self) -> Result<PairingInvitation> {
         let endpoints = addresses(self.port);
         anyhow::ensure!(

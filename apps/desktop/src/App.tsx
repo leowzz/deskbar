@@ -215,9 +215,7 @@ export function App() {
       <aside className="sidebar">
         <div className="brand">
           <Icon name="desk" />
-          <span>
-            Desklet<span className="brand-role">连接助手</span>
-          </span>
+          <span>Desklet</span>
         </div>
         <nav aria-label="主导航">
           {(
@@ -245,14 +243,6 @@ export function App() {
         </nav>
         <div className="sidebar-bottom">
           <strong>{status?.name ?? "这台电脑"}</strong>
-          <span>
-            {status
-              ? "连接助手正在运行"
-              : loadError
-                ? "连接暂不可用"
-                : "正在连接…"}
-          </span>
-          <p>关闭窗口后仍在菜单栏运行</p>
         </div>
       </aside>
       <main>
@@ -265,13 +255,13 @@ export function App() {
                   ? "快捷入口"
                   : "设置"}
             </h1>
-            <p className="subtitle">
-              {view === "devices"
-                ? "连接 Android 设备，将身旁的屏幕变成工作台。"
-                : view === "shortcuts"
-                  ? "管理设备可以在这台电脑上打开的网页和应用。"
-                  : "管理这台电脑上的连接助手偏好。"}
-            </p>
+            {view !== "settings" && (
+              <p className="subtitle">
+                {view === "devices"
+                  ? "连接 Android 设备，将身旁的屏幕变成工作台。"
+                  : "管理设备可以在这台电脑上打开的网页和应用。"}
+              </p>
+            )}
           </div>
           {view === "devices" && (
             <button
@@ -425,7 +415,6 @@ export function App() {
             aria-labelledby="appearance-title"
           >
             <h2 id="appearance-title">外观</h2>
-            <p>选择连接助手的主题，立即生效并保存在这台电脑上。</p>
             <div className="theme-options" role="group" aria-label="应用主题">
               {(
                 [

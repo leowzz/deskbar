@@ -532,25 +532,89 @@ header .primary {
   background: var(--chart);
   border-radius: inherit;
 }
-.shortcut-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+.shortcut-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  align-items: stretch;
+  gap: 12px;
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  margin-top: 12px;
+  margin-top: 16px;
 }
-.shortcut-info {
-  flex: 1;
-  min-width: min(210px, 100%);
+.shortcut-catalog:empty {
+  display: none;
+}
+.shortcut-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 12px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.shortcut-tile:hover,
+.shortcut-tile[aria-expanded="true"] {
+  background: var(--raised);
+  border-color: transparent;
+}
+.shortcut-tile.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+.shortcut-tile.drop-target {
+  background: var(--selection);
+  border-color: var(--focus);
+}
+.shortcut-name {
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
   overflow-wrap: anywhere;
 }
-.shortcut-row small {
+.shortcut-tile .shortcut-icon {
+  width: 48px;
+  height: 48px;
+}
+.shortcut-menu {
+  position: fixed;
+  z-index: 20;
+  width: 168px;
+  padding: 6px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 12%);
+}
+.shortcut-menu button {
   display: block;
-  margin-top: 3px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.shortcut-menu button:hover,
+.shortcut-menu button:focus-visible {
+  background: var(--raised);
+}
+.shortcut-menu .danger-text {
+  color: var(--danger);
+}
+.danger-button {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger);
 }
 .shortcut-form,
 .settings-panel {
@@ -593,6 +657,14 @@ header .primary {
 }
 .shortcut-form p.notice {
   color: var(--danger);
+}
+.shortcut-editor {
+  width: min(560px, calc(100% - 32px));
+}
+.shortcut-editor .shortcut-form {
+  padding: 0;
+  margin: 0;
+  border: 0;
 }
 .theme-options {
   display: grid;

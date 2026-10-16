@@ -71,7 +71,7 @@ class LayoutRepository {
         return LayoutLoadResult(
           document: decoded.document,
           migrated: true,
-          warning: '已将旧布局迁移到一个页面，原配置已备份',
+          warning: '已升级布局，原配置已备份',
           backupPath: legacy.path,
         );
       } on _FutureLayoutVersion {
@@ -205,6 +205,31 @@ _DecodedLayout _decode(String content) {
   if (version == LayoutDocument.currentSchemaVersion) {
     return _DecodedLayout(LayoutDocument.fromJson(value));
   }
+  if (version == 2) {
+    // Validate in the old coordinate bounds before scaling. Keep all unknown
+    // fields and both orientation profiles intact.
+    final pages = value['pages'];
+    if (pages is! List) throw const FormatException('页面列表无效');
+    for (final page in pages) {
+      if (page is! Map<String, dynamic> || page['widgets'] is! List) {
+        throw const FormatException('页面组件无效');
+      }
+      for (final widget in page['widgets'] as List) {
+        if (widget is! Map<String, dynamic> || widget['placements'] is! Map) {
+          throw const FormatException('组件位置无效');
+        }
+        final placements = widget['placements'] as Map;
+        for (final orientation in LayoutOrientation.values) {
+          placements[orientation.name] = _upgradeRect(
+            placements[orientation.name],
+            orientation,
+          ).toJson();
+        }
+      }
+    }
+    value['schemaVersion'] = LayoutDocument.currentSchemaVersion;
+    return _DecodedLayout(LayoutDocument.fromJson(value), migrated: true);
+  }
   if (version != null && version != 1) throw const FormatException('布局版本无效');
   return _DecodedLayout(_migrateCanvas(value), migrated: true);
 }
@@ -247,9 +272,7 @@ LayoutDocument _migrateCanvas(Map<String, dynamic> value) {
       }
       if (rectangle == null && orientation == current) rectangle = raw['rect'];
       if (rectangle is Map<String, dynamic>) {
-        final rect = GridPlacement.fromJson(rectangle);
-        if (!rect.fits(orientation)) throw const FormatException('旧组件超出画布范围');
-        placements[orientation] = rect;
+        placements[orientation] = _upgradeRect(rectangle, orientation);
       } else {
         (missing[id] ??= {}).add(orientation);
         final type = raw['type'];
@@ -325,4 +348,11 @@ LayoutDocument _migrateCanvas(Map<String, dynamic> value) {
   );
   result.validate();
   return result;
+}
+
+GridPlacement _upgradeRect(dynamic value, LayoutOrientation orientation) {
+  if (value is! Map<String, dynamic>) throw const FormatException('组件位置无效');
+  final rect = GridPlacement.fromJson(value).scaled(4);
+  if (!rect.fits(orientation)) throw const FormatException('旧组件超出画布范围');
+  return rect;
 }

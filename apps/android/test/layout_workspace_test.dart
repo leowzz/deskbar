@@ -96,7 +96,7 @@ void main() {
       workspace.setPlacement(
         b,
         LayoutOrientation.wide,
-        const GridPlacement(x: 11, y: 0, w: 4, h: 4),
+        GridPlacement(x: 11, y: 0, w: 4, h: 4).scaled(4),
       ),
       false,
     );
@@ -114,7 +114,7 @@ void main() {
     workspace.setPlacement(
       id,
       LayoutOrientation.wide,
-      const GridPlacement(x: 1, y: 2, w: 10, h: 8),
+      GridPlacement(x: 1, y: 2, w: 10, h: 8).scaled(4),
     );
     workspace.updateWidget(id, options: {'itemWidth': 340, 'gap': 24});
     expect(
@@ -131,7 +131,7 @@ void main() {
     workspace.setPlacement(
       id,
       LayoutOrientation.portrait,
-      const GridPlacement(x: 0, y: 0, w: 4, h: 24),
+      GridPlacement(x: 0, y: 0, w: 4, h: 24).scaled(4),
     );
     final before = workspace.document.toJson();
     expect(workspace.addWidget('usage'), isNull);
@@ -149,7 +149,7 @@ void main() {
       workspace.setPlacement(
         blocking,
         LayoutOrientation.portrait,
-        const GridPlacement(x: 0, y: 0, w: 4, h: 24),
+        GridPlacement(x: 0, y: 0, w: 4, h: 24).scaled(4),
       );
       final before = workspace.document.toJson();
       expect(workspace.moveWidgetToPage(first, target), false);
@@ -184,7 +184,7 @@ void main() {
       workspace.setPlacement(
         first,
         LayoutOrientation.wide,
-        const GridPlacement(x: 8, y: 6, w: 4, h: 6),
+        GridPlacement(x: 8, y: 6, w: 4, h: 6).scaled(4),
       );
       final page = workspace.addPage()!;
       workspace.addWidget('shortcuts');
@@ -291,7 +291,7 @@ void main() {
         workspace.addWidget('sessions', binding: {'token': 'secret'}),
         isNull,
       );
-      final zero = const GridPlacement(x: 0, y: 0, w: 0, h: 1);
+      final zero = GridPlacement(x: 0, y: 0, w: 0, h: 1).scaled(4);
       expect(zero.fits(LayoutOrientation.wide), false);
       expect(workspace.updateWidget(id, options: {'gap': -1}), false);
       expect(workspace.updateWidget(id, options: {'itemWidth': 'bad'}), false);
@@ -322,10 +322,10 @@ void main() {
               widgets.first.id,
               LayoutOrientation.wide,
               GridPlacement(
-                x: random.nextInt(12),
-                y: random.nextInt(12),
-                w: 4,
-                h: 4,
+                x: random.nextInt(LayoutOrientation.wide.columns),
+                y: random.nextInt(LayoutOrientation.wide.rows),
+                w: 16,
+                h: 16,
               ),
             );
           }
