@@ -485,6 +485,20 @@ void main() {
       final grid = find.byKey(const PageStorageKey('sessions-main-sessions'));
       expect(find.text('会话 4'), findsOneWidget);
       expect(find.text('会话 5'), findsOneWidget);
+      final gridTop = tester.getTopLeft(grid).dy;
+      final rowTops = <int>{
+        for (var i = 0; i < 6; i++)
+          (tester
+                      .getTopLeft(
+                        find.byKey(
+                          ValueKey('session-card-main-sessions-session-$i'),
+                        ),
+                      )
+                      .dy -
+                  gridTop)
+              .round(),
+      };
+      expect(rowTops, hasLength(3));
       expect(
         tester.getRect(find.text('会话 5')).bottom,
         lessThanOrEqualTo(tester.getRect(grid).bottom + .01),

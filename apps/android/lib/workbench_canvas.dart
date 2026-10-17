@@ -1451,7 +1451,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               contentPadding: EdgeInsets.zero,
               isThreeLine: true,
               title: const Text('自动铺满完整行'),
-              subtitle: const Text('根据目标高度计算完整行数，大字号时增加最小高度。'),
+              subtitle: const Text('根据设备布局尺寸计算完整行数，文字缩放只影响卡片内容排版。'),
               value: w.options['fitRows'] != false,
               onChanged: (v) =>
                   workspace.updateWidget(id, options: {'fitRows': v}),

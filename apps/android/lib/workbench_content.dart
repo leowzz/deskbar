@@ -9,9 +9,8 @@ import 'workbench_data.dart';
 const sessionCompactMinimumHeight = 88.0;
 const sessionStandardMinimumHeight = 96.0;
 
-double sessionMinimumHeight({required bool compact, double scale = 1}) =>
-    (compact ? sessionCompactMinimumHeight : sessionStandardMinimumHeight) *
-    math.max(1.0, scale).toDouble();
+double sessionMinimumHeight({required bool compact}) =>
+    compact ? sessionCompactMinimumHeight : sessionStandardMinimumHeight;
 
 String workbenchTime(int seconds) {
   if (seconds <= 0) return '未知';
