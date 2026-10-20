@@ -562,6 +562,12 @@ class WorkbenchWidgetBody extends StatelessWidget {
         ? '${age ~/ 3600}小时前'
         : workbenchTime(session.updatedAt);
     final scale = number('textScale', 1).clamp(1, 2).toDouble();
+    // Fit the title and footer in the configured row, including padding and
+    // an 8dp gap, without changing how many cards fit on the device.
+    final textScale = math.min(
+      MediaQuery.textScalerOf(context).scale(14) / 14,
+      (height - 28) / (32 * scale * 1.4),
+    );
     return Semantics(
       button: !editing,
       label: '${session.title}，${session.statusLabel}',
@@ -586,79 +592,83 @@ class WorkbenchWidgetBody extends StatelessWidget {
                   : null,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: math.max(0, height - 20),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Tooltip(
-                            message: session.title,
-                            child: Text(
-                              session.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 18 * scale,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (!narrow)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: running ? c.successBg : c.raised,
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Text(
-                              session.statusLabel,
-                              style: TextStyle(
-                                color: statusColor,
-                                fontSize: 13 * scale,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
+            child: MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Tooltip(
+                          message: session.title,
                           child: Text(
-                            session.project,
+                            session.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: c.muted,
-                              fontSize: 14 * scale,
+                              fontSize: 18 * scale,
+                              height: 1.4,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        if (!narrow)
-                          Text(
-                            time,
+                      ),
+                      const SizedBox(width: 8),
+                      if (!narrow)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: running ? c.successBg : c.raised,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            session.statusLabel,
                             style: TextStyle(
-                              color: c.muted,
-                              fontSize: 14 * scale,
+                              color: statusColor,
+                              fontSize: 13 * scale,
+                              height: 1.4,
                             ),
                           ),
-                      ],
-                    ),
-                  ],
-                ),
+                        ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          session.project,
+                          key: ValueKey('session-project-$id-${session.id}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: c.muted,
+                            fontSize: 14 * scale,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (!narrow)
+                        Text(
+                          time,
+                          key: ValueKey('session-time-$id-${session.id}'),
+                          style: TextStyle(
+                            color: c.muted,
+                            fontSize: 14 * scale,
+                            height: 1.4,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -925,14 +935,24 @@ class WorkbenchWidgetBody extends StatelessWidget {
               )
               .join('\n\n');
 
-    if (!api && options['density'] == 'sidebar') {
+    if (!api) {
       final q = quotas.first;
       final fresh = online && (data.source(sourceId)?.fresh(data.now) ?? false);
-      return QuotaSidebar(
-        quota: q,
-        now: data.now,
-        fresh: fresh,
-        status: _status(context, data, sourceId),
+      return Tooltip(
+        message: detailMessage,
+        child: LayoutDebugOverlay(
+          enabled: debugLayout,
+          label: '额度 · 自适应排版',
+          top: true,
+          child: QuotaSidebar(
+            quota: q,
+            now: data.now,
+            fresh: fresh,
+            compact: density == 'compact',
+            numberKey: ValueKey('usage-number-$id'),
+            status: _status(context, data, sourceId),
+          ),
+        ),
       );
     }
     return LayoutBuilder(

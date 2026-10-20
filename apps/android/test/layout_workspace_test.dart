@@ -441,7 +441,7 @@ void main() {
       final workspace = emptyWorkspace();
       final id = workspace.addWidget('shortcuts')!;
       expect(workspace.findWidget(id)!.options['rows'], 'auto');
-      expect(workspace.findWidget(id)!.options['alignment'], 'spaceEvenly');
+      expect(workspace.findWidget(id)!.options['alignment'], 'center');
       expect(
         workspace.updateWidget(
           id,

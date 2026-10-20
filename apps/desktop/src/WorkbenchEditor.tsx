@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { call, type DeviceDisplay, type Status } from "./api";
+import { call, type Device, type DeviceDisplay, type Status } from "./api";
 
 type CachedDeviceSize = Pick<DeviceDisplay, "width" | "height">;
 
@@ -26,17 +26,46 @@ function readDeviceSize(id: string): CachedDeviceSize | null {
 
 export function WorkbenchEditor({ status }: { status: Status }) {
   const [deviceId, setDeviceId] = useState(status.devices[0]?.id ?? "");
+  const selected =
+    status.devices.find((device) => device.id === deviceId) ??
+    status.devices[0];
+
+  useEffect(() => {
+    setDeviceId(selected?.id ?? "");
+  }, [selected?.id]);
+
+  if (!selected) return <p>连接设备后即可编辑工作台。</p>;
+  return (
+    <DeviceWorkbenchEditor
+      key={selected.id}
+      status={status}
+      selected={selected}
+      onSelectDevice={setDeviceId}
+    />
+  );
+}
+
+// A removed device ends its entire editing session, including its iframe,
+// pending requests, cached dimensions and editing lock. A new pairing has a new
+// ID even when the device name stays the same.
+function DeviceWorkbenchEditor({
+  status,
+  selected,
+  onSelectDevice,
+}: {
+  status: Status;
+  selected: Device;
+  onSelectDevice: (id: string) => void;
+}) {
+  const deviceId = selected.id;
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const frame = useRef<HTMLIFrameElement>(null);
-  const selected = status.devices.find((d) => d.id === deviceId);
-  const [cachedSize, setCachedSize] = useState<CachedDeviceSize | null>(null);
+  const [cachedSize, setCachedSize] = useState<CachedDeviceSize | null>(() =>
+    readDeviceSize(deviceId),
+  );
   const displayRef = useRef<DeviceDisplay | null>(null);
-
-  useEffect(() => {
-    setCachedSize(deviceId ? readDeviceSize(deviceId) : null);
-  }, [deviceId]);
 
   useEffect(() => {
     const display = selected?.display;
@@ -75,10 +104,6 @@ export function WorkbenchEditor({ status }: { status: Status }) {
   displayRef.current = display;
 
   useEffect(() => {
-    if (!selected && !editing) setDeviceId(status.devices[0]?.id ?? "");
-  }, [selected, status.devices, editing]);
-
-  useEffect(() => {
     if (!deviceId) return;
     let active = true;
     let ready = false;
@@ -114,6 +139,7 @@ export function WorkbenchEditor({ status }: { status: Status }) {
     }
     async function receive(event: MessageEvent) {
       if (
+        !active ||
         event.source !== frame.current?.contentWindow ||
         event.origin !== window.location.origin ||
         event.data?.channel !== "deskbar-editor"
@@ -165,27 +191,41 @@ export function WorkbenchEditor({ status }: { status: Status }) {
     };
   }, [deviceId]);
 
-  if (!status.devices.length) return <p>连接设备后即可编辑工作台。</p>;
   const online =
     selected?.display && Date.now() / 1000 - selected.display.seen_at < 15;
   return (
     <section className="workbench-editor">
       <div className="editor-device-row">
-        <label>
-          设备
-          <select
-            aria-label="编辑的设备"
-            value={deviceId}
-            disabled={editing}
-            onChange={(e) => setDeviceId(e.target.value)}
-          >
-            {status.devices.map((device) => (
-              <option value={device.id} key={device.id}>
-                {device.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div
+          className="editor-device-switcher"
+          role="group"
+          aria-label="编辑的设备"
+        >
+          {status.devices.map((device) => {
+            const summary = device.id.slice(0, 8);
+            const connected =
+              device.display && Date.now() / 1000 - device.display.seen_at < 15;
+            return (
+              <button
+                type="button"
+                key={device.id}
+                className="editor-device-button"
+                data-device-id={device.id}
+                aria-label={`${device.name} · ${summary}`}
+                aria-pressed={device.id === deviceId}
+                title={`设备标识：${device.id}`}
+                disabled={editing}
+                onClick={() => onSelectDevice(device.id)}
+              >
+                <span className="editor-device-name">{device.name}</span>
+                <span className="editor-device-summary">
+                  <code>#{summary}</code>
+                  <span>· {connected ? "已连接" : "离线"}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <span className={`status-tag ${online ? "success" : "warning"}`}>
           {!online
             ? "设备离线 · 可编辑当前布局"

@@ -34,7 +34,7 @@ class _DesktopEditorState extends State<DesktopEditor> {
   late final repository = _DesktopRepository(_save);
   final Map<int, Completer<void>> requests = {};
   int requestId = 0, revision = 0;
-  bool ready = false, debug = true, dark = false;
+  bool ready = false, debug = false, dark = false;
   bool lastEditing = false, previewFit = true;
   _PreviewOrientationMode previewMode = _PreviewOrientationMode.device;
   double deviceWidth = 1280, deviceHeight = 720, textScale = 1;

@@ -115,7 +115,7 @@
             "labels": false,
             "columns": "auto",
             "rows": 1,
-            "alignment": "spaceEvenly",
+            "alignment": "center",
             "appearance": "dock"
           },
           "placements": {

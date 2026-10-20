@@ -1226,20 +1226,47 @@ footer .text-button {
   gap: 12px;
   margin-bottom: 12px;
 }
-.editor-device-row label {
+.editor-device-switcher {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
-.editor-device-row select {
+.editor-device-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: min(180px, 100%);
   max-width: 260px;
-  min-height: 36px;
-  padding: 6px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
+  text-align: left;
+}
+.editor-device-button[aria-pressed="true"] {
+  border-color: var(--selected-text);
+  background: var(--selection);
+  color: var(--selected-text);
+}
+.editor-device-name {
   font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.editor-device-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.editor-device-summary code {
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 .editor-device-row > span {
   font-size: 13px;

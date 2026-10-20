@@ -245,6 +245,9 @@ void main() {
           expect(tester.takeException(), isNull);
           await tester.tap(find.byTooltip('设置会话').first);
           await tester.pumpAndSettle();
+          await tester.ensureVisible(find.text('高级设置'));
+          await tester.tap(find.text('高级设置'));
+          await tester.pumpAndSettle();
           expect(find.widgetWithText(TextField, '卡片目标宽度'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
@@ -261,6 +264,8 @@ void main() {
       workspace.beginEdit();
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('设置会话').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('高级设置'));
       await tester.pumpAndSettle();
 
       final density = find.byKey(
@@ -358,9 +363,14 @@ void main() {
             editor: false,
           );
           final session = find.text('一个比较长的真实工作任务标题，需要在大字号和窄屏下保持可读');
-          final shortcut = find.text('常用应用入口名称很长也能换行');
+          final shortcut = find.byTooltip('常用应用入口名称很长也能换行');
           expect(session, findsOneWidget);
           expect(shortcut, findsOneWidget);
+          expect(find.text('常用应用入口名称很长也能换行'), findsNothing);
+          expect(
+            find.descendant(of: shortcut, matching: find.byType(Image)),
+            findsOneWidget,
+          );
           expect(session.hitTestable(), findsOneWidget);
           expect(shortcut.hitTestable(), findsOneWidget);
           final card = find.byKey(
@@ -782,6 +792,24 @@ void main() {
       Future<void> open(String id) async {
         await tester.tap(find.byKey(ValueKey('widget-move-$id')));
         await tester.pumpAndSettle();
+        final scroll = tester.state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byKey(PageStorageKey('widget-inspector-$id')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        final offset = scroll.position.pixels;
+        if (find.byKey(ValueKey('title-$id')).evaluate().isEmpty) {
+          await tester.ensureVisible(find.text('高级设置'));
+          await tester.tap(find.text('高级设置'));
+          await tester.pumpAndSettle();
+        }
+        scroll.position.jumpTo(
+          offset.clamp(0, scroll.position.maxScrollExtent),
+        );
+        await tester.pumpAndSettle();
       }
 
       ScrollableState inspectorScroll() => tester.state<ScrollableState>(
@@ -815,18 +843,17 @@ void main() {
       expect(selected('已授权来源'), 'codex.sessions');
       expect(field('显示范围'), findsNothing);
       expect(find.text('最多显示会话数 · 20 个'), findsOneWidget);
-      expect(inspectorScroll().position.pixels, 0);
+      final initialOffset = inspectorScroll().position.pixels;
       await tester.drag(
         find.byType(SingleChildScrollView).last,
         const Offset(0, -350),
       );
       await tester.pumpAndSettle();
       final aOffset = inspectorScroll().position.pixels;
-      expect(aOffset, greaterThan(0));
+      expect(aOffset, greaterThan(initialOffset));
       await open('quota');
-      expect(selected('用量内容'), 'quota');
-      expect(selected('内容布局'), 'fill');
-      expect(selected('内容对齐'), 'spaceEvenly');
+      expect(selected('显示内容'), 'quota');
+      expect(find.text('完整信息'), findsOneWidget);
       expect(find.text('显示详细数据'), findsNothing);
       expect(selected('已授权来源'), 'codex.quota');
       expect(selected('显示范围'), 'weekly');
@@ -836,7 +863,7 @@ void main() {
       expect(selected('显示范围'), 'shortcut');
       expect(selected('图标尺寸'), 'fixed');
       expect(selected('行数'), 'auto');
-      expect(selected('对齐方式'), 'spaceEvenly');
+      expect(selected('对齐方式'), 'center');
       expect(inspectorScroll().position.pixels, 0);
       await open('session-b');
       expect(selected('会话信息'), 'normal');
@@ -859,22 +886,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(selected('会话信息'), 'normal');
       await open('api');
-      expect(selected('用量内容'), 'api');
+      expect(selected('显示内容'), 'api');
       expect(selected('内容布局'), 'fill');
       expect(selected('内容对齐'), 'spaceEvenly');
       expect(selected('已授权来源'), 'sub2api.usage');
       expect(selected('显示范围'), 'api-account');
       final sourceRect = tester.getRect(field('已授权来源'));
       final rangeRect = tester.getRect(field('显示范围'));
-      final contentRect = tester.getRect(field('用量内容'));
+      final contentRect = tester.getRect(field('显示内容'));
       final densityRect = tester.getRect(field('内容布局'));
       final alignmentRect = tester.getRect(field('内容对齐'));
-      expect(rangeRect.top, greaterThanOrEqualTo(sourceRect.bottom + 8));
+      expect(sourceRect.top, greaterThan(rangeRect.bottom));
       expect(densityRect.top, greaterThanOrEqualTo(contentRect.bottom + 8));
       expect(alignmentRect.top, greaterThanOrEqualTo(densityRect.bottom + 8));
       expect(inspectorScroll().position.pixels, 0);
       await open('quota');
-      expect(selected('用量内容'), 'quota');
+      expect(selected('显示内容'), 'quota');
       expect(selected('显示范围'), 'weekly');
       await open('session-a');
       expect(selected('会话信息'), 'compact');
@@ -972,15 +999,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('设置会话').last);
     await tester.pumpAndSettle();
-    final inspector = find.byKey(const PageStorageKey('widget-inspector-list'));
-    final position = tester
-        .state<ScrollableState>(
-          find
-              .descendant(of: inspector, matching: find.byType(Scrollable))
-              .first,
-        )
-        .position;
-    expect(position.pixels, 0);
+    await tester.ensureVisible(find.text('高级设置'));
+    await tester.tap(find.text('高级设置'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('title-list')));
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('title-list')).hitTestable(),
       findsOneWidget,

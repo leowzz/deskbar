@@ -184,11 +184,15 @@ class QuotaSidebar extends StatelessWidget {
     required this.now,
     required this.fresh,
     this.status,
+    this.compact = false,
+    this.numberKey,
   });
   final WorkQuota quota;
   final int now;
-  final bool fresh;
+  final bool fresh, compact;
   final Widget? status;
+  final Key? numberKey;
+
   @override
   Widget build(BuildContext context) {
     final c = deskbarColors(context);
@@ -199,90 +203,180 @@ class QuotaSidebar extends StatelessWidget {
     String two(int n) => n.toString().padLeft(2, '0');
     final remaining = Duration(seconds: math.max(0, quota.resetsAt - now));
     final countdown = expired
-        ? '等待刷新'
+        ? '已到期'
         : remaining.inDays > 0
         ? '${remaining.inDays}天${remaining.inHours % 24}时'
         : '${remaining.inHours}时${remaining.inMinutes % 60}分';
+    final date = '${two(reset.month)}/${two(reset.day)}';
+    final time = '${two(reset.hour)}:${two(reset.minute)}';
     return LayoutBuilder(
       builder: (context, box) {
-        final horizontal = box.maxWidth > box.maxHeight * 1.5;
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final horizontal =
+            box.maxWidth >= 460 && box.maxWidth > box.maxHeight * 1.3;
+        final stacked = !compact && !horizontal && box.maxHeight >= 260 * scale;
         Widget metric(
           String label,
           String value,
           double size, {
+          Key? valueKey,
           Color? color,
-        }) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(label, style: TextStyle(color: c.muted, fontSize: 16)),
-              const SizedBox(height: 6),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.center,
-                child: Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: size,
-                    height: 1.15,
-                    color: color ?? c.text,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ],
-          ),
+        }) => _QuotaMetric(
+          label: label,
+          value: value,
+          fontSize: size,
+          valueKey: valueKey,
+          color: color,
         );
-        final metrics = [
-          metric(
-            expired
-                ? '已到重置时间'
-                : fresh
-                ? '剩余额度'
-                : '上次剩余额度',
-            expired ? '等待刷新' : '${quota.remaining.round()}%',
-            60,
-          ),
-          metric(
-            '重置时间',
-            '${two(reset.month)}/${two(reset.day)}'
-                '${horizontal ? ' ' : '\n'}${two(reset.hour)}:${two(reset.minute)}',
-            32,
-          ),
-          metric('剩余时间', countdown, 30, color: c.chart),
-        ];
-        if (horizontal) {
-          return Row(
+        final primary = metric(
+          expired
+              ? '已到重置时间'
+              : fresh
+              ? '剩余额度'
+              : '上次剩余额度',
+          expired ? '等待刷新' : '${quota.remaining.round()}%',
+          compact ? 48 : 64,
+          valueKey: numberKey,
+        );
+        final resetMetric = metric(
+          '重置时间',
+          stacked || (!horizontal && box.maxWidth < 360)
+              ? '$date\n$time'
+              : '$date $time',
+          30,
+          valueKey: const ValueKey('quota-reset'),
+        );
+        final countdownMetric = metric(
+          '剩余时间',
+          countdown,
+          30,
+          color: c.chart,
+          valueKey: const ValueKey('quota-countdown'),
+        );
+        final details = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: resetMetric),
+            VerticalDivider(width: 16, color: c.line),
+            Expanded(child: countdownMetric),
+          ],
+        );
+        Widget content;
+        if (compact || box.maxHeight < 120 * scale) {
+          content = Column(
+            children: [
+              Expanded(child: primary),
+              if (box.maxHeight >= 64 * scale)
+                Text(
+                  expired ? '等待额度刷新' : '$date $time 重置 · $countdown',
+                  key: const ValueKey('quota-reset-summary'),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: TextStyle(color: c.muted, fontSize: 12),
+                ),
+            ],
+          );
+        } else if (horizontal) {
+          content = Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (var i = 0; i < metrics.length; i++) ...[
-                if (i > 0) VerticalDivider(width: 1, color: c.line),
-                Expanded(child: SingleChildScrollView(child: metrics[i])),
-              ],
+              Expanded(flex: 5, child: primary),
+              VerticalDivider(width: 16, color: c.line),
+              Expanded(flex: 8, child: details),
+            ],
+          );
+        } else if (stacked) {
+          content = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 5, child: primary),
+              Divider(height: 16, color: c.line),
+              Expanded(flex: 4, child: resetMetric),
+              Divider(height: 16, color: c.line),
+              Expanded(flex: 4, child: countdownMetric),
+            ],
+          );
+        } else {
+          content = Column(
+            children: [
+              Expanded(flex: 5, child: primary),
+              Divider(height: 12, color: c.line),
+              Expanded(flex: 4, child: details),
             ],
           );
         }
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: box.maxHeight),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                metrics[0],
-                Divider(height: 16, color: c.line),
-                metrics[1],
-                Divider(height: 16, color: c.line),
-                metrics[2],
-                if (!fresh && status != null) status!,
-              ],
-            ),
+        return Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              Expanded(child: content),
+              if (!fresh && status != null)
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: math.min(48, box.maxHeight * .25),
+                  ),
+                  child: SingleChildScrollView(child: status),
+                ),
+            ],
           ),
         );
       },
     );
   }
+}
+
+class _QuotaMetric extends StatelessWidget {
+  const _QuotaMetric({
+    required this.label,
+    required this.value,
+    required this.fontSize,
+    this.valueKey,
+    this.color,
+  });
+  final String label, value;
+  final double fontSize;
+  final Key? valueKey;
+  final Color? color;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final c = deskbarColors(context);
+      final labelHeight = MediaQuery.textScalerOf(context).scale(14) * 1.4;
+      return Semantics(
+        label: '$label：$value',
+        child: Column(
+          children: [
+            if (box.maxHeight >= labelHeight + 24) ...[
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: c.muted, fontSize: 14, height: 1.4),
+              ),
+              const SizedBox(height: 4),
+            ],
+            Expanded(
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    key: valueKey,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      height: 1.15,
+                      fontWeight: FontWeight.w600,
+                      color: color ?? c.text,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }

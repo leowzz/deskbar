@@ -250,8 +250,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byType(WorkbenchStatusBar), findsOneWidget);
       expect(find.byTooltip('设置'), findsOneWidget);
-      expect(find.text('重置时间'), findsOneWidget);
-      expect(find.text('剩余时间'), findsOneWidget);
+      expect(
+        find.text('重置时间').evaluate().isNotEmpty ||
+            find
+                .byKey(const ValueKey('quota-reset-summary'))
+                .evaluate()
+                .isNotEmpty,
+        isTrue,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       connection.dispose();

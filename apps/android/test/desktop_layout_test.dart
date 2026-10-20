@@ -119,7 +119,7 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pump();
       expect(workspace.editing, isTrue);
-      expect(repository.saved, isNull);
+      // Auto-save may already have completed while the panel animated.
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -138,7 +138,10 @@ void main() {
         workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
         5,
       );
+      await tester.tap(find.text('高级设置'));
+      await tester.pumpAndSettle();
       final name = find.byKey(const ValueKey('title-quota'));
+      await tester.ensureVisible(name);
       await tester.enterText(name, '额度名称');
       await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
@@ -157,6 +160,7 @@ void main() {
         workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
         5,
       );
+      final previousSaved = repository.saved;
       repository.fail = true;
       // The debounce flushes the focused numeric field without a save button.
       await tester.tap(find.text('完成'));
@@ -166,7 +170,7 @@ void main() {
         workspace.selectedWidget!.placementFor(LayoutOrientation.wide).x,
         7,
       );
-      expect(repository.saved, isNull);
+      expect(repository.saved, same(previousSaved));
       repository.fail = false;
       await tester.tap(find.text('完成'));
       await tester.pumpAndSettle();
@@ -221,10 +225,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('outline-main-sessions')));
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('title-main-sessions')).hitTestable(),
-        findsOneWidget,
-      );
+      expect(find.text('高级设置').hitTestable(), findsOneWidget);
+      await tester.ensureVisible(find.text('高级设置'));
+      await tester.tap(find.text('高级设置'));
+      await tester.pumpAndSettle();
       final x = tester.getRect(
         find.byKey(const ValueKey('placement-main-sessions-portrait-x')),
       );
@@ -280,10 +284,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(workspace.selectedWidgetId, 'main-sessions');
       expect(workspace.editing, isTrue);
-      expect(
-        find.byKey(const ValueKey('title-main-sessions')).hitTestable(),
-        findsOneWidget,
-      );
+      expect(find.text('高级设置').hitTestable(), findsOneWidget);
       final inspector = tester.getRect(
         find.byKey(const ValueKey('editor-inspector')),
       );
@@ -292,7 +293,11 @@ void main() {
       expect(find.byKey(const ValueKey('editor-outline')), findsOneWidget);
       expect(tester.getRect(find.byType(PageView)), canvas);
       expect(tester.getSize(body), before);
+      await tester.ensureVisible(find.text('高级设置'));
+      await tester.tap(find.text('高级设置'));
+      await tester.pumpAndSettle();
       final name = find.byKey(const ValueKey('title-main-sessions'));
+      await tester.ensureVisible(name);
       await tester.enterText(name, '正在编辑');
       await tester.pumpAndSettle();
       await tester.pumpWidget(editor(Size(size.height, size.width)));

@@ -28,11 +28,6 @@ String _shortcutRowsValue(dynamic value) {
   return 'auto';
 }
 
-String _shortcutAlignmentValue(dynamic value) =>
-    const {'left', 'center', 'spaceEvenly', 'right'}.contains(value)
-    ? value as String
-    : 'spaceEvenly';
-
 List<Widget> _inspectorFields(List<Widget> fields, {double gap = 12}) => [
   for (var i = 0; i < fields.length; i++) ...[
     fields[i],
@@ -76,6 +71,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       widget.repository ?? LayoutRepository();
   late final PageController pages = PageController(initialPage: _pageIndex);
   final storage = PageStorageBucket();
+  final precisionStorage = PageStorageBucket();
   late final DisplayPreferences display =
       widget.displayPreferences ?? DisplayPreferences();
   String? panel, inspectedId;
@@ -655,7 +651,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: widget.previewFit
-            ? Center(
+            ? SizedBox.expand(
                 child: FittedBox(fit: BoxFit.contain, child: screen),
               )
             : SingleChildScrollView(
@@ -1472,12 +1468,172 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       if (value == null) return;
       workspace.updateWidget(
         w.id,
+        binding: key == 'content'
+            ? {
+                if (widget.connection.data != null)
+                  'hostId': widget.connection.data!.hostId,
+                'source': value == 'api' ? 'sub2api.usage' : 'codex.quota',
+              }
+            : null,
         options: {
           key: key == 'columns' && value != 'auto' ? int.parse(value) : value,
         },
       );
     },
   );
+
+  Widget _presetChips(
+    LayoutWidget w,
+    Map<String, Map<String, dynamic>> presets,
+  ) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      for (final preset in presets.entries)
+        ChoiceChip(
+          label: Text(preset.key),
+          selected: preset.value.entries.every(
+            (entry) => w.options[entry.key] == entry.value,
+          ),
+          onSelected: (_) =>
+              workspace.updateWidget(w.id, options: preset.value),
+        ),
+    ],
+  );
+
+  List<Widget> _basicWidgetControls(LayoutWidget w) => [
+    if (w.type == 'sessions') ...[
+      _presetChips(w, const {
+        '紧凑': {
+          'appearance': 'cards',
+          'density': 'compact',
+          'itemWidth': 260.0,
+          'itemHeight': 88.0,
+          'gap': 8.0,
+          'textScale': 1.0,
+          'fitRows': true,
+        },
+        '标准': {
+          'appearance': 'cards',
+          'density': 'normal',
+          'itemWidth': 300.0,
+          'itemHeight': 112.0,
+          'gap': 12.0,
+          'textScale': 1.0,
+          'fitRows': true,
+        },
+        '大字': {
+          'appearance': 'cards',
+          'density': 'normal',
+          'itemWidth': 360.0,
+          'itemHeight': 144.0,
+          'gap': 12.0,
+          'textScale': 1.35,
+          'fitRows': true,
+        },
+      }),
+      _choice(w, 'columns', '排列列数', const {
+        'auto': '自动',
+        '1': '1 列',
+        '2': '2 列',
+        '3': '3 列',
+        '4': '4 列',
+        '5': '5 列',
+        '6': '6 列',
+      }, 'auto'),
+      KeyedSubtree(
+        key: ValueKey('session-limit-${w.id}'),
+        child: _slider(
+          '最多显示会话数',
+          sessionDisplayLimit(w.options).toDouble(),
+          1,
+          maximumSessionDisplayLimit.toDouble(),
+          (v) =>
+              workspace.updateWidget(w.id, options: {'maxSessions': v.round()}),
+          suffix: ' 个',
+        ),
+      ),
+    ],
+    if (w.type == 'shortcuts') ...[
+      _presetChips(w, const {
+        '图标': {
+          'appearance': 'plain',
+          'iconSize': 'max',
+          'labels': false,
+          'rows': 'auto',
+          'gapX': 16.0,
+          'gapY': 16.0,
+          'alignment': 'center',
+        },
+        '图文': {
+          'appearance': 'plain',
+          'iconSize': 'max',
+          'labels': true,
+          'rows': 'auto',
+          'gapX': 16.0,
+          'gapY': 16.0,
+          'alignment': 'center',
+        },
+        '底部栏': {
+          'appearance': 'dock',
+          'iconSize': 'max',
+          'labels': false,
+          'rows': 1,
+          'gapX': 16.0,
+          'gapY': 16.0,
+          'alignment': 'center',
+        },
+      }),
+      _choice(w, 'alignment', '对齐方式', const {
+        'left': '左对齐',
+        'center': '居中对齐',
+        'spaceEvenly': '均匀分布',
+        'right': '右对齐',
+      }, 'center'),
+    ],
+    if (w.type == 'usage') ...[
+      _choice(w, 'content', '显示内容', const {
+        'quota': 'Codex 额度',
+        'api': 'API 用量',
+      }, 'quota'),
+      _bindingControls(w, resourceOnly: true),
+      Wrap(
+        spacing: 8,
+        children: [
+          for (final entry in const {'fill': '完整信息', 'compact': '简洁显示'}.entries)
+            ChoiceChip(
+              label: Text(entry.value),
+              selected: entry.key == 'compact'
+                  ? w.options['density'] == 'compact'
+                  : w.options['density'] != 'compact',
+              onSelected: (_) =>
+                  workspace.updateWidget(w.id, options: {'density': entry.key}),
+            ),
+        ],
+      ),
+    ],
+    if (w.type == 'statusBar') ...[
+      _WidgetNameField(
+        key: ValueKey('status-label-${w.id}'),
+        id: '${w.id}-label',
+        value: w.options['label'] as String? ?? 'DeskBar',
+        label: '左侧名称',
+        maxLength: 80,
+        onChanged: (v) => workspace.updateWidget(w.id, options: {'label': v}),
+      ),
+      for (final entry in const {
+        'showClock': '显示日期与时间',
+        'showConnection': '显示连接状态',
+      }.entries)
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(entry.value),
+          value: w.options[entry.key] != false,
+          onChanged: (v) =>
+              workspace.updateWidget(w.id, options: {entry.key: v}),
+        ),
+    ],
+  ];
 
   Widget _widgetInspector() {
     final id = inspectedId;
@@ -1502,26 +1658,16 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             value: w.visible,
             onChanged: (v) => _result(workspace.setWidgetVisible(id, v)),
           ),
-          if (w.type != 'statusBar') _bindingControls(w),
+          if (w.type != 'statusBar')
+            _bindingControls(w, sourceOnly: w.type != 'shortcuts'),
         ]),
       ),
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: _inspectorFields([
           if (w.type == 'statusBar') ...[
-            _WidgetNameField(
-              key: ValueKey('status-label-$id'),
-              id: '$id-label',
-              value: w.options['label'] as String? ?? 'DeskBar',
-              label: '左侧名称',
-              maxLength: 80,
-              onChanged: (v) =>
-                  workspace.updateWidget(id, options: {'label': v}),
-            ),
             for (final entry in const {
-              'showClock': '显示日期与时间',
               'showSeconds': '显示秒数',
-              'showConnection': '显示连接状态',
               'showThemeButton': '显示主题切换',
               'showSettingsButton': '显示设置入口',
             }.entries)
@@ -1538,15 +1684,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               'plain': '简洁',
               'cards': '边框卡片',
             }, 'plain'),
-            _choice(w, 'columns', '列数', const {
-              'auto': '自动',
-              '1': '1 列',
-              '2': '2 列',
-              '3': '3 列',
-              '4': '4 列',
-              '5': '5 列',
-              '6': '6 列',
-            }, 'auto'),
             if (w.options['appearance'] == 'cards')
               _slider(
                 '文字大小',
@@ -1694,50 +1831,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 options: {'rows': v == 'auto' ? 'auto' : int.parse(v!)},
               ),
             ),
-            DropdownButtonFormField<String>(
-              key: ValueKey('shortcut-alignment-$id-${w.options['alignment']}'),
-              initialValue: _shortcutAlignmentValue(w.options['alignment']),
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '对齐方式'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'left',
-                  child: Text(
-                    '左对齐',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'center',
-                  child: Text(
-                    '居中对齐',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'spaceEvenly',
-                  child: Text(
-                    '均匀分布',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'right',
-                  child: Text(
-                    '右对齐',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) => workspace.updateWidget(
-                id,
-                options: {'alignment': v ?? 'spaceEvenly'},
-              ),
-            ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('显示名称'),
@@ -1746,40 +1839,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                   workspace.updateWidget(id, options: {'labels': v}),
             ),
           ],
-          if (w.type == 'usage') ...[
-            DropdownButtonFormField<String>(
-              key: ValueKey('content-$id-${w.options['content']}'),
-              initialValue: w.options['content'] == 'api' ? 'api' : 'quota',
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '用量内容'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'quota',
-                  child: Text(
-                    'Codex 额度',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'api',
-                  child: Text(
-                    'API 用量',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) => workspace.updateWidget(
-                id,
-                options: {'content': v},
-                binding: {
-                  if (widget.connection.data != null)
-                    'hostId': widget.connection.data!.hostId,
-                  'source': v == 'api' ? 'sub2api.usage' : 'codex.quota',
-                },
-              ),
-            ),
+          if (w.type == 'usage' && w.options['content'] == 'api') ...[
             DropdownButtonFormField<String>(
               key: ValueKey('usage-density-$id-${w.options['density']}'),
               initialValue: switch (w.options['density']) {
@@ -1924,12 +1984,31 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           key: PageStorageKey('widget-inspector-$id'),
           primary: false,
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-          child: Wrap(
-            spacing: 16,
-            runSpacing: 16,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final group in groups)
-                SizedBox(width: columnWidth, child: group),
+              ..._inspectorFields(_basicWidgetControls(w), gap: 16),
+              const SizedBox(height: 16),
+              ExpansionTile(
+                key: PageStorageKey('advanced-$id'),
+                tilePadding: EdgeInsets.zero,
+                title: const Text('高级设置'),
+                subtitle: const Text('位置、来源与精细参数'),
+                children: [
+                  PageStorage(
+                    bucket: precisionStorage,
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        for (final group in groups.take(2))
+                          SizedBox(width: columnWidth, child: group),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              groups.last,
             ],
           ),
         );
@@ -2002,7 +2081,11 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     );
   }
 
-  Widget _bindingControls(LayoutWidget w) {
+  Widget _bindingControls(
+    LayoutWidget w, {
+    bool sourceOnly = false,
+    bool resourceOnly = false,
+  }) {
     final data = widget.connection.data;
     final source = w.type == 'sessions'
         ? 'codex.sessions'
@@ -2034,36 +2117,37 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String>(
-          key: ValueKey('binding-${w.id}-$source-$currentHost'),
-          initialValue: valid ? source : null,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: '已授权来源'),
-          hint: Text(
-            currentHost != null && !valid ? '原来源不可用，请重新选择' : '请在电脑端开启共享',
-          ),
-          items: [
-            if (authorized)
-              DropdownMenuItem(
-                value: source,
-                child: Text(
-                  '${widget.connection.hostName ?? '此电脑'} · ${source == 'sub2api.usage' ? 'API 用量' : widgetTypeName(w.type)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        if (!resourceOnly)
+          DropdownButtonFormField<String>(
+            key: ValueKey('binding-${w.id}-$source-$currentHost'),
+            initialValue: valid ? source : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: '已授权来源'),
+            hint: Text(
+              currentHost != null && !valid ? '原来源不可用，请重新选择' : '请在电脑端开启共享',
+            ),
+            items: [
+              if (authorized)
+                DropdownMenuItem(
+                  value: source,
+                  child: Text(
+                    '${widget.connection.hostName ?? '此电脑'} · ${source == 'sub2api.usage' ? 'API 用量' : widgetTypeName(w.type)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-          ],
-          onChanged: (v) {
-            if (v != null && data != null) {
-              workspace.updateWidget(
-                w.id,
-                binding: {'hostId': data.hostId, 'source': v},
-              );
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        if (w.type == 'sessions')
+            ],
+            onChanged: (v) {
+              if (v != null && data != null) {
+                workspace.updateWidget(
+                  w.id,
+                  binding: {'hostId': data.hostId, 'source': v},
+                );
+              }
+            },
+          ),
+        if (!resourceOnly) const SizedBox(height: 12),
+        if (!sourceOnly && w.type == 'sessions')
           KeyedSubtree(
             key: ValueKey('session-limit-${w.id}'),
             child: _slider(
@@ -2078,7 +2162,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               suffix: ' 个',
             ),
           )
-        else if (valid) ...[
+        else if (!sourceOnly && valid) ...[
           DropdownButtonFormField<String>(
             key: ValueKey('resource-${w.id}-$source-$selectedResource'),
             initialValue: selectedResource == null || selectedResource.isEmpty
@@ -2087,9 +2171,15 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             isExpanded: true,
             decoration: const InputDecoration(labelText: '显示范围'),
             items: [
-              const DropdownMenuItem(
+              DropdownMenuItem(
                 value: '',
-                child: Text('全部', maxLines: 1, overflow: TextOverflow.ellipsis),
+                child: Text(
+                  w.type == 'usage' && resources.isNotEmpty
+                      ? '自动（${resources.values.first}）'
+                      : '全部',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (selectedResource != null &&
                   selectedResource.isNotEmpty &&
