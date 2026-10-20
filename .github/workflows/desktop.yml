@@ -1,0 +1,131 @@
+name: Desktop build
+
+on:
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PUB_HOSTED_URL: https://pub.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          cache: true
+      - name: Build shared frontend
+        run: |
+          npm install -g pnpm@11.9.0
+          pnpm install --frozen-lockfile
+          cd apps/android
+          flutter pub get --enforce-lockfile
+          cd ../..
+          pnpm --dir apps/desktop test
+          pnpm --dir apps/desktop build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-frontend
+          path: apps/desktop/dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  desktop:
+    needs: frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos
+            bundles: app,dmg
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+            bundles: nsis
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: |
+          npm install -g pnpm@11.9.0
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+          rustup target add "${{ matrix.target }}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Keep release dependencies separate from the debug-only make check cache.
+          shared-key: desktop-release-${{ matrix.target }}
+          # Tags can restore main's cache, but cannot share caches with other tags.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-frontend
+          path: apps/desktop/dist/
+      - name: Build desktop without bundling
+        if: ${{ !inputs.release }}
+        run: pnpm --dir apps/desktop tauri build --target "${{ matrix.target }}" --no-bundle --config '{"build":{"beforeBuildCommand":""}}' -- --locked
+      - name: Build Windows installer and signed update
+        if: inputs.release && runner.os == 'Windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm --dir apps/desktop tauri build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.release.conf.json --config '{"build":{"beforeBuildCommand":""}}' -- --locked
+      - name: Build macOS installer and signed update
+        if: inputs.release && runner.os == 'macOS'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Apple Silicon requires an ad-hoc signature when no Apple group is configured.
+          export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then unset "$name"; fi
+          done
+          pnpm --dir apps/desktop tauri build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.release.conf.json --config '{"build":{"beforeBuildCommand":""}}' -- --locked
+          codesign --verify --deep --strict "target/${{ matrix.target }}/release/bundle/macos/DeskBar 连接助手.app"
+      - name: Test desktop using release dependencies
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked --workspace --release --target "${{ matrix.target }}"
+      - name: Collect artifacts
+        if: inputs.release
+        run: python3 scripts/release_assets.py collect --tag "$TAG" --platform "${{ matrix.platform }}" --source "target/${{ matrix.target }}/release/bundle"
+      - uses: actions/upload-artifact@v4
+        if: inputs.release
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
