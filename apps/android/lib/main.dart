@@ -7,6 +7,7 @@ import 'workbench_canvas.dart';
 import 'package:flutter/services.dart';
 import 'rawblock.dart';
 import 'top_notice.dart';
+import 'update_settings.dart';
 
 void main() => runApp(const DeskBarApp());
 
@@ -308,6 +309,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                   value: display.rotationLocked,
                   onChanged: display.setRotationLocked,
                 ),
+                const UpdateSettings(),
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context);
@@ -345,6 +347,22 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                 ),
                 toolbarHeight: compact ? 48 : 56,
                 actions: [
+                  if (!paired)
+                    IconButton(
+                      tooltip: '软件更新',
+                      icon: const Icon(Icons.system_update),
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        showDragHandle: true,
+                        isScrollControlled: true,
+                        builder: (context) => const SafeArea(
+                          child: SingleChildScrollView(
+                            padding: EdgeInsets.all(16),
+                            child: UpdateSettings(),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (compact && paired)
                     TextButton(onPressed: forget, child: const Text('断开电脑')),
                   IconButton(

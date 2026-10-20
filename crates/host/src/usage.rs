@@ -305,6 +305,7 @@ mod tests {
             },
             password: "fixture-password".into(),
             client: reqwest::Client::builder()
+                .no_proxy()
                 .timeout(Duration::from_secs(5))
                 .redirect(reqwest::redirect::Policy::none())
                 .build()

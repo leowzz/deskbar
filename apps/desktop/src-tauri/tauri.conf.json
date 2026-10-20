@@ -28,10 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "app",
-      "dmg"
-    ],
+    "targets": ["app", "dmg"],
     "macOS": {
       "infoPlist": "Info.plist",
       "minimumSystemVersion": "12.0"
@@ -43,5 +40,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExQkZCQ0REQzUzMTYyRUIKUldUcllqSEYzYnkvb2RxVlhDbW5mTXF6eDZoYURNckFIQU9aUnloZVJVZHNNakJRb1pmVzV4N1oK",
+      "endpoints": [
+        "https://github.com/leowzz/deskbar/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

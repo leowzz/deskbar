@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate release
+        env:
+          TAG: ${{ github.ref_name }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          DESKBAR_ANDROID_KEYSTORE_BASE64: ${{ secrets.DESKBAR_ANDROID_KEYSTORE_BASE64 }}
+          DESKBAR_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.DESKBAR_ANDROID_KEYSTORE_PASSWORD }}
+          DESKBAR_ANDROID_KEY_ALIAS: ${{ secrets.DESKBAR_ANDROID_KEY_ALIAS }}
+          DESKBAR_ANDROID_KEY_PASSWORD: ${{ secrets.DESKBAR_ANDROID_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cp .env.example .env
+          python3 scripts/release.py check --tag "$TAG" --require-branch
+          python3 scripts/release_assets.py preflight --tag "$TAG"
+          make release-test docs-check
+
+  desktop:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos
+            bundles: app,dmg
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+            bundles: nsis
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.ref_name }}
+      PUB_HOSTED_URL: https://pub.dev
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          cache: true
+      - name: Install build tools
+        run: |
+          npm install -g pnpm@11.9.0
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+          rustup target add "${{ matrix.target }}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: desktop-${{ matrix.target }}
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          cd apps/android
+          flutter pub get --enforce-lockfile
+      - name: Check desktop
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked --workspace
+          pnpm --dir apps/desktop check
+          pnpm --dir apps/desktop test
+      - name: Build Windows installer and signed update
+        if: runner.os == 'Windows'
+        run: pnpm --dir apps/desktop tauri build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.release.conf.json -- --locked
+      - name: Build macOS installer and signed update
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Tauri imports a configured certificate and notarizes with a complete Apple group.
+          # Without Apple credentials, Apple Silicon still requires an ad-hoc code signature.
+          export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then unset "$name"; fi
+          done
+          pnpm --dir apps/desktop tauri build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.release.conf.json -- --locked
+          codesign --verify --deep --strict "target/${{ matrix.target }}/release/bundle/macos/DeskBar 连接助手.app"
+      - name: Collect artifacts
+        run: python3 scripts/release_assets.py collect --tag "$TAG" --platform "${{ matrix.platform }}" --source "target/${{ matrix.target }}/release/bundle"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  android:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TAG: ${{ github.ref_name }}
+      PUB_HOSTED_URL: https://pub.dev
+      DESKBAR_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.DESKBAR_ANDROID_KEYSTORE_PASSWORD }}
+      DESKBAR_ANDROID_KEY_ALIAS: ${{ secrets.DESKBAR_ANDROID_KEY_ALIAS }}
+      DESKBAR_ANDROID_KEY_PASSWORD: ${{ secrets.DESKBAR_ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          cache: true
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DESKBAR_ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/deskbar-release.keystore"
+          echo "DESKBAR_ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/deskbar-release.keystore" >> "$GITHUB_ENV"
+      - name: Check and build Android
+        working-directory: apps/android
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test
+          flutter build apk --release --target-platform android-arm64
+          cd android
+          ./gradlew :app:testReleaseUnitTest
+      - name: Verify APK signature and collect
+        run: |
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)"
+          "$apksigner" verify --verbose --print-certs apps/android/build/app/outputs/flutter-apk/app-release.apk
+          python3 scripts/release_assets.py collect --tag "$TAG" --platform android --source apps/android/build/app/outputs/flutter-apk
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deskbar-release.keystore"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: [desktop, android]
+    concurrency:
+      group: publish-stable
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Validate artifacts and generate latest.json
+        run: python3 scripts/release_assets.py manifest --tag "$TAG"
+      - name: Publish complete release
+        run: |
+          promote="$(python3 scripts/release_assets.py promote --tag "$TAG")"
+          if gh release view "$TAG" --json isDraft > release-state.json 2>/dev/null; then
+            jq -e '.isDraft == true' release-state.json > /dev/null || {
+              echo "::error::Already published; refusing to replace release assets"
+              exit 1
+            }
+          else
+            gh release create "$TAG" --verify-tag --draft --title "DeskBar $TAG" --generate-notes
+          fi
+          gh release upload "$TAG" dist/deskbar-* dist/latest.json dist/SHA256SUMS --clobber
+          # Compare static manifests under a shared publish lock; older builds cannot roll back Latest.
+          gh release edit "$TAG" --draft=false --prerelease=false --latest="$promote"

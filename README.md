@@ -35,7 +35,7 @@ DeskBar 把 Android 屏幕变成电脑旁的工作台。电脑安装 **DeskBar �
 
 ## 运行开发版本
 
-需要 Rust（1.89+）、Node.js（22+）、pnpm 11、Flutter 3.44 / Dart 3.12，以及对应平台构建工具。桌面目前在 macOS 验证；Android 最低版本为 Android 9（API 28）。依赖已提交锁文件。
+需要 Rust（1.90+）、Node.js（22+）、pnpm 11、Flutter 3.44 / Dart 3.12，以及对应平台构建工具。桌面目前在 macOS 验证；Android 最低版本为 Android 9（API 28）。依赖已提交锁文件。
 
 ```sh
 make setup           # 安装桌面与 Flutter 依赖
@@ -43,9 +43,13 @@ make dev             # 启动本机服务端与 DeskBar 连接助手
 make android         # 在指定 Android 设备运行，先设置 ANDROID_DEVICE
 make check           # 文档、格式、Rust 测试、桌面类型与 Flutter 检查
 make android-build   # 生成开发 APK，不是签名发布版本
-make android-release # 使用本机发布密钥生成签名 AAB
+make android-release # 使用发布密钥生成 arm64 APK
+make desktop-release # 生成本机桌面安装包与签名更新包
+make release         # patch +1，同步版本、提交并创建本地 tag
 make prototype       # 保留原 HTML 布局原型预览
 ```
+
+构建与 GitHub Release 配置、签名要求和应用内更新见 [发布说明](release/README.md)。双端设置提供「软件更新」；检查静态清单，确认后安装。
 
 `make android ANDROID_DEVICE=<设备序列号>` 用于选择运行设备。Android 开发 APK 位于 `apps/android/build/app/outputs/flutter-apk/app-debug.apk`。
 

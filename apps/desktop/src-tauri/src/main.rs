@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod recent_apps;
+mod update;
 use deskbar_lan::{Agent, AgentStatus, PairingInvitation};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -269,6 +270,8 @@ async fn choose_shortcut_icon(app: tauri::AppHandle) -> Result<Option<String>, S
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(update::PendingUpdate::default())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             let recent = recent_apps::RecentApps::new(directory.join("recent-apps.json"));
@@ -309,6 +312,8 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            update::update_check,
+            update::update_install,
             agent_status,
             device_workbench,
             save_layout,

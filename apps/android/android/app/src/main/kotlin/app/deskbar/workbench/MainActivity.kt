@@ -10,10 +10,15 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var runtime: ConnectionRuntime? = null
+    private var updater: AppUpdater? = null
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val connection = ConnectionRuntime(applicationContext)
         runtime = connection
+        val appUpdater = AppUpdater(this)
+        updater = appUpdater
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.deskbar/update")
+            .setMethodCallHandler(appUpdater::call)
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "app.deskbar/events").setStreamHandler(connection)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.deskbar/connection").setMethodCallHandler { call, result -> connection.call(call, result) }
         // Layout contains only local display preferences and stable resource IDs.
@@ -96,5 +101,5 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
-    override fun onDestroy() { runtime?.close(); super.onDestroy() }
+    override fun onDestroy() { updater?.close(); runtime?.close(); super.onDestroy() }
 }

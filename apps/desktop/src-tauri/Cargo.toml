@@ -17,6 +17,8 @@ hostname = "0.4"
 serde.workspace = true
 serde_json.workspace = true
 open = "5"
+tauri-plugin-updater = "2"
+semver = "1"
 
 [dev-dependencies]
 tempfile = "3"

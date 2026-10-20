@@ -1,0 +1,42 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PUB_HOSTED_URL: https://pub.dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          cache: true
+      - name: Install build tools
+        run: |
+          npm install -g pnpm@11.9.0
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: desktop-aarch64-apple-darwin
+      - run: make setup check

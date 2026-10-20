@@ -10,6 +10,8 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+import { UpdateSettings } from "./UpdateSettings";
+
 type View = "devices" | "workbench" | "shortcuts" | "settings";
 type Theme = "light" | "dark";
 const themeKey = "deskbar.theme";
@@ -470,6 +472,7 @@ export function App() {
         {view === "settings" && status && (
           <UsageSettings status={status} busy={busy} run={run} />
         )}
+        {view === "settings" && <UpdateSettings />}
         {view !== "workbench" && (
           <footer>
             <span>电脑和设备需要连接同一局域网。</span>
