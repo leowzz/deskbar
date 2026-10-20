@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "deskbar-desktop"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "deskbar-host",
  "deskbar-lan",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "deskbar-host"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "deskbar-lan"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "axum",
