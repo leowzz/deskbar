@@ -7,6 +7,7 @@ edition.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 tauri = { version = "2", features = ["tray-icon"] }
 deskbar-host = { path = "../../../crates/host" }
