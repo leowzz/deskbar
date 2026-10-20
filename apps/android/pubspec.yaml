@@ -1,7 +1,7 @@
 name: deskbar
 description: 电脑旁的 Android 工作台。
 publish_to: none
-version: 0.1.1+2
+version: 0.1.2+3
 environment:
   sdk: ^3.12.0
 dependencies:
