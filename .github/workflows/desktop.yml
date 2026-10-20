@@ -71,6 +71,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Match macOS deployment target
+        if: runner.os == 'macOS'
+        run: |
+          # Tauri sets this for builds; raw cargo tests must use the same value.
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+          config = json.loads(Path("apps/desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+          print("MACOSX_DEPLOYMENT_TARGET=" + config["bundle"]["macOS"]["minimumSystemVersion"])
+          PY
       - name: Install build tools
         run: |
           npm install -g pnpm@11.9.0
