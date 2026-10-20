@@ -82,7 +82,7 @@ jobs:
           # Keep release dependencies separate from the debug-only make check cache.
           shared-key: desktop-release-${{ matrix.target }}
           # Tags can restore main's cache, but cannot share caches with other tags.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ !inputs.release }}
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v4
         with:
