@@ -48,9 +48,9 @@
           },
           "placements": {
             "wide": {
-              "x": 34,
+              "x": 0,
               "y": 5,
-              "w": 14,
+              "w": 11,
               "h": 33
             },
             "portrait": {
@@ -75,9 +75,9 @@
           },
           "placements": {
             "wide": {
-              "x": 0,
+              "x": 11,
               "y": 5,
-              "w": 34,
+              "w": 37,
               "h": 34
             },
             "portrait": {
@@ -99,7 +99,9 @@
           "options": {
             "labels": false,
             "alignment": "center",
-            "spacing": 8
+            "spacing": 8,
+            "rows": 1,
+            "maxShortcuts": 0
           },
           "placements": {
             "wide": {

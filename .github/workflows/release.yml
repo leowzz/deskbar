@@ -48,85 +48,10 @@ jobs:
 
   desktop:
     needs: preflight
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-15
-            target: aarch64-apple-darwin
-            platform: macos
-            bundles: app,dmg
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            platform: windows
-            bundles: nsis
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    env:
-      TAG: ${{ github.ref_name }}
-      PUB_HOSTED_URL: https://pub.dev
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.44.8"
-          cache: true
-      - name: Install build tools
-        run: |
-          npm install -g pnpm@11.9.0
-          rustup toolchain install stable --profile minimal --component rustfmt
-          rustup default stable
-          rustup target add "${{ matrix.target }}"
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: desktop-${{ matrix.target }}
-      - name: Install dependencies
-        run: |
-          pnpm install --frozen-lockfile
-          cd apps/android
-          flutter pub get --enforce-lockfile
-      - name: Check desktop
-        run: |
-          cargo fmt --all -- --check
-          cargo test --locked --workspace
-          pnpm --dir apps/desktop check
-          pnpm --dir apps/desktop test
-      - name: Build Windows installer and signed update
-        if: runner.os == 'Windows'
-        run: pnpm --dir apps/desktop tauri build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.release.conf.json -- --locked
-      - name: Build macOS installer and signed update
-        if: runner.os == 'macOS'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          # Tauri imports a configured certificate and notarizes with a complete Apple group.
-          # Without Apple credentials, Apple Silicon still requires an ad-hoc code signature.
-          export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-            if [[ -z "${!name}" ]]; then unset "$name"; fi
-          done
-          pnpm --dir apps/desktop tauri build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.release.conf.json -- --locked
-          codesign --verify --deep --strict "target/${{ matrix.target }}/release/bundle/macos/DeskBar 连接助手.app"
-      - name: Collect artifacts
-        run: python3 scripts/release_assets.py collect --tag "$TAG" --platform "${{ matrix.platform }}" --source "target/${{ matrix.target }}/release/bundle"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.platform }}
-          path: dist/*
-          if-no-files-found: error
+    uses: ./.github/workflows/desktop.yml
+    with:
+      release: true
+    secrets: inherit
 
   android:
     needs: preflight

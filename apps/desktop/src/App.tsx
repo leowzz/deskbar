@@ -214,7 +214,10 @@ export function App() {
   const remaining = invitation
     ? Math.max(0, Math.ceil(invitation.expires_at - clock / 1000))
     : 0;
-  const pending = status?.pending;
+  const pending = status?.native_pairing ? null : status?.pending;
+  useEffect(() => {
+    if (status?.native_pairing && status.pending) setInvitation(null);
+  }, [status?.native_pairing, status?.pending?.id]);
   const pairingOpen = Boolean(invitation || pending);
   useEffect(() => {
     if (pairingOpen && !dialogRef.current?.open) dialogRef.current?.showModal();
@@ -303,7 +306,7 @@ export function App() {
         )}
         {openedEditor && status && (
           <div hidden={view !== "workbench"}>
-            <WorkbenchEditor status={status} />
+            <WorkbenchEditor status={status} active={view === "workbench"} />
           </div>
         )}
         {view === "devices" && (

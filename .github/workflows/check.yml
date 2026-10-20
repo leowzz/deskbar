@@ -16,6 +16,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Exercise the actual release profile on both platforms and warm main's caches.
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+
   check:
     runs-on: macos-15
     timeout-minutes: 40

@@ -36,7 +36,7 @@ APPLE_SIGNING_IDENTITY=- make desktop-release
 
 ## CI 与安装包
 
-[Checks](../.github/workflows/check.yml) 在 main push / PR 时运行 `make check`。[Release](../.github/workflows/release.yml) 只由版本 tag 触发，先检查版本、tag 的远端分支归属、签名配置和发布脚本，再构建：
+[Checks](../.github/workflows/check.yml) 在 main push / PR 时运行 `make check`，并通过[共用桌面构建](../.github/workflows/desktop.yml) 验证 macOS / Windows 的 Release 编译与测试。main 的成功构建会预热两平台的 Release 依赖缓存；发布前先等待该版本的 Checks 成功，再推送 tag。[Release](../.github/workflows/release.yml) 只由版本 tag 触发，先检查版本、tag 的远端分支归属、签名配置和发布脚本，再构建：
 
 - macOS Apple Silicon（arm64）：DMG 和 Tauri `.app.tar.gz` 更新包。
 - Windows x64：NSIS `.exe` 安装包，同时用于更新。
@@ -44,7 +44,9 @@ APPLE_SIGNING_IDENTITY=- make desktop-release
 
 每个平台上传 artifact；发布任务必须等待三平台成功，校验文件集合和 SHA-256，再生成 `latest.json` 与 `SHA256SUMS`。先上传到 draft，全部成功后才公开 Release。失败可重跑 draft；已经公开的同版本拒绝覆盖，应递增版本重新发布。发布阶段串行执行，并读取现有静态清单比较版本；只有更高版本才设为 Latest，防止旧版本迟到覆盖最新通道。
 
-Flutter 固定 3.44.8，Node 24、pnpm 11.9.0，Rust stable，Python 3.11+。桌面构建包含 Flutter Web 预览器，Windows 同样需要 Flutter；构建脚本关闭 Git Bash 的路径转换，保证 `/editor/` 原样传给 Flutter。复制预览器用 Python，不依赖 rsync；发布脚本统一使用 UTF-8 读写配置和清单，避免 Windows 系统编码影响中文名称。
+Flutter 固定 3.44.8，Node 24、pnpm 11.9.0，Rust stable，Python 3.11+。CI 在 Linux 构建一次包含 Flutter Web 预览器的桌面前端，通过同次运行的 artifact 交给两个桌面任务；桌面任务无需安装或缓存 Flutter。下载前端后，CI 仅覆盖 Tauri 的 `beforeBuildCommand`，本机 `make desktop-release` 仍从源码构建完整前端。复制预览器用 Python，不依赖 rsync；发布脚本统一使用 UTF-8 读写配置和清单，避免 Windows 系统编码影响中文名称。
+
+桌面 CI 的 Rust 测试与安装包使用相同 Release profile、target 和 `tauri/custom-protocol` 特性；macOS 从 Tauri 配置读取最低系统版本，统一构建和测试的 `MACOSX_DEPLOYMENT_TARGET`，复用依赖编译结果。`make check` 继续保留 debug 检查。Release 缓存与 debug 缓存分开，Checks 写入缓存，发布只读取。GitHub 不允许不同 tag 相互读取缓存，PR 缓存也只用于该 PR，因此发布依赖 main 的预热。目标是缓存命中后整轮发布尽量在 10 分钟内完成；首次构建、Rust / 依赖升级、缓存淘汰、runner 排队及 Apple 公证可能超出，需要以 Actions 实际耗时确认。
 
 Android 在发布 APK 构建后运行 `:app:testDebugUnitTest` 验证原生逻辑；当前工程只注册 debug 单元测试变体，没有 `testReleaseUnitTest`。发布 APK 另用 `apksigner` 验证签名。
 

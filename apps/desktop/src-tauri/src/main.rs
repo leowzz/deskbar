@@ -1,4 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#[cfg(target_os = "macos")]
+mod pairing_prompt;
 mod recent_apps;
 mod update;
 use deskbar_lan::{Agent, AgentStatus, PairingInvitation};
@@ -16,8 +18,17 @@ impl AgentState {
 }
 
 #[tauri::command]
-fn agent_status(state: State<AgentState>) -> Result<AgentStatus, String> {
-    Ok(state.agent()?.status())
+fn agent_status(state: State<AgentState>) -> Result<DesktopStatus, String> {
+    Ok(DesktopStatus {
+        status: state.agent()?.status(),
+        native_pairing: cfg!(target_os = "macos"),
+    })
+}
+#[derive(serde::Serialize)]
+struct DesktopStatus {
+    #[serde(flatten)]
+    status: AgentStatus,
+    native_pairing: bool,
 }
 #[tauri::command]
 fn device_workbench(
@@ -301,6 +312,10 @@ fn main() {
                 .to_string();
             let agent = tauri::async_runtime::block_on(Agent::start(directory, name))
                 .map_err(|e| format!("{e}。请退出 DeskBar 连接助手后重试"));
+            #[cfg(target_os = "macos")]
+            if let Ok(agent) = &agent {
+                pairing_prompt::start(app.handle().clone(), agent.clone());
+            }
             app.manage(AgentState(agent));
             let show = MenuItem::with_id(app, "show", "打开 DeskBar 连接助手", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出 DeskBar 连接助手", true, None::<&str>)?;

@@ -599,11 +599,20 @@ button.device-name-trigger:hover:not(:disabled) {
   justify-content: center;
   gap: 8px;
 }
-.shortcut-heading .icon-button {
-  padding: 8px;
-  min-width: 36px;
-  display: grid;
-  place-items: center;
+.recent-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 8px;
+  flex-shrink: 0;
+}
+.recent-refresh .icon {
+  width: 16px;
+  height: 16px;
+}
+.recent-refresh:active:not(:disabled) {
+  background: var(--selection);
 }
 .shortcut-catalog {
   display: grid;

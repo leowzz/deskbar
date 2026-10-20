@@ -333,7 +333,7 @@ class LayoutDocument {
               'main-sessions',
               'sessions',
               '近期会话',
-              const GridPlacement(x: 0, y: 5, w: 34, h: 34),
+              const GridPlacement(x: 11, y: 5, w: 37, h: 34),
               const GridPlacement(x: 0, y: 27, w: 16, h: 47),
               options: const {'columns': 2},
             ),
@@ -341,7 +341,7 @@ class LayoutDocument {
               'main-usage',
               'usage',
               'Codex 额度',
-              const GridPlacement(x: 34, y: 5, w: 14, h: 33),
+              const GridPlacement(x: 0, y: 5, w: 11, h: 33),
               const GridPlacement(x: 0, y: 10, w: 16, h: 17),
             ),
             widget(
@@ -390,6 +390,18 @@ class LayoutDocument {
     );
   }
 }
+
+const maximumShortcutDisplayLimit = 64;
+
+int shortcutRows(Map<String, dynamic> options) =>
+    options['rows'] is num ? (options['rows'] as num).round().clamp(1, 12) : 1;
+
+/// Zero keeps every entry in one continuously scrollable grid.
+int shortcutDisplayLimit(Map<String, dynamic> options) =>
+    (options['maxShortcuts'] as num? ?? 0).round().clamp(
+      0,
+      maximumShortcutDisplayLimit,
+    );
 
 /// Independent of legacy gapX/gapY, which remain readable but unused.
 double shortcutSpacing(Map<String, dynamic> options) =>
@@ -943,7 +955,13 @@ class LayoutWorkspace extends ChangeNotifier {
       'showSettingsButton': true,
     },
     'sessions' => {'maxSessions': 6, 'columns': 'auto'},
-    'shortcuts' => {'labels': false, 'alignment': 'center', 'spacing': 8},
+    'shortcuts' => {
+      'labels': false,
+      'alignment': 'center',
+      'spacing': 8,
+      'rows': 1,
+      'maxShortcuts': 0,
+    },
     'usage' => {'content': 'quota'},
     _ => {'showTitle': true},
   };
@@ -1271,6 +1289,17 @@ void _validateOptions(String type, Map<String, dynamic> options) {
         !value.isFinite ||
         (allowsZero ? value < 0 : value <= 0)) {
       throw const FormatException('组件尺寸和间距无效');
+    }
+  }
+  if (options.containsKey('maxShortcuts')) {
+    final limit = options['maxShortcuts'];
+    if (type != 'shortcuts' ||
+        limit is! num ||
+        !limit.isFinite ||
+        limit != limit.round() ||
+        limit < 0 ||
+        limit > maximumShortcutDisplayLimit) {
+      throw const FormatException('单页入口数量需为 0 到 64 的整数，0 为不限');
     }
   }
   if (options.containsKey('spacing')) {

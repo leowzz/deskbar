@@ -91,10 +91,13 @@ async function editor(t, initialDevices, handle = () => ({})) {
       else delete globalThis[name];
     }
   });
-  const render = async (devices) =>
+  const render = async (devices, active = true) =>
     act(async () => {
       root.render(
-        React.createElement(exports.WorkbenchEditor, { status: { devices } }),
+        React.createElement(exports.WorkbenchEditor, {
+          status: { devices },
+          active,
+        }),
       );
     });
   const message = async (frame, payload) =>
@@ -119,7 +122,7 @@ async function editor(t, initialDevices, handle = () => ({})) {
     return { element, sent, contentWindow: element.contentWindow };
   };
   await render(initialDevices);
-  return { render, message, frame, container, calls, intervals };
+  return { render, message, frame, container, calls, intervals, window };
 }
 
 test("removing all devices while editing allows a fresh pairing with the same name", async (t) => {
@@ -280,4 +283,111 @@ test("flat device buttons distinguish same-name devices and switch only outside 
   await app.message(current, { type: "editing", value: false });
   await act(async () => buttons()[0].click());
   assert.equal(buttons()[0].getAttribute("aria-pressed"), "true");
+});
+
+test("hidden previews stop polling and resume without losing the editing session", async (t) => {
+  const pending = deferred();
+  let response = {};
+  const app = await editor(t, [device("a")], () => response);
+  const original = app.frame();
+  await app.message(original, { type: "ready" });
+  await app.message(original, { type: "editing", value: true });
+  const tick = () =>
+    act(async () => {
+      for (const callback of app.intervals.values()) await callback();
+    });
+  await app.render([device("a")], false);
+  await tick();
+  assert.equal(app.calls.length, 1);
+  assert.equal(app.container.querySelector("iframe"), original.element);
+  assert.equal(
+    app.container.querySelector(".editor-device-button").disabled,
+    true,
+  );
+  await app.render([device("a")], true);
+  assert.equal(app.calls.length, 2);
+
+  response = pending.promise;
+  // Start a request, then hide before its response arrives.
+  await act(async () => {
+    for (const callback of app.intervals.values()) void callback();
+  });
+  Object.defineProperty(app.window.document, "hidden", {
+    configurable: true,
+    value: true,
+  });
+  const before = original.sent.length;
+  await act(async () => pending.resolve({ stale: true }));
+  await tick();
+  assert.equal(original.sent.length, before);
+  assert.equal(app.calls.length, 3);
+  // Save acknowledgements are independent of preview visibility.
+  response = 4;
+  await app.message(original, {
+    type: "save",
+    requestId: 9,
+    expectedRevision: 0,
+    layout: {},
+  });
+  assert.deepEqual(original.sent.at(-1), {
+    type: "saved",
+    requestId: 9,
+    revision: 4,
+  });
+  response = { fresh: true };
+  Object.defineProperty(app.window.document, "hidden", {
+    configurable: true,
+    value: false,
+  });
+  await act(async () =>
+    app.window.document.dispatchEvent(new app.window.Event("visibilitychange")),
+  );
+  assert.deepEqual(original.sent.at(-1).snapshot, { fresh: true });
+});
+
+test("heartbeats skip Dart rebuilds while content, permissions and connectivity still update", async (t) => {
+  let response = {
+    revision: 1,
+    server_time: 1,
+    capabilities: ["open_session"],
+  };
+  const display = { width: 1280, height: 720, seen_at: Date.now() / 1000 };
+  const app = await editor(t, [device("a", display)], () => response);
+  const current = app.frame();
+  await app.message(current, { type: "ready" });
+  const tick = () =>
+    act(async () => {
+      for (const callback of app.intervals.values()) await callback();
+    });
+  for (let server_time = 2; server_time < 102; server_time++) {
+    response = { ...response, server_time };
+    await app.render([device("a", { ...display, seen_at: Date.now() / 1000 })]);
+    await tick();
+  }
+  assert.equal(current.sent.length, 1);
+  response = { ...response, capabilities: [] };
+  await tick();
+  assert.equal(current.sent.length, 2);
+  await app.render([
+    device("a", { ...display, seen_at: Date.now() / 1000 - 20 }),
+  ]);
+  await tick();
+  assert.equal(current.sent.length, 3);
+  response = { ...response, revision: 2 };
+  await tick();
+  assert.equal(current.sent.length, 4);
+});
+
+test("repeated navigation reuses one engine and a reloaded engine receives state", async (t) => {
+  const app = await editor(t, [device("a")]);
+  const current = app.frame();
+  await app.message(current, { type: "ready" });
+  for (let i = 0; i < 100; i++) {
+    await app.render([device("a")], false);
+    await app.render([device("a")], true);
+    assert.equal(app.container.querySelector("iframe"), current.element);
+  }
+  assert.equal(current.sent.length, 1);
+  await app.message(current, { type: "ready" });
+  assert.equal(current.sent.length, 2);
 });

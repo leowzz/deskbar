@@ -19,6 +19,7 @@ export interface Device {
   display: DeviceDisplay | null;
 }
 export interface Status {
+  native_pairing?: boolean;
   name: string;
   host_id: string;
   workbench: WorkbenchData;

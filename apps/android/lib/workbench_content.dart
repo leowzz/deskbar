@@ -222,14 +222,9 @@ class WorkbenchWidgetBody extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       child: LayoutBuilder(
         builder: (context, box) {
-          final labels = labelsRequested && box.maxHeight >= 96;
-          final gapX = alignment == 'center' ? shortcutSpacing(options) : 8.0;
-          final labelHeight = labels
-              ? MediaQuery.textScalerOf(context).scale(labelStyle.fontSize!) *
-                        (labelStyle.height ?? 1.5) *
-                        2 +
-                    4
-              : 0.0;
+          final requestedGap = alignment == 'center'
+              ? shortcutSpacing(options)
+              : 8.0;
           final noticePainter = TextPainter(
             text: TextSpan(
               text: notice,
@@ -241,23 +236,48 @@ class WorkbenchWidgetBody extends StatelessWidget {
           final noticeHeight = notice.isEmpty ? 0.0 : noticePainter.height + 4;
           noticePainter.dispose();
           final availableHeight = math.max(1.0, box.maxHeight - noticeHeight);
-          // Width only clips the viewport; it must not shrink or wrap the icons.
-          final iconSize = (availableHeight - labelHeight - 8).clamp(
-            16.0,
-            200.0,
+          final limit = shortcutDisplayLimit(options);
+          final capacity = limit > 0
+              ? math.min(limit, entries.length)
+              : entries.length;
+          final rows = math.min(shortcutRows(options), capacity);
+          final columns = (capacity / rows).ceil();
+          final gapX = limit > 0
+              ? math.min(requestedGap, box.maxWidth / (columns * 2))
+              : requestedGap;
+          const gapY = 8.0;
+          final rowHeight = math.max(
+            1.0,
+            (availableHeight - gapY * (rows - 1)) / rows,
           );
-          final tileWidth = math.max(48.0, iconSize);
+          final cellWidth = limit > 0
+              ? math.max(1.0, (box.maxWidth - gapX * (columns - 1)) / columns)
+              : double.infinity;
+          final labels = labelsRequested && rowHeight >= 96 && cellWidth >= 48;
+          final labelHeight = labels
+              ? MediaQuery.textScalerOf(context).scale(labelStyle.fontSize!) *
+                        (labelStyle.height ?? 1.5) *
+                        2 +
+                    4
+              : 0.0;
+          // Unlimited grids keep their icon size when narrowed. Limited pages
+          // fit their configured capacity into the available rows and width.
+          final iconSize = math.min(
+            (rowHeight - labelHeight - 8).clamp(16.0, 200.0),
+            cellWidth,
+          );
+          final tileWidth = math.min(math.max(48.0, iconSize), cellWidth);
           final contentHeight = iconSize + labelHeight + 8;
-          final tileHeight = math.min(
-            availableHeight,
-            math.max(48.0, contentHeight),
-          );
-          final contentWidth =
-              entries.length * tileWidth + (entries.length - 1) * gapX;
-          final overflow = contentWidth > box.maxWidth;
-          if (availableHeight < contentHeight) {
+          final tileHeight = math.min(rowHeight, math.max(48.0, contentHeight));
+          final gridHeight = tileHeight * rows + gapY * (rows - 1);
+          final contentWidth = columns * tileWidth + (columns - 1) * gapX;
+          final pageCount = (entries.length / capacity).ceil();
+          final overflow = limit > 0
+              ? pageCount > 1
+              : contentWidth > box.maxWidth;
+          if (rowHeight < contentHeight) {
             return _Message(
-              '${notice.isEmpty ? '' : '$notice。'}入口区域太矮，请在电脑端调整高度。',
+              '${notice.isEmpty ? '' : '$notice。'}入口区域太矮，请在电脑端调整高度或减少行数。',
             );
           }
           Widget tile(WorkShortcut entry) {
@@ -336,11 +356,54 @@ class WorkbenchWidgetBody extends StatelessWidget {
             );
           }
 
-          final children = <Widget>[];
-          for (final entry in entries) {
-            if (children.isNotEmpty) children.add(SizedBox(width: gapX));
-            children.add(tile(entry));
-          }
+          Widget grid(List<WorkShortcut> items) => SizedBox(
+            width: math.max(box.maxWidth, contentWidth),
+            height: gridHeight,
+            child: Column(
+              children: [
+                for (var row = 0; row < rows; row++) ...[
+                  if (row > 0) const SizedBox(height: gapY),
+                  SizedBox(
+                    height: tileHeight,
+                    child: Row(
+                      mainAxisAlignment: _shortcutMainAxisAlignment(alignment),
+                      children: [
+                        for (var col = 0; col < columns; col++)
+                          if (row * columns + col < items.length) ...[
+                            if (col > 0) SizedBox(width: gapX),
+                            tile(items[row * columns + col]),
+                          ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+          final scrollPhysics = overflow
+              ? const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                )
+              : const NeverScrollableScrollPhysics();
+          final content = limit > 0
+              ? PageView.builder(
+                  key: PageStorageKey('shortcuts-$id'),
+                  physics: scrollPhysics,
+                  itemCount: pageCount,
+                  itemBuilder: (context, page) => grid(
+                    entries.sublist(
+                      page * capacity,
+                      math.min((page + 1) * capacity, entries.length),
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  key: PageStorageKey('shortcuts-$id'),
+                  primary: false,
+                  scrollDirection: Axis.horizontal,
+                  physics: scrollPhysics,
+                  child: grid(entries),
+                );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -360,7 +423,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                       '单元 ${tileWidth.toStringAsFixed(1)} × ${tileHeight.toStringAsFixed(1)} dp · 图标 ${iconSize.toStringAsFixed(1)} dp · 间距 $gapX dp · ${_shortcutAlignmentLabel(alignment)}',
                   child: Center(
                     child: SizedBox(
-                      height: tileHeight,
+                      height: gridHeight,
                       child: Listener(
                         onPointerSignal: overflow
                             ? (event) {
@@ -378,26 +441,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
                           behavior: ScrollConfiguration.of(
                             context,
                           ).copyWith(scrollbars: false),
-                          child: SingleChildScrollView(
-                            key: PageStorageKey('shortcuts-$id'),
-                            primary: false,
-                            scrollDirection: Axis.horizontal,
-                            physics: overflow
-                                ? const AlwaysScrollableScrollPhysics(
-                                    parent: ClampingScrollPhysics(),
-                                  )
-                                : const NeverScrollableScrollPhysics(),
-                            child: SizedBox(
-                              width: math.max(box.maxWidth, contentWidth),
-                              height: tileHeight,
-                              child: Row(
-                                mainAxisAlignment: _shortcutMainAxisAlignment(
-                                  alignment,
-                                ),
-                                children: children,
-                              ),
-                            ),
-                          ),
+                          child: content,
                         ),
                       ),
                     ),

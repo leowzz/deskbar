@@ -43,8 +43,8 @@ export function ShortcutGlyph({
         </>
       ) : name === "refresh" ? (
         <>
-          <path d="M20 7v5h-5M4 17v-5h5" />
-          <path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1" />
+          <path d="M3 11a9 9 0 0 1 15-6.7L21 7M21 3v4h-4" />
+          <path d="M21 13a9 9 0 0 1-15 6.7L3 17M3 21v-4h4" />
         </>
       ) : name === "close" ? (
         <path d="m6 6 12 12M6 18 18 6" />
@@ -316,13 +316,15 @@ export function Shortcuts({
       <div className="shortcut-heading recent-heading">
         <h2>最近使用 · 点击添加</h2>
         <button
-          className="icon-button"
+          className="text-button recent-refresh"
           aria-label="刷新最近应用"
+          aria-busy={loading}
           title="刷新最近应用"
           disabled={loading}
           onClick={() => void refreshRecent()}
         >
           <ShortcutGlyph name="refresh" />
+          <span>刷新</span>
         </button>
       </div>
       {recentError ? (

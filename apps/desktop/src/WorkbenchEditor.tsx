@@ -24,7 +24,13 @@ function readDeviceSize(id: string): CachedDeviceSize | null {
   }
 }
 
-export function WorkbenchEditor({ status }: { status: Status }) {
+export function WorkbenchEditor({
+  status,
+  active = true,
+}: {
+  status: Status;
+  active?: boolean;
+}) {
   const [deviceId, setDeviceId] = useState(status.devices[0]?.id ?? "");
   const selected =
     status.devices.find((device) => device.id === deviceId) ??
@@ -40,6 +46,7 @@ export function WorkbenchEditor({ status }: { status: Status }) {
       key={selected.id}
       status={status}
       selected={selected}
+      active={active}
       onSelectDevice={setDeviceId}
     />
   );
@@ -51,10 +58,12 @@ export function WorkbenchEditor({ status }: { status: Status }) {
 function DeviceWorkbenchEditor({
   status,
   selected,
+  active,
   onSelectDevice,
 }: {
   status: Status;
   selected: Device;
+  active: boolean;
   onSelectDevice: (id: string) => void;
 }) {
   const deviceId = selected.id;
@@ -66,6 +75,12 @@ function DeviceWorkbenchEditor({
     readDeviceSize(deviceId),
   );
   const displayRef = useRef<DeviceDisplay | null>(null);
+  const activeRef = useRef(active);
+  const refreshRef = useRef<(() => void) | null>(null);
+  activeRef.current = active;
+  useEffect(() => {
+    if (active) refreshRef.current?.();
+  }, [active]);
 
   useEffect(() => {
     const display = selected?.display;
@@ -109,6 +124,7 @@ function DeviceWorkbenchEditor({
     let ready = false;
     let fetching = false;
     let saving = false;
+    let lastState = "";
     setLoading(true);
     setError("");
     function send(message: unknown) {
@@ -118,16 +134,42 @@ function DeviceWorkbenchEditor({
       );
     }
     async function refresh() {
-      if (!ready || fetching || !active) return;
+      if (
+        !ready ||
+        fetching ||
+        !active ||
+        !activeRef.current ||
+        document.hidden
+      )
+        return;
       fetching = true;
       try {
-        const snapshot = await call("device_workbench", { id: deviceId });
-        if (active) {
-          send({
-            type: "state",
-            snapshot,
-            display: displayRef.current,
+        const snapshot = await call<Record<string, unknown>>(
+          "device_workbench",
+          {
+            id: deviceId,
+          },
+        );
+        if (active && activeRef.current && !document.hidden) {
+          const display = displayRef.current;
+          // Heartbeats and server time change every poll without changing the
+          // preview. Avoid decoding and rebuilding the entire Dart document.
+          const state = JSON.stringify({
+            snapshot: { ...snapshot, server_time: undefined },
+            display: display && {
+              ...display,
+              seen_at: undefined,
+              online: Date.now() / 1000 - display.seen_at < 15,
+            },
           });
+          if (state !== lastState) {
+            send({
+              type: "state",
+              snapshot,
+              display,
+            });
+            lastState = state;
+          }
           setLoading(false);
           setError("");
         }
@@ -137,6 +179,9 @@ function DeviceWorkbenchEditor({
         fetching = false;
       }
     }
+    refreshRef.current = refresh;
+    const resume = () => void refresh();
+    document.addEventListener("visibilitychange", resume);
     async function receive(event: MessageEvent) {
       if (
         !active ||
@@ -152,6 +197,7 @@ function DeviceWorkbenchEditor({
         return;
       }
       if (message.type === "ready") {
+        lastState = "";
         ready = true;
         void refresh();
       } else if (message.type === "editing") {
@@ -185,6 +231,8 @@ function DeviceWorkbenchEditor({
     }, 30000);
     return () => {
       active = false;
+      refreshRef.current = null;
+      document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("message", receive);
       window.clearInterval(timer);
       window.clearTimeout(timeout);

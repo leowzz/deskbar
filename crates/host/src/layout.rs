@@ -112,6 +112,9 @@ impl LayoutDocument {
                             widget.r#type == "sessions"
                                 && value.as_f64().is_some_and(|n| (1.0..=2.0).contains(&n))
                         }
+                        "maxShortcuts" => {
+                            widget.r#type == "shortcuts" && value.as_u64().is_some_and(|n| n <= 64)
+                        }
                         "maxSessions" => value.as_u64().is_some_and(|n| (1..=40).contains(&n)),
                         "itemWidth" | "itemHeight" => {
                             value.as_f64().is_some_and(|n| n > 0.0 && n <= 2000.0)
@@ -288,6 +291,40 @@ mod tests {
                 .insert(key.into(), value);
             assert!(invalid.validate("host").is_err(), "{key}");
         }
+    }
+
+    #[test]
+    fn shortcut_page_capacity_is_bounded_and_round_trips() {
+        let mut layout: LayoutDocument =
+            serde_json::from_str(include_str!("../../../protocol/dashboard.example.json")).unwrap();
+        for value in [0, 1, 5, 64] {
+            layout.pages[0].widgets[3]
+                .options
+                .insert("maxShortcuts".into(), serde_json::json!(value));
+            layout.pages[0].widgets[3]
+                .options
+                .insert("rows".into(), serde_json::json!(2));
+            layout.validate("host").unwrap();
+            let restored: LayoutDocument =
+                serde_json::from_str(&serde_json::to_string(&layout).unwrap()).unwrap();
+            assert_eq!(restored.pages[0].widgets[3].options["maxShortcuts"], value);
+        }
+        for value in [
+            serde_json::json!(-1),
+            serde_json::json!(65),
+            serde_json::json!(1.5),
+            serde_json::json!("6"),
+        ] {
+            layout.pages[0].widgets[3]
+                .options
+                .insert("maxShortcuts".into(), value);
+            assert!(layout.validate("host").is_err());
+        }
+        layout.pages[0].widgets[3].options.remove("maxShortcuts");
+        layout.pages[0].widgets[2]
+            .options
+            .insert("maxShortcuts".into(), serde_json::json!(5));
+        assert!(layout.validate("host").is_err());
     }
 
     #[test]

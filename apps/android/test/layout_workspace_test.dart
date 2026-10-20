@@ -37,14 +37,16 @@ void main() {
         'labels': false,
         'alignment': 'center',
         'spacing': 8,
+        'rows': 1,
+        'maxShortcuts': 0,
       });
       final expected = {
         'sessions': [
-          [0, 5, 34, 34],
+          [11, 5, 37, 34],
           [0, 27, 16, 47],
         ],
         'usage': [
-          [34, 5, 14, 33],
+          [0, 5, 11, 33],
           [0, 10, 16, 17],
         ],
         'shortcuts': [
@@ -484,7 +486,8 @@ void main() {
     () {
       final workspace = emptyWorkspace();
       final id = workspace.addWidget('shortcuts')!;
-      expect(workspace.findWidget(id)!.options.containsKey('rows'), isFalse);
+      expect(workspace.findWidget(id)!.options['rows'], 1);
+      expect(workspace.findWidget(id)!.options['maxShortcuts'], 0);
       expect(workspace.findWidget(id)!.options['alignment'], 'center');
       expect(
         workspace.updateWidget(

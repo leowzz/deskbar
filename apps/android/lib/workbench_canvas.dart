@@ -1508,6 +1508,39 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       ),
     ],
     if (w.type == 'shortcuts') ...[
+      KeyedSubtree(
+        key: ValueKey('shortcut-rows-${w.id}'),
+        child: _slider(
+          '排列行数',
+          shortcutRows(w.options).toDouble(),
+          1,
+          12,
+          (v) => workspace.updateWidget(w.id, options: {'rows': v.round()}),
+          suffix: ' 行',
+        ),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('限制单页数量'),
+        value: shortcutDisplayLimit(w.options) > 0,
+        onChanged: (v) =>
+            workspace.updateWidget(w.id, options: {'maxShortcuts': v ? 6 : 0}),
+      ),
+      if (shortcutDisplayLimit(w.options) > 0)
+        KeyedSubtree(
+          key: ValueKey('shortcut-limit-${w.id}'),
+          child: _slider(
+            '单页入口数',
+            shortcutDisplayLimit(w.options).toDouble(),
+            1,
+            maximumShortcutDisplayLimit.toDouble(),
+            (v) => workspace.updateWidget(
+              w.id,
+              options: {'maxShortcuts': v.round()},
+            ),
+            suffix: ' 个',
+          ),
+        ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('显示名称'),
