@@ -46,6 +46,8 @@ APPLE_SIGNING_IDENTITY=- make desktop-release
 
 Flutter 固定 3.44.8，Node 24、pnpm 11.9.0，Rust stable，Python 3.11+。桌面构建包含 Flutter Web 预览器，Windows 同样需要 Flutter；构建脚本关闭 Git Bash 的路径转换，保证 `/editor/` 原样传给 Flutter。复制预览器用 Python，不依赖 rsync。
 
+Android 在发布 APK 构建后运行 `:app:testDebugUnitTest` 验证原生逻辑；当前工程只注册 debug 单元测试变体，没有 `testReleaseUnitTest`。发布 APK 另用 `apksigner` 验证签名。
+
 ## 签名配置
 
 Repository Secrets：

@@ -166,7 +166,7 @@ jobs:
           flutter test
           flutter build apk --release --target-platform android-arm64
           cd android
-          ./gradlew :app:testReleaseUnitTest
+          ./gradlew :app:testDebugUnitTest
       - name: Verify APK signature and collect
         run: |
           apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)"
