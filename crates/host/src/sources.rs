@@ -98,8 +98,9 @@ pub fn sessions(home: &Path) -> Result<(Vec<Session>, usize)> {
         [],
         |r| r.get(0),
     )?;
+    // Exclude non-interactive exec records before both COUNT and LIMIT.
     let filter = format!(
-        "archived=0 AND source NOT LIKE '%subagent%' {}",
+        "archived=0 AND source != 'exec' AND source NOT LIKE '%subagent%' {}",
         if edges {
             "AND NOT EXISTS(SELECT 1 FROM thread_spawn_edges WHERE child_thread_id=threads.id)"
         } else {
@@ -303,6 +304,60 @@ mod tests {
             db.query_row("SELECT count(*) FROM threads", [], |r| r.get::<_, usize>(0))
                 .unwrap(),
             4
+        );
+    }
+    #[test]
+    fn exec_records_do_not_count_or_displace_recent_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Connection::open(dir.path().join("state_5.sqlite")).unwrap();
+        // Older schema: no name, originator, millisecond timestamps or spawn edges.
+        db.execute_batch("CREATE TABLE threads(id TEXT,title TEXT,cwd TEXT,source TEXT,archived INTEGER,updated_at INTEGER);").unwrap();
+        let insert = |id: &str, cwd: &str, source: &str, updated: i64| {
+            db.execute(
+                "INSERT INTO threads VALUES(?1,'标题',?2,?3,0,?4)",
+                rusqlite::params![id, cwd, source, updated],
+            )
+            .unwrap();
+        };
+        let exec_paths = [
+            "/Users/leo/Library/Application Support/Dayflow/chatcli",
+            "/work/project",
+        ];
+        for n in 0..45 {
+            insert(
+                &format!("background-{n}"),
+                exec_paths[n % exec_paths.len()],
+                "exec",
+                300,
+            );
+        }
+        for (id, cwd, source) in [
+            ("title-only", "/work/project", "cli"),
+            ("interactive", exec_paths[0], "cli"),
+            ("desktop", exec_paths[0], "vscode"),
+        ] {
+            insert(id, cwd, source, 200);
+        }
+        db.execute(
+            "UPDATE threads SET title='优化 chatcli' WHERE id='title-only'",
+            [],
+        )
+        .unwrap();
+        for n in 0..41 {
+            insert(&format!("session-{n}"), "/work/project", "cli", 100);
+        }
+
+        let (items, total) = sessions(dir.path()).unwrap();
+        assert_eq!(total, 44);
+        assert_eq!(items.len(), 40);
+        assert!(items
+            .iter()
+            .all(|s| !s.session_id.starts_with("background-")));
+        assert_eq!(items.iter().filter(|s| s.updated_at == 200).count(), 3);
+        assert_eq!(
+            db.query_row("SELECT count(*) FROM threads", [], |r| r.get::<_, usize>(0))
+                .unwrap(),
+            89
         );
     }
     #[test]
