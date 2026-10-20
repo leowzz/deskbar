@@ -1250,27 +1250,23 @@ footer .text-button {
 .workbench-editor {
   min-width: 0;
 }
-.editor-device-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
-}
 .editor-device-switcher {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
   max-width: 100%;
+  margin-bottom: 12px;
 }
 .editor-device-button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: min(180px, 100%);
-  max-width: 260px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 300px;
+  min-width: min(260px, 100%);
+  max-width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1284,6 +1280,7 @@ footer .text-button {
   color: var(--selected-text);
 }
 .editor-device-name {
+  grid-column: 1 / -1;
   font-size: 14px;
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -1299,8 +1296,16 @@ footer .text-button {
   font: inherit;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
-.editor-device-row > span {
-  font-size: 13px;
+.editor-device-button .editor-device-status {
+  justify-self: end;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.editor-device-editing {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: var(--muted);
+  font-size: 12px;
 }
 .workbench-editor iframe {
   display: block;

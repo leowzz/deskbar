@@ -191,49 +191,59 @@ function DeviceWorkbenchEditor({
     };
   }, [deviceId]);
 
-  const online =
-    selected?.display && Date.now() / 1000 - selected.display.seen_at < 15;
   return (
     <section className="workbench-editor">
-      <div className="editor-device-row">
-        <div
-          className="editor-device-switcher"
-          role="group"
-          aria-label="编辑的设备"
-        >
-          {status.devices.map((device) => {
-            const summary = device.id.slice(0, 8);
-            const connected =
-              device.display && Date.now() / 1000 - device.display.seen_at < 15;
-            return (
-              <button
-                type="button"
-                key={device.id}
-                className="editor-device-button"
-                data-device-id={device.id}
-                aria-label={`${device.name} · ${summary}`}
-                aria-pressed={device.id === deviceId}
-                title={`设备标识：${device.id}`}
-                disabled={editing}
-                onClick={() => onSelectDevice(device.id)}
-              >
-                <span className="editor-device-name">{device.name}</span>
-                <span className="editor-device-summary">
-                  <code>#{summary}</code>
-                  <span>· {connected ? "已连接" : "离线"}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <span className={`status-tag ${online ? "success" : "warning"}`}>
-          {!online
-            ? "设备离线 · 可编辑当前布局"
-            : selected.display?.layout_revision === selected.layout_revision
+      <div
+        className="editor-device-switcher"
+        role="group"
+        aria-label="编辑的设备"
+      >
+        {status.devices.map((device) => {
+          const summary = device.id.slice(0, 8);
+          const connected =
+            device.display && Date.now() / 1000 - device.display.seen_at < 15;
+          const updated =
+            connected &&
+            device.display?.layout_revision === device.layout_revision;
+          const deviceStatus = !connected
+            ? "离线"
+            : updated
               ? "设备已更新"
-              : "等待设备应用布局"}
-        </span>
-        {editing && <span>编辑中 · 更改会自动应用</span>}
+              : "等待设备应用布局";
+          return (
+            <button
+              type="button"
+              key={device.id}
+              className="editor-device-button"
+              data-device-id={device.id}
+              aria-label={`${device.name} · ${summary}`}
+              aria-pressed={device.id === deviceId}
+              title={`设备标识：${device.id}`}
+              disabled={editing}
+              onClick={() => onSelectDevice(device.id)}
+            >
+              <span className="editor-device-name">{device.name}</span>
+              {editing && device.id === deviceId && (
+                <span className="editor-device-editing">
+                  编辑中 · 更改会自动应用
+                </span>
+              )}
+              <span className="editor-device-summary">
+                <code>#{summary}</code>
+              </span>
+              <span
+                className={`editor-device-status status-tag ${updated ? "success" : "warning"}`}
+                title={
+                  connected
+                    ? `已连接 · ${deviceStatus}`
+                    : "设备离线 · 可编辑当前布局"
+                }
+              >
+                {deviceStatus}
+              </span>
+            </button>
+          );
+        })}
       </div>
       {error && (
         <p className="notice error" role="alert">
