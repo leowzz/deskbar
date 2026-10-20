@@ -119,6 +119,10 @@ impl LayoutDocument {
                         "iconSize" => {
                             value == "max" || value.as_f64().is_some_and(|n| n > 0.0 && n <= 200.0)
                         }
+                        "spacing" => {
+                            widget.r#type == "shortcuts"
+                                && value.as_f64().is_some_and(|n| (0.0..=16.0).contains(&n))
+                        }
                         "gap" | "gapX" | "gapY" => {
                             value.as_f64().is_some_and(|n| (0.0..=128.0).contains(&n))
                         }
@@ -283,6 +287,31 @@ mod tests {
                 .options
                 .insert(key.into(), value);
             assert!(invalid.validate("host").is_err(), "{key}");
+        }
+    }
+
+    #[test]
+    fn shortcut_spacing_is_bounded_and_round_trips() {
+        let mut layout: LayoutDocument =
+            serde_json::from_str(include_str!("../../../protocol/dashboard.example.json")).unwrap();
+        for value in [serde_json::json!(0), serde_json::json!(16)] {
+            layout.pages[0].widgets[3]
+                .options
+                .insert("spacing".into(), value.clone());
+            layout.validate("host").unwrap();
+            let restored: LayoutDocument =
+                serde_json::from_str(&serde_json::to_string(&layout).unwrap()).unwrap();
+            assert_eq!(restored.pages[0].widgets[3].options["spacing"], value);
+        }
+        for value in [
+            serde_json::json!(-1),
+            serde_json::json!(17),
+            serde_json::json!("8"),
+        ] {
+            layout.pages[0].widgets[3]
+                .options
+                .insert("spacing".into(), value);
+            assert!(layout.validate("host").is_err());
         }
     }
 

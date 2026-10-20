@@ -1,5 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { WorkbenchSettings, Sharing, UsageSettings } from "./WorkbenchSettings";
+import {
+  WorkbenchSettings,
+  Sharing,
+  UsageSettings,
+  DeviceName,
+} from "./WorkbenchSettings";
 import { WorkbenchEditor } from "./WorkbenchEditor";
 import QRCode from "qrcode";
 import { isTauri } from "@tauri-apps/api/core";
@@ -342,54 +347,51 @@ export function App() {
               <div className="device-list">
                 {status.devices.map((device) => (
                   <article className="device-card" key={device.id}>
-                    <div className="device-info">
-                      <div className="device-heading">
-                        <span className="device-icon">
-                          <Icon name="tablet" />
+                    <div className="device-heading">
+                      <span className="device-icon">
+                        <Icon name="tablet" />
+                      </span>
+                      <div className="device-title">
+                        <DeviceName device={device} busy={busy} run={run} />
+                        <span className="device-state">
+                          {new Date(device.paired_at * 1000).toLocaleDateString(
+                            "zh-CN",
+                          )}{" "}
+                          配对
                         </span>
-                        <div>
-                          <h3>{device.name}</h3>
-                          <span className="device-state">已配对</span>
+                      </div>
+                      {removeId === device.id ? (
+                        <div className="remove-confirm">
+                          <p>移除后需要重新配对</p>
+                          <button
+                            className="destructive"
+                            disabled={busy}
+                            onClick={() =>
+                              void run(async () => {
+                                await call("revoke_device", { id: device.id });
+                                setRemoveId(null);
+                              })
+                            }
+                          >
+                            确认移除
+                          </button>
+                          <button
+                            className="secondary"
+                            onClick={() => setRemoveId(null)}
+                          >
+                            取消
+                          </button>
                         </div>
-                      </div>
-                      <p>
-                        {new Date(device.paired_at * 1000).toLocaleDateString(
-                          "zh-CN",
-                        )}{" "}
-                        配对
-                      </p>
-                      <Sharing device={device} busy={busy} run={run} />
+                      ) : (
+                        <button
+                          className="text-button"
+                          onClick={() => setRemoveId(device.id)}
+                        >
+                          移除
+                        </button>
+                      )}
                     </div>
-                    {removeId === device.id ? (
-                      <div className="remove-confirm">
-                        <p>移除后需要重新配对</p>
-                        <button
-                          className="destructive"
-                          disabled={busy}
-                          onClick={() =>
-                            void run(async () => {
-                              await call("revoke_device", { id: device.id });
-                              setRemoveId(null);
-                            })
-                          }
-                        >
-                          确认移除
-                        </button>
-                        <button
-                          className="secondary"
-                          onClick={() => setRemoveId(null)}
-                        >
-                          取消
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        className="text-button"
-                        onClick={() => setRemoveId(device.id)}
-                      >
-                        移除
-                      </button>
-                    )}
+                    <Sharing device={device} busy={busy} run={run} />
                   </article>
                 ))}
               </div>
@@ -526,7 +528,9 @@ export function App() {
               <h2 id="pair-title">允许连接这台设备？</h2>
               <p className="request-name">{pending.name}</p>
               <p>
-                只确认你正在操作的设备。连接后，请在设备卡片中选择共享内容；你随时可以修改权限或移除设备。
+                {pending.existing_device_name
+                  ? `将重新连接「${pending.existing_device_name}」，保留原有名称、共享权限和屏幕布局。只确认你正在操作的设备。`
+                  : "只确认你正在操作的设备。连接后，请在设备卡片中选择共享内容；你随时可以修改权限或移除设备。"}
               </p>
               <div className="modal-actions">
                 <button className="secondary" disabled={busy} onClick={close}>

@@ -51,7 +51,7 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final workspace = LayoutWorkspace(document: sessionPage())..beginEdit();
       addTearDown(workspace.dispose);
-      expect(LayoutWorkspace.defaultOptions('sessions')['maxSessions'], 20);
+      expect(LayoutWorkspace.defaultOptions('sessions')['maxSessions'], 6);
       expect(
         sessionDisplayLimit(workspace.findWidget('session-0')!.options),
         20,
@@ -106,7 +106,7 @@ void main() {
 
   for (final limit in [null, 1, 7, 40]) {
     testWidgets(
-      'session list honors limit $limit and ignores old single-session binding',
+      'session count $limit sizes rows without hiding remaining sessions',
       (tester) async {
         final value = snapshot();
         final original = Map<String, dynamic>.from(
@@ -145,19 +145,18 @@ void main() {
         );
         await tester.pumpAndSettle();
         final grid = find.byType(GridView);
-        final expected = limit ?? 20;
         expect(
           tester.widget<GridView>(grid).childrenDelegate.estimatedChildCount,
-          expected,
+          40,
         );
         expect(find.text('会话 0'), findsOneWidget);
         await tester.dragUntilVisible(
-          find.text('会话 ${expected - 1}'),
+          find.text('会话 39'),
           grid,
-          const Offset(0, -300),
+          const Offset(0, -500),
+          maxIteration: 100,
         );
-        expect(find.text('会话 ${expected - 1}'), findsOneWidget);
-        expect(find.text('会话 $expected'), findsNothing);
+        expect(find.text('会话 39'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

@@ -23,6 +23,50 @@ void main() {
   });
 
   test(
+    'default overview uses the approved device layout in both orientations',
+    () {
+      final document = LayoutDocument.initial();
+      final widgets = {for (final w in document.activePage.widgets) w.type: w};
+      expect(
+        widgets.keys,
+        containsAll(['sessions', 'usage', 'shortcuts', 'statusBar']),
+      );
+      expect(widgets.length, 4);
+      expect(widgets['sessions']!.options, {'columns': 2, 'maxSessions': 6});
+      expect(widgets['shortcuts']!.options, {
+        'labels': false,
+        'alignment': 'center',
+        'spacing': 8,
+      });
+      final expected = {
+        'sessions': [
+          [0, 5, 34, 34],
+          [0, 27, 16, 47],
+        ],
+        'usage': [
+          [34, 5, 14, 33],
+          [0, 10, 16, 17],
+        ],
+        'shortcuts': [
+          [0, 39, 48, 9],
+          [0, 74, 16, 22],
+        ],
+        'statusBar': [
+          [0, 0, 48, 5],
+          [0, 0, 16, 10],
+        ],
+      };
+      for (final entry in expected.entries) {
+        for (final orientation in LayoutOrientation.values) {
+          final p = widgets[entry.key]!.placementFor(orientation);
+          expect([p.x, p.y, p.w, p.h], entry.value[orientation.index]);
+        }
+      }
+      document.validate();
+    },
+  );
+
+  test(
     'status bar moves above a full overview in both orientations atomically',
     () {
       final workspace = LayoutWorkspace()..beginEdit();
@@ -71,7 +115,7 @@ void main() {
     final before = workspace.document.toJson();
     final id = workspace.addWidget('statusBar');
     expect(id, isNotNull);
-    expect(workspace.activePage.widgets.length, 4);
+    expect(workspace.activePage.widgets.length, 5);
     workspace.document.validate();
     workspace.undo();
     expect(workspace.document.toJson(), before);
@@ -440,7 +484,7 @@ void main() {
     () {
       final workspace = emptyWorkspace();
       final id = workspace.addWidget('shortcuts')!;
-      expect(workspace.findWidget(id)!.options['rows'], 'auto');
+      expect(workspace.findWidget(id)!.options.containsKey('rows'), isFalse);
       expect(workspace.findWidget(id)!.options['alignment'], 'center');
       expect(
         workspace.updateWidget(
@@ -473,8 +517,8 @@ void main() {
     final workspace = emptyWorkspace();
     final id = workspace.addWidget('usage')!;
     final defaults = workspace.findWidget(id)!.options;
-    expect(defaults['density'], 'fill');
-    expect(defaults['alignment'], 'spaceEvenly');
+    expect(defaults.containsKey('density'), isFalse);
+    expect(defaults.containsKey('alignment'), isFalse);
     expect(defaults.containsKey('showDetails'), isFalse);
     expect(
       workspace.updateWidget(

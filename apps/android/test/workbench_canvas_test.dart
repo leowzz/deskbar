@@ -248,7 +248,8 @@ void main() {
           await tester.ensureVisible(find.text('高级设置'));
           await tester.tap(find.text('高级设置'));
           await tester.pumpAndSettle();
-          expect(find.widgetWithText(TextField, '卡片目标宽度'), findsOneWidget);
+          expect(find.widgetWithText(TextField, '卡片目标宽度'), findsNothing);
+          expect(find.widgetWithText(TextField, '每屏会话数'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
         });
@@ -265,85 +266,33 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('设置会话').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('高级设置'));
+      final count = find.widgetWithText(TextField, '每屏会话数');
+      final minus = find.byKey(const ValueKey('number-decrement-每屏会话数'));
+      final plus = find.byKey(const ValueKey('number-increment-每屏会话数'));
+      await tester.tap(minus);
       await tester.pumpAndSettle();
-
-      final density = find.byKey(
-        const ValueKey('density-main-sessions-compact'),
-      );
-      await tester.ensureVisible(density);
+      expect(workspace.findWidget('main-sessions')!.options['maxSessions'], 5);
+      await tester.tap(plus);
       await tester.pumpAndSettle();
-      await tester.tap(density);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('标准').last);
-      await tester.pumpAndSettle();
-      expect(
-        workspace.findWidget('main-sessions')!.options['itemHeight'],
-        96.0,
-      );
-
-      final width = find.widgetWithText(TextField, '卡片目标宽度');
-      final height = find.widgetWithText(TextField, '卡片目标高度');
-      final widthMinus = find.byKey(const ValueKey('number-decrement-卡片目标宽度'));
-      final widthPlus = find.byKey(const ValueKey('number-increment-卡片目标宽度'));
-      final heightMinus = find.byKey(const ValueKey('number-decrement-卡片目标高度'));
-      expect(tester.widget<IconButton>(widthMinus).onPressed, isNotNull);
-      expect(
-        (tester.widget<IconButton>(widthPlus).icon as Icon).icon,
-        Icons.keyboard_arrow_up,
-      );
-      expect(
-        (tester.widget<IconButton>(widthMinus).icon as Icon).icon,
-        Icons.keyboard_arrow_down,
-      );
-      expect(
-        tester.getCenter(widthPlus).dy,
-        lessThan(tester.getCenter(widthMinus).dy),
-      );
-      await tester.tap(widthMinus);
-      await tester.pumpAndSettle();
-      expect(
-        workspace.findWidget('main-sessions')!.options['itemWidth'],
-        279.0,
-      );
-      await tester.tap(widthPlus);
-      await tester.pumpAndSettle();
-      expect(
-        workspace.findWidget('main-sessions')!.options['itemWidth'],
-        280.0,
-      );
-
-      final beforeRepeat =
-          workspace.findWidget('main-sessions')!.options['itemWidth'] as double;
-      final heldPlus = await tester.startGesture(tester.getCenter(widthPlus));
+      expect(workspace.findWidget('main-sessions')!.options['maxSessions'], 6);
+      final held = await tester.startGesture(tester.getCenter(plus));
       await tester.pump(const Duration(milliseconds: 450));
       await tester.pump(const Duration(milliseconds: 240));
-      await heldPlus.up();
+      await held.up();
       await tester.pumpAndSettle();
       expect(
-        workspace.findWidget('main-sessions')!.options['itemWidth'],
-        greaterThan(beforeRepeat + 1),
+        workspace.findWidget('main-sessions')!.options['maxSessions'],
+        greaterThan(7),
       );
-
-      await tester.enterText(width, '120');
+      await tester.enterText(count, '1');
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
-      expect(
-        workspace.findWidget('main-sessions')!.options['itemWidth'],
-        120.0,
-      );
-      expect(tester.widget<IconButton>(widthMinus).onPressed, isNull);
-      expect(tester.widget<IconButton>(widthMinus).tooltip, '已是最小值');
-
-      await tester.enterText(height, '88');
+      expect(tester.widget<IconButton>(minus).onPressed, isNull);
+      expect(tester.widget<IconButton>(minus).tooltip, '已是最小值');
+      await tester.enterText(count, '40');
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
-      expect(
-        workspace.findWidget('main-sessions')!.options['itemHeight'],
-        96.0,
-      );
-      expect(tester.widget<IconButton>(heightMinus).onPressed, isNull);
-      expect(tester.widget<IconButton>(heightMinus).tooltip, '已是最小值');
+      expect(tester.widget<IconButton>(plus).onPressed, isNull);
       expect(tester.takeException(), isNull);
     },
   );
@@ -376,9 +325,7 @@ void main() {
           final card = find.byKey(
             const ValueKey('session-card-main-sessions-session'),
           );
-          final grid = find.byKey(
-            const PageStorageKey('sessions-main-sessions'),
-          );
+          final grid = find.byType(GridView);
           expect(
             tester.getRect(card).bottom,
             lessThanOrEqualTo(tester.getRect(grid).bottom + .01),
@@ -414,6 +361,7 @@ void main() {
               'gap': 0,
               'itemHeight': 96.0,
               'itemWidth': 200.0,
+              'columns': 2,
               'maxSessions': 20,
               'showTitle': true,
             },
@@ -492,7 +440,7 @@ void main() {
         liveConnection: connection,
       );
 
-      final grid = find.byKey(const PageStorageKey('sessions-main-sessions'));
+      final grid = find.byType(GridView);
       expect(find.text('会话 4'), findsOneWidget);
       expect(find.text('会话 5'), findsOneWidget);
       final gridTop = tester.getTopLeft(grid).dy;
@@ -551,7 +499,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         final card = find.byKey(const ValueKey('session-card-compact-session'));
-        final grid = find.byKey(const PageStorageKey('sessions-compact'));
+        final grid = find.byType(GridView);
         expect(card, findsOneWidget);
         expect(
           tester.getRect(card).bottom,
@@ -576,41 +524,40 @@ void main() {
       },
     );
   }
-  testWidgets(
-    'too-short compact body keeps source error and offers expansion',
-    (tester) async {
-      final value = snapshot();
-      (value['sources'] as List).first['health'] = 'failed';
-      (value['sources'] as List).first['message'] = '电脑未能读取会话，等待恢复';
-      final connection = Connection()
-        ..phase = ConnectionPhase.online
-        ..data = WorkbenchData(value);
-      addTearDown(connection.dispose);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: rawBlockTheme(),
-          home: Scaffold(
-            body: SizedBox(
-              width: 500,
-              height: 100,
-              child: WorkbenchWidgetBody(
-                connection: connection,
-                id: 'small',
-                type: 'sessions',
-                options: const {'density': 'compact', 'fitRows': true},
-                binding: const {},
-              ),
+  testWidgets('short session body adapts while preserving source error', (
+    tester,
+  ) async {
+    final value = snapshot();
+    (value['sources'] as List).first['health'] = 'failed';
+    (value['sources'] as List).first['message'] = '电脑未能读取会话，等待恢复';
+    final connection = Connection()
+      ..phase = ConnectionPhase.online
+      ..data = WorkbenchData(value);
+    addTearDown(connection.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: rawBlockTheme(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 500,
+            height: 100,
+            child: WorkbenchWidgetBody(
+              connection: connection,
+              id: 'small',
+              type: 'sessions',
+              options: const {'density': 'compact', 'fitRows': true},
+              binding: const {},
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('电脑未能读取会话'), findsOneWidget);
-      expect(find.textContaining('请在电脑端调整组件大小'), findsOneWidget);
-      expect(find.byType(GridView), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('电脑未能读取会话'), findsOneWidget);
+    expect(find.textContaining('请在电脑端调整组件大小'), findsNothing);
+    expect(find.byType(GridView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('mobile canvas long press stays read only', (tester) async {
     final workspace = LayoutWorkspace();
     addTearDown(workspace.dispose);
@@ -839,10 +786,10 @@ void main() {
       expect(editableName().focusNode.hasFocus, isTrue);
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
-      expect(selected('会话信息'), 'compact');
+      expect(field('会话信息'), findsNothing);
       expect(selected('已授权来源'), 'codex.sessions');
       expect(field('显示范围'), findsNothing);
-      expect(find.text('最多显示会话数 · 20 个'), findsOneWidget);
+      expect(find.text('每屏会话数 · 6 个'), findsOneWidget);
       final initialOffset = inspectorScroll().position.pixels;
       await tester.drag(
         find.byType(SingleChildScrollView).last,
@@ -853,7 +800,7 @@ void main() {
       expect(aOffset, greaterThan(initialOffset));
       await open('quota');
       expect(selected('显示内容'), 'quota');
-      expect(find.text('完整信息'), findsOneWidget);
+      expect(find.text('完整信息'), findsNothing);
       expect(find.text('显示详细数据'), findsNothing);
       expect(selected('已授权来源'), 'codex.quota');
       expect(selected('显示范围'), 'weekly');
@@ -861,52 +808,38 @@ void main() {
       await open('shortcut');
       expect(selected('已授权来源'), 'host.shortcuts');
       expect(selected('显示范围'), 'shortcut');
-      expect(selected('图标尺寸'), 'fixed');
-      expect(selected('行数'), 'auto');
+      expect(field('图标尺寸'), findsNothing);
+      expect(field('行数'), findsNothing);
       expect(selected('对齐方式'), 'center');
       expect(inspectorScroll().position.pixels, 0);
       await open('session-b');
-      expect(selected('会话信息'), 'normal');
+      expect(field('会话信息'), findsNothing);
       expect(selected('已授权来源'), 'codex.sessions');
       expect(field('显示范围'), findsNothing);
-      expect(find.text('最多显示会话数 · 20 个'), findsOneWidget);
-      await tester.ensureVisible(field('会话信息'));
+      expect(find.text('每屏会话数 · 6 个'), findsOneWidget);
+      workspace.updateWidget('session-b', options: {'columns': 2});
       await tester.pumpAndSettle();
-      await tester.tap(field('会话信息'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('精简').last);
-      await tester.pumpAndSettle();
-      expect(workspace.findWidget('session-b')!.options['density'], 'compact');
+      expect(selected('排列列数'), '2');
       expect(workspace.findWidget('session-a')!.options['itemWidth'], 240);
-      expect(
-        workspace.findWidget('session-a')!.binding['resourceId'],
-        'session',
-      );
       workspace.undo();
       await tester.pumpAndSettle();
-      expect(selected('会话信息'), 'normal');
+      expect(selected('排列列数'), 'auto');
       await open('api');
       expect(selected('显示内容'), 'api');
-      expect(selected('内容布局'), 'fill');
-      expect(selected('内容对齐'), 'spaceEvenly');
+      expect(field('内容布局'), findsNothing);
+      expect(field('内容对齐'), findsNothing);
       expect(selected('已授权来源'), 'sub2api.usage');
       expect(selected('显示范围'), 'api-account');
       final sourceRect = tester.getRect(field('已授权来源'));
       final rangeRect = tester.getRect(field('显示范围'));
-      final contentRect = tester.getRect(field('显示内容'));
-      final densityRect = tester.getRect(field('内容布局'));
-      final alignmentRect = tester.getRect(field('内容对齐'));
       expect(sourceRect.top, greaterThan(rangeRect.bottom));
-      expect(densityRect.top, greaterThanOrEqualTo(contentRect.bottom + 8));
-      expect(alignmentRect.top, greaterThanOrEqualTo(densityRect.bottom + 8));
-      expect(inspectorScroll().position.pixels, 0);
       await open('quota');
       expect(selected('显示内容'), 'quota');
       expect(selected('显示范围'), 'weekly');
       await open('session-a');
-      expect(selected('会话信息'), 'compact');
+      expect(field('会话信息'), findsNothing);
       expect(field('显示范围'), findsNothing);
-      expect(find.text('最多显示会话数 · 20 个'), findsOneWidget);
+      expect(find.text('每屏会话数 · 6 个'), findsOneWidget);
       expect(inspectorScroll().position.pixels, aOffset);
       expect(tester.takeException(), isNull);
     },
@@ -942,6 +875,7 @@ void main() {
                   ...LayoutWorkspace.defaultOptions('sessions'),
                   'fitRows': false,
                   'itemHeight': 140.0,
+                  'maxSessions': 20,
                 },
                 placements: {
                   LayoutOrientation.wide: GridPlacement(
@@ -983,7 +917,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final grid = find.byKey(const PageStorageKey('sessions-list'));
+    final grid = find.byType(GridView);
     ScrollableState sourceScroll() => tester.state<ScrollableState>(
       find.descendant(of: grid, matching: find.byType(Scrollable)).first,
     );
@@ -1129,26 +1063,26 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('USD 12.34'), findsOneWidget);
-      expect(find.text('上次实际成本 · 等待刷新'), findsOneWidget);
+      expect(find.text(r'$12.34'), findsOneWidget);
+      expect(find.text('上次实际成本'), findsOneWidget);
+      expect(find.text('统计窗口已结束 · 等待刷新'), findsOneWidget);
       expect(find.text('item 主指标标题'), findsNothing);
       expect(find.text('item 主指标数值'), findsNothing);
       expect(find.text('item Token'), findsNothing);
       expect(find.text('item TPM'), findsNothing);
       expect(find.text('item 统计窗口'), findsNothing);
       final tooltip = tester.widget<Tooltip>(find.byType(Tooltip).first);
+      expect(tooltip.message, contains(r'$12.34'));
       expect(tooltip.message, contains('Token 1.2M · TPM 4.5K'));
       expect(tooltip.message, contains('统计窗口'));
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await mouse.addPointer(
-        location: tester.getCenter(find.text('USD 12.34')),
-      );
+      await mouse.addPointer(location: tester.getCenter(find.text(r'$12.34')));
       await tester.pumpAndSettle();
-      expect(find.text('item 主指标数值'), findsOneWidget);
+      expect(find.textContaining('区域 '), findsOneWidget);
       await mouse.removePointer();
-      await tester.longPress(find.text('USD 12.34'));
+      await tester.longPress(find.text(r'$12.34'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Token 1.2M · TPM 4.5K'), findsOneWidget);
+      expect(find.textContaining('Token 1.2M · TPM 4.5K'), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(
         MaterialApp(

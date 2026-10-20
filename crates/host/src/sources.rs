@@ -52,6 +52,30 @@ fn database(path: &Path) -> Result<Connection> {
 fn bounded(s: &str, max: usize) -> String {
     s.chars().filter(|c| !c.is_control()).take(max).collect()
 }
+// Only a repository basename crosses the LAN boundary, never URL userinfo or paths.
+fn repository_name(origin: &str) -> String {
+    let parsed = url::Url::parse(origin);
+    let path = match &parsed {
+        Ok(url) if url.has_host() || url.scheme() == "file" => url.path(),
+        _ if !origin.contains("://") => origin
+            .split_once(':')
+            .map(|(_, path)| path)
+            .unwrap_or(origin),
+        _ => return String::new(),
+    };
+    let name = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("");
+    if name.contains('@') || name.contains(':') {
+        return String::new();
+    }
+    bounded(name.strip_suffix(".git").unwrap_or(name), 96)
+}
 pub fn sessions(home: &Path) -> Result<(Vec<Session>, usize)> {
     let mut db = database(&newest(home, "state_")?)?;
     let tx = db.transaction()?;
@@ -88,14 +112,37 @@ pub fn sessions(home: &Path) -> Result<(Vec<Session>, usize)> {
         |r| r.get(0),
     )?;
     let history = newest(home, "thread_history_").and_then(|p| database(&p));
-    let mut stmt = tx.prepare(&format!("SELECT id,{title},cwd,{updated} FROM threads WHERE {filter} ORDER BY {updated} DESC,id LIMIT 40")).context("Codex 会话格式不兼容，请更新连接助手")?;
+    // Older Codex databases may not have these metadata columns.
+    let optional = |name: &str| {
+        if columns.iter().any(|c| c == name) {
+            format!("COALESCE({name},'')")
+        } else {
+            "''".to_string()
+        }
+    };
+    let model = optional("model");
+    let effort = optional("reasoning_effort");
+    let origin = optional("git_origin_url");
+    let branch = optional("git_branch");
+    let mut stmt = tx.prepare(&format!("SELECT id,{title},cwd,{updated},{model},{effort},{origin},{branch} FROM threads WHERE {filter} ORDER BY {updated} DESC,id LIMIT 40")).context("Codex 会话格式不兼容，请更新连接助手")?;
     let sessions = stmt.query_map([], |r| {
         let id: String = r.get(0)?;
         let title: String = r.get(1)?;
         let cwd: String = r.get(2)?;
         let updated_at = r.get::<_,i64>(3)?.max(0) as u64;
         let status = history.as_ref().ok().and_then(|h| h.query_row("SELECT status FROM thread_turns WHERE thread_id=?1 ORDER BY started_at DESC,rowid DESC LIMIT 1", [&id], |r| r.get::<_,String>(0)).ok()).map(|s| match s.to_ascii_lowercase().replace('_', "").as_str() { "inprogress" | "running" | "started" => "running", "completed" | "complete" => "completed", "failed" => "failed", "interrupted" | "cancelled" | "aborted" => "interrupted", _ => "unknown" }.to_string()).unwrap_or_else(|| "unknown".into());
-        Ok(Session { version: digest(&format!("{id}:{updated_at}:{title}:{status}")), session_id: id, title: bounded(&title,192), project: bounded(cwd.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(""),96), status, updated_at })
+        let model = bounded(&r.get::<_, String>(4)?, 96);
+        let reasoning_effort = bounded(&r.get::<_, String>(5)?, 32);
+        let origin: String = r.get(6)?;
+        // Share only the repository name, never remote credentials or full URLs.
+        let repo = repository_name(&origin);
+        let branch = bounded(&r.get::<_, String>(7)?, 96);
+        Ok(Session {
+            version: digest(&format!("{id}:{updated_at}:{title}:{status}:{repo}:{branch}:{model}:{reasoning_effort}")),
+            session_id: id, title: bounded(&title,192),
+            project: bounded(cwd.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(""),96),
+            repo, branch, model, reasoning_effort, status, updated_at,
+        })
     })?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok((sessions, total))
 }
@@ -227,12 +274,53 @@ mod tests {
         assert_eq!(items[0].title, "标题");
         assert_eq!(items[0].project, "project");
         assert_eq!(items[0].status, "running");
+        assert!(items[0].repo.is_empty() && items[0].model.is_empty());
+        assert!(items[0].branch.is_empty() && items[0].reasoning_effort.is_empty());
+        db.execute_batch(
+            "ALTER TABLE threads ADD COLUMN model TEXT;
+            ALTER TABLE threads ADD COLUMN reasoning_effort TEXT;
+            ALTER TABLE threads ADD COLUMN git_origin_url TEXT;
+            ALTER TABLE threads ADD COLUMN git_branch TEXT;
+            UPDATE threads SET model='gpt-6.1-sol', reasoning_effort='high',
+                git_origin_url='https://user:secret@example.com/team/deskbar.git',
+                git_branch='main' WHERE id='main';",
+        )
+        .unwrap();
+        let (with_metadata, _) = sessions(dir.path()).unwrap();
+        let session = &with_metadata[0];
+        assert_eq!(session.repo, "deskbar");
+        assert_eq!(session.branch, "main");
+        assert_eq!(session.model, "gpt-6.1-sol");
+        assert_eq!(session.reasoning_effort, "high");
+        assert_ne!(session.version, items[0].version);
+        let wire = serde_json::to_string(session).unwrap();
+        for private in ["secret", "example.com", "/private", "https://"] {
+            assert!(!wire.contains(private));
+        }
+
         assert!(!serde_json::to_string(&items).unwrap().contains("/private"));
         assert_eq!(
             db.query_row("SELECT count(*) FROM threads", [], |r| r.get::<_, usize>(0))
                 .unwrap(),
             4
         );
+    }
+    #[test]
+    fn repository_metadata_never_exposes_remote_credentials() {
+        for (origin, name) in [
+            (
+                "https://user:secret@example.com/team/deskbar.git?token=secret",
+                "deskbar",
+            ),
+            ("ssh://git@example.com/team/deskbar.git", "deskbar"),
+            ("git@example.com:team/deskbar.git", "deskbar"),
+            ("file:///private/work/deskbar", "deskbar"),
+            ("https://user:secret@example.com", ""),
+            ("git@example.com", ""),
+            ("", ""),
+        ] {
+            assert_eq!(repository_name(origin), name);
+        }
     }
     #[tokio::test]
     #[ignore = "read-only smoke test using this computer's Codex account"]

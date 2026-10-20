@@ -37,6 +37,17 @@ fn matches(a: &str, b: &str) -> bool {
     bool::from(a.as_bytes().ct_eq(b.as_bytes()))
 }
 
+fn identity_digest(identity: &str) -> Result<String> {
+    if identity.len() != 43
+        || URL_SAFE_NO_PAD
+            .decode(identity)
+            .map_or(true, |bytes| bytes.len() != 32)
+    {
+        bail!("设备身份无效，请更新工作台后重试");
+    }
+    Ok(digest(identity))
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Device {
     pub id: String,
@@ -52,6 +63,8 @@ pub struct Device {
     pub display: Option<layout::DisplayState>,
     #[serde(skip_serializing, default)]
     pub token_hash: String,
+    #[serde(skip)]
+    pub identity_hash: Option<String>,
 }
 
 // Separate disk record so serializing a UI response can never expose token hashes.
@@ -61,6 +74,8 @@ struct StoredDevice {
     name: String,
     paired_at: u64,
     token_hash: String,
+    #[serde(default)]
+    identity_hash: Option<String>,
     #[serde(default)]
     permissions: Permissions,
     #[serde(default)]
@@ -92,6 +107,8 @@ pub struct PairingRequest {
     pub id: String,
     pub name: String,
     pub expires_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub existing_device_name: Option<String>,
 }
 
 struct Pending {
@@ -101,6 +118,8 @@ struct Pending {
     claim_hash: String,
     token: String,
     approved: bool,
+    identity_hash: Option<String>,
+    device_id: String,
 }
 
 pub struct Host {
@@ -189,6 +208,7 @@ impl Host {
                     name: d.name,
                     paired_at: d.paired_at,
                     token_hash: d.token_hash,
+                    identity_hash: d.identity_hash,
                     permissions: d.permissions,
                     layout: d.layout,
                     layout_revision: d.layout_revision,
@@ -222,6 +242,7 @@ impl Host {
                     name: d.name.clone(),
                     paired_at: d.paired_at,
                     token_hash: d.token_hash.clone(),
+                    identity_hash: d.identity_hash.clone(),
                     permissions: d.permissions.clone(),
                     layout: d.layout.clone(),
                     layout_revision: d.layout_revision,
@@ -292,11 +313,25 @@ impl Host {
         name: &str,
         time: u64,
     ) -> Result<PairingRequest> {
+        self.request_pairing_with_identity(session, password, claim, name, None, time)
+    }
+
+    pub fn request_pairing_with_identity(
+        &mut self,
+        session: &str,
+        password: &str,
+        claim: &str,
+        name: &str,
+        identity: Option<&str>,
+        time: u64,
+    ) -> Result<PairingRequest> {
+        let identity_hash = identity.map(identity_digest).transpose()?;
         // Recover a lost response without creating a second device.
         if let Some(p) = &self.pending {
             if time < p.info.expires_at
                 && session == p.session_id
                 && name.trim() == p.info.name
+                && identity_hash == p.identity_hash
                 && matches(&digest(password), &p.invitation_hash)
                 && matches(&digest(claim), &p.claim_hash)
             {
@@ -317,11 +352,18 @@ impl Host {
         if name.is_empty() || name.chars().count() > 64 || claim.len() != 43 {
             bail!("设备信息不完整");
         }
+        let existing = identity_hash.as_ref().and_then(|hash| {
+            self.devices
+                .iter()
+                .find(|device| device.identity_hash.as_ref() == Some(hash))
+        });
         let info = PairingRequest {
             id: Uuid::new_v4().to_string(),
             name: name.into(),
             expires_at: invitation.expires_at,
+            existing_device_name: existing.map(|device| device.name.clone()),
         };
+        let device_id = existing.map_or_else(|| info.id.clone(), |device| device.id.clone());
         self.pending = Some(Pending {
             info: info.clone(),
             session_id: session.into(),
@@ -329,6 +371,8 @@ impl Host {
             claim_hash: digest(claim),
             token: secret(),
             approved: false,
+            identity_hash,
+            device_id,
         });
         self.invitation = None; // One invitation can request approval only once.
         Ok(info)
@@ -348,18 +392,28 @@ impl Host {
             .filter(|p| p.info.id == id && !p.approved && time < p.info.expires_at)
             .context("这次连接请求已结束")?;
         let mut devices = self.devices.clone();
-        devices.push(Device {
-            id: p.info.id.clone(),
-            name: p.info.name.clone(),
-            paired_at: time,
-            token_hash: digest(&p.token),
-            permissions: Permissions::default(),
-            layout: None,
-            layout_revision: 0,
-            display: None,
-        });
+        if let Some(device) = devices.iter_mut().find(|device| device.id == p.device_id) {
+            device.token_hash = digest(&p.token);
+        } else {
+            devices.push(Device {
+                id: p.device_id.clone(),
+                name: p.info.name.clone(),
+                paired_at: time,
+                token_hash: digest(&p.token),
+                identity_hash: p.identity_hash.clone(),
+                permissions: Permissions::default(),
+                layout: None,
+                layout_revision: 0,
+                display: None,
+            });
+        }
         self.save(&devices)?;
         self.devices = devices;
+        self.completed_claims.retain(|_, (token, _)| {
+            self.devices
+                .iter()
+                .any(|device| matches(&device.token_hash, &digest(token)))
+        });
         self.pending.as_mut().unwrap().approved = true;
         self.revision += 1;
         Ok(())
@@ -400,6 +454,53 @@ impl Host {
         self.devices.iter().any(|d| matches(&d.token_hash, &hash))
     }
 
+    pub fn register_device_identity(&mut self, token: &str, identity: &str) -> Result<()> {
+        let hash = identity_digest(identity)?;
+        let id = self
+            .device_id(token)
+            .context("这台设备已取消连接，请重新配对")?;
+        let device = self.devices.iter().find(|device| device.id == id).unwrap();
+        if let Some(existing) = &device.identity_hash {
+            if existing != &hash {
+                bail!("设备身份不一致，请重新配对");
+            }
+            return Ok(());
+        }
+        if self
+            .devices
+            .iter()
+            .any(|device| device.identity_hash.as_ref() == Some(&hash))
+        {
+            bail!("设备身份已关联其他记录，请重新配对");
+        }
+        let mut devices = self.devices.clone();
+        devices
+            .iter_mut()
+            .find(|device| device.id == id)
+            .unwrap()
+            .identity_hash = Some(hash);
+        self.save(&devices)?;
+        self.devices = devices;
+        Ok(())
+    }
+
+    pub fn rename_device(&mut self, id: &str, name: &str) -> Result<()> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 64 || name.chars().any(char::is_control) {
+            bail!("设备名称需为 1–64 个字符，且不能包含控制字符");
+        }
+        let mut devices = self.devices.clone();
+        devices
+            .iter_mut()
+            .find(|device| device.id == id)
+            .context("设备已移除")?
+            .name = name.to_owned();
+        self.save(&devices)?;
+        self.devices = devices;
+        self.revision += 1;
+        Ok(())
+    }
+
     pub fn revoke(&mut self, id: &str) -> Result<()> {
         let devices: Vec<_> = self
             .devices
@@ -412,9 +513,14 @@ impl Host {
         }
         self.save(&devices)?;
         self.devices = devices;
-        if self.pending.as_ref().is_some_and(|p| p.info.id == id) {
+        if self.pending.as_ref().is_some_and(|p| p.device_id == id) {
             self.pending = None;
         }
+        self.completed_claims.retain(|_, (token, _)| {
+            self.devices
+                .iter()
+                .any(|device| matches(&device.token_hash, &digest(token)))
+        });
         self.revision += 1;
         Ok(())
     }
@@ -443,6 +549,214 @@ impl Host {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn pair_with_identity(host: &mut Host, identity: Option<&str>) -> (String, String) {
+        let invite = host.invite(100);
+        let claim = secret();
+        let request = host
+            .request_pairing_with_identity(
+                &invite.session_id,
+                &invite.secret,
+                &claim,
+                "同型号设备",
+                identity,
+                101,
+            )
+            .unwrap();
+        host.approve(&request.id, 102).unwrap();
+        let token = host.claim(&request.id, &claim, 103).unwrap().unwrap();
+        (host.device_id(&token).unwrap(), token)
+    }
+
+    #[test]
+    fn remembered_device_reuses_configuration_after_restart_and_rotates_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let identity = secret();
+        let (id, old_token) = pair_with_identity(&mut host, Some(&identity));
+        host.rename_device(&id, "桌面副屏").unwrap();
+        host.set_permissions(
+            &id,
+            Permissions {
+                sessions: true,
+                quota: true,
+                api_usage: true,
+                shortcuts: true,
+                open: true,
+            },
+        )
+        .unwrap();
+        let layout =
+            serde_json::from_str(include_str!("../../../protocol/layout.example.json")).unwrap();
+        host.save_layout(&id, 0, layout).unwrap();
+        let original = serde_json::to_value(&host.devices[0]).unwrap();
+        assert!(original.get("identity_hash").is_none());
+        assert!(!fs::read_to_string(dir.path().join("host.yaml"))
+            .unwrap()
+            .contains(&identity));
+        drop(host);
+        let mut host = Host::load(dir.path().into(), "unused".into()).unwrap();
+        let invite = host.invite(200);
+        let claim = secret();
+        let request = host
+            .request_pairing_with_identity(
+                &invite.session_id,
+                &invite.secret,
+                &claim,
+                "新的型号名",
+                Some(&identity),
+                201,
+            )
+            .unwrap();
+        assert_eq!(request.existing_device_name.as_deref(), Some("桌面副屏"));
+        assert_ne!(request.id, id);
+        assert_eq!(
+            host.request_pairing_with_identity(
+                &invite.session_id,
+                &invite.secret,
+                &claim,
+                "新的型号名",
+                Some(&identity),
+                201,
+            )
+            .unwrap()
+            .id,
+            request.id
+        );
+        assert!(host
+            .request_pairing_with_identity(
+                &invite.session_id,
+                &invite.secret,
+                &claim,
+                "新的型号名",
+                Some(&secret()),
+                201,
+            )
+            .is_err());
+        assert!(host.claim(&request.id, &claim, 201).unwrap().is_none());
+        assert!(host.authenticate(&old_token));
+        // Failed persistence leaves the old connection and configuration untouched.
+        let temp = host.path.with_extension("yaml.tmp");
+        fs::create_dir(&temp).unwrap();
+        assert!(host.approve(&request.id, 202).is_err());
+        assert!(host.authenticate(&old_token));
+        fs::remove_dir(temp).unwrap();
+        host.approve(&request.id, 202).unwrap();
+        let token = host.claim(&request.id, &claim, 203).unwrap().unwrap();
+        assert_eq!(host.device_id(&token).as_deref(), Some(id.as_str()));
+        assert!(!host.authenticate(&old_token));
+        assert_eq!(host.devices.len(), 1);
+        assert_eq!(serde_json::to_value(&host.devices[0]).unwrap(), original);
+        drop(host);
+        let restored = Host::load(dir.path().into(), "unused".into()).unwrap();
+        assert!(restored.authenticate(&token));
+        assert!(!restored.authenticate(&old_token));
+    }
+
+    #[test]
+    fn different_identities_and_legacy_clients_stay_separate_and_removal_starts_fresh() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let identity = secret();
+        let (id, token) = pair_with_identity(&mut host, Some(&identity));
+        pair_with_identity(&mut host, Some(&secret()));
+        pair_with_identity(&mut host, None);
+        pair_with_identity(&mut host, None);
+        assert_eq!(host.devices.len(), 4);
+        host.rename_device(&id, "旧配置").unwrap();
+        host.revoke(&id).unwrap();
+        assert!(!host.authenticate(&token));
+        let (new_id, _) = pair_with_identity(&mut host, Some(&identity));
+        assert_ne!(id, new_id);
+        let device = host
+            .devices
+            .iter()
+            .find(|device| device.id == new_id)
+            .unwrap();
+        assert_eq!(device.name, "同型号设备");
+        assert_eq!(
+            serde_json::to_value(&device.permissions).unwrap(),
+            serde_json::to_value(Permissions::default()).unwrap()
+        );
+        assert!(device.layout.is_none());
+        // Removing the original card also cancels an outstanding reconnect approval.
+        let invite = host.invite(200);
+        let claim = secret();
+        let request = host
+            .request_pairing_with_identity(
+                &invite.session_id,
+                &invite.secret,
+                &claim,
+                "同型号设备",
+                Some(&identity),
+                201,
+            )
+            .unwrap();
+        host.revoke(&new_id).unwrap();
+        assert!(host.approve(&request.id, 202).is_err());
+    }
+
+    #[test]
+    fn legacy_identity_registration_requires_authentication_and_is_atomic_and_immutable() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let (id, token) = pair_with_identity(&mut host, None);
+        let (_, other_token) = pair_with_identity(&mut host, None);
+        let identity = secret();
+        assert!(host
+            .register_device_identity("invalid-token", &identity)
+            .is_err());
+        for invalid in ["", "serial-number", &"!".repeat(43)] {
+            assert!(host.register_device_identity(&token, invalid).is_err());
+        }
+        let temp = host.path.with_extension("yaml.tmp");
+        fs::create_dir(&temp).unwrap();
+        assert!(host.register_device_identity(&token, &identity).is_err());
+        assert!(host.devices[0].identity_hash.is_none());
+        fs::remove_dir(&temp).unwrap();
+        host.register_device_identity(&token, &identity).unwrap();
+        host.register_device_identity(&token, &identity).unwrap();
+        assert!(host.register_device_identity(&token, &secret()).is_err());
+        assert!(host
+            .register_device_identity(&other_token, &identity)
+            .is_err());
+        let (reused, _) = pair_with_identity(&mut host, Some(&identity));
+        assert_eq!(reused, id);
+        assert_eq!(host.devices.len(), 2);
+    }
+
+    #[test]
+    fn rename_preserves_pairing_and_survives_restart_without_partial_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = Host::load(dir.path().into(), "电脑".into()).unwrap();
+        let invite = host.invite(100);
+        let claim = secret();
+        let request = host
+            .request_pairing(&invite.session_id, &invite.secret, &claim, "Xiaomi 14", 101)
+            .unwrap();
+        host.approve(&request.id, 102).unwrap();
+        let token = host.claim(&request.id, &claim, 103).unwrap().unwrap();
+        let original = serde_json::to_value(&host.devices[0]).unwrap();
+        for invalid in ["", "  ", "a\nb", &"名".repeat(65)] {
+            assert!(host.rename_device(&request.id, invalid).is_err());
+        }
+        assert!(host.rename_device("missing", "副屏").is_err());
+        host.rename_device(&request.id, "  桌面副屏  ").unwrap();
+        let mut expected = original;
+        expected["name"] = serde_json::json!("桌面副屏");
+        assert_eq!(serde_json::to_value(&host.devices[0]).unwrap(), expected);
+        let revision = host.revision;
+        let temp = host.path.with_extension("yaml.tmp");
+        fs::create_dir(&temp).unwrap();
+        assert!(host.rename_device(&request.id, "不应保存").is_err());
+        assert_eq!(host.devices[0].name, "桌面副屏");
+        assert_eq!(host.revision, revision);
+        fs::remove_dir(temp).unwrap();
+        drop(host);
+        let restored = Host::load(dir.path().into(), "unused".into()).unwrap();
+        assert_eq!(restored.devices[0].name, "桌面副屏");
+        assert!(restored.authenticate(&token));
+    }
+
     #[test]
     fn approval_expiry_revocation_and_restart() {
         let dir = tempfile::tempdir().unwrap();

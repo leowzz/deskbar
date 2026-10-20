@@ -262,7 +262,13 @@ void main() {
   test(
     'v2 migration scales both profiles, preserves every page and backs up exact bytes',
     () async {
-      final old = LayoutDocument.initial().toJson();
+      // The legacy fixture uses the coarse grid; new defaults need not be divisible by four.
+      final fixture = LayoutDocument.fromJson(
+        jsonDecode(
+          File('../../protocol/layout.example.json').readAsStringSync(),
+        ),
+      );
+      final old = fixture.toJson();
       old['schemaVersion'] = 2;
       old['futureField'] = {'keep': true};
       for (final page in old['pages'] as List) {
@@ -278,8 +284,7 @@ void main() {
       await primary().writeAsString(bytes);
       final loaded = await repository.load();
       expect(loaded.migrated, true);
-      final expected = LayoutDocument.initial().toJson()
-        ..['futureField'] = {'keep': true};
+      final expected = fixture.toJson()..['futureField'] = {'keep': true};
       expect(loaded.document.toJson(), expected);
       expect(await File(loaded.backupPath!).readAsString(), bytes);
       expect(await backup().readAsString(), bytes);

@@ -157,8 +157,13 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
   Future<void> paste([String? initial]) async {
     if (pasteOpen) return;
     pasteOpen = true;
+    final defaultName = await connection.defaultDeviceName();
+    if (!mounted) {
+      pasteOpen = false;
+      return;
+    }
     final invitation = TextEditingController(text: initial);
-    final name = TextEditingController(text: 'Android 工作台');
+    final name = TextEditingController(text: defaultName);
     final value = await showDialog<(String, String)>(
       context: context,
       builder: (context) => AlertDialog(
@@ -529,7 +534,6 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                                       ? null
                                       : () => connection.pair(
                                           computer.invitation,
-                                          'Android 工作台',
                                         ),
                                 ),
                               ),

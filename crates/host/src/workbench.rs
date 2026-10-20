@@ -27,6 +27,14 @@ pub struct Session {
     pub version: String,
     pub title: String,
     pub project: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub repo: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub branch: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub model: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reasoning_effort: String,
     pub status: String,
     pub updated_at: u64,
 }

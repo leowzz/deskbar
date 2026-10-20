@@ -328,17 +328,12 @@ header .primary {
   gap: 12px;
 }
 .device-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 20px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-}
-.device-info {
-  flex: 1;
-  min-width: 0;
 }
 .device-heading {
   display: flex;
@@ -350,10 +345,50 @@ header .primary {
   display: grid;
   place-items: center;
   width: 40px;
-  height: 44px;
+  height: 40px;
   flex-shrink: 0;
   border-radius: 7px;
   background: var(--raised);
+}
+.device-title {
+  flex: 1;
+  min-width: 0;
+}
+.device-name {
+  margin: 0;
+}
+.device-name-input {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  min-width: 0;
+  min-height: 36px;
+  font-size: 16px;
+  font-weight: 550;
+}
+button.device-name-trigger {
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  cursor: text;
+}
+button.device-name-trigger:hover:not(:disabled) {
+  background: transparent;
+  color: var(--selected-text);
+}
+.sharing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.device-card .text-button {
+  padding-inline: 8px;
 }
 .device-icon .icon {
   width: 25px;
@@ -363,27 +398,30 @@ header .primary {
   font-size: 12px;
   color: var(--muted);
 }
-.device-info > p {
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.device-card > .text-button {
+.device-heading > .text-button {
   flex-shrink: 0;
 }
 .sharing {
   border: 0;
+  border-top: 1px solid var(--line);
   padding: 0;
-  margin: 16px 0 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 24px;
+  margin: 0;
+  min-width: 0;
 }
-.sharing legend {
+.sharing-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding-top: 4px;
   font-size: 12px;
   color: var(--muted);
-  padding: 0;
-  margin-bottom: 8px;
+}
+.sharing-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0 24px;
 }
 .sharing label {
   min-width: 0;
@@ -392,8 +430,8 @@ header .primary {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  min-height: 40px;
-  font-size: 13px;
+  min-height: 36px;
+  font-size: 14px;
   cursor: pointer;
 }
 .sharing input[type="checkbox"] {
@@ -1027,9 +1065,6 @@ footer .text-button {
   main {
     padding: 28px 24px 20px;
   }
-  .sharing {
-    grid-template-columns: 1fr;
-  }
 }
 @media (max-width: 640px) {
   .app-shell {
@@ -1081,12 +1116,8 @@ footer .text-button {
   .device-card {
     padding: 16px;
   }
-  .device-card {
+  .device-heading {
     flex-wrap: wrap;
-    gap: 12px;
-  }
-  .device-info {
-    flex-basis: calc(100% - 70px);
   }
   .remove-confirm {
     max-width: none;

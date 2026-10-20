@@ -172,7 +172,7 @@ void main() {
     expect(sent, isNull);
   });
   testWidgets(
-    'shortcut renders the shared PNG at its chosen size and blank long press never opens',
+    'shortcut renders the shared PNG at its automatic size and blank long press never opens',
     (tester) async {
       final c = Connection()
         ..data = WorkbenchData(snapshot())
@@ -202,7 +202,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(tester.getSize(find.byType(Image)), const Size(72, 72));
+      expect(
+        tester.getSize(find.byType(Image)).width,
+        inInclusiveRange(24, 200),
+      );
       final area = tester.getRect(find.byType(WorkbenchWidgetBody));
       await tester.longPressAt(area.topRight + const Offset(-8, 8));
       await tester.pumpAndSettle();

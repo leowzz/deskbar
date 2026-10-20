@@ -17,6 +17,10 @@ async fn android_connection_fixture() {
     fs::create_dir_all(&directory).unwrap();
     let mut host = Host::load(directory.join("host"), "DeskBar 连接测试".into()).unwrap();
     host.workbench.sessions = vec![Session {
+        repo: "deskbar".into(),
+        branch: "main".into(),
+        model: "gpt-6.1-sol".into(),
+        reasoning_effort: "high".into(),
         session_id: "00000000-0000-4000-8000-000000000001".into(),
         version: "fixture-version".into(),
         title: "验证工作台连接".into(),

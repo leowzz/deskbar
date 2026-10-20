@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Handler
+import android.os.Build
 import android.os.Looper
 import android.util.Base64
 import io.flutter.plugin.common.EventChannel
@@ -51,6 +52,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
 
     fun call(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "deviceName" -> result.success(deviceName(Build.MANUFACTURER, Build.MODEL))
             "pause", "cancel" -> { stop(); result.success(null) }
             "forget" -> {
                 stop()
@@ -64,7 +66,8 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
                 stop()
                 val ticket = generation.get()
                 val invitation = call.argument<String>("invitation") ?: ""
-                val name = call.argument<String>("name") ?: "Android 工作台"
+                val name = call.argument<String>("name")?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: deviceName(Build.MANUFACTURER, Build.MODEL)
                 io.execute { try { pair(invitation, name, ticket); main.post { result.success(null) } }
                     catch (e: Exception) { main.post { if (ticket == generation.get()) result.error("pairing", friendly(e), null) else result.success(null) } } }
             }
@@ -138,6 +141,8 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
         if (token != null) builder.header("Authorization", "Bearer $token")
         http.newCall(builder.build()).execute().use { response ->
             if (response.code == 401) throw RevokedError()
+            // Older agents do not yet support authenticated identity registration.
+            if (path == "/v1/device/identity" && response.code == 404) return JSONObject()
             val json = JSONObject(response.body?.string() ?: "{}")
             if (!response.isSuccessful) throw UserError(json.optString("message", "连接未完成，请重试"))
             return json
@@ -161,6 +166,7 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
         val http = pinnedClient(pin); client = http
         val claim = randomSecret()
         val input = JSONObject().put("session_id", field("session")).put("secret", field("secret")).put("claim", claim).put("name", name.trim())
+            .put("device_identity", store.identity(hostId))
         var chosen = ""
         var pending: JSONObject? = null
         var last: Exception? = null
@@ -199,6 +205,10 @@ class ConnectionRuntime(private val context: Context) : EventChannel.StreamHandl
             return try {
                 val snapshot = request(http, endpoint, "/v1/snapshot", token = host.getString("token"))
                 if (snapshot.getString("host_id") != host.getString("host_id") || snapshot.getInt("protocol_version") != 1) throw UserError("电脑版本或身份不一致，请检查后重新配对")
+                if (ticket != generation.get()) return false
+                request(http, endpoint, "/v1/device/identity",
+                    JSONObject().put("device_identity", store.identity(host.getString("host_id"))),
+                    host.getString("token"))
                 host.put("endpoint", endpoint)
                 synchronized(this) { if (ticket != generation.get()) return false; store.save(host) }
                 subscribe(http, host, ticket); true

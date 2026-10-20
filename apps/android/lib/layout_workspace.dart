@@ -307,11 +307,19 @@ class LayoutDocument {
       id: id,
       type: type,
       title: title,
-      binding: {'source': 'codex'},
+      binding: type == 'statusBar'
+          ? {}
+          : {
+              'source': switch (type) {
+                'sessions' => 'codex.sessions',
+                'usage' => 'codex.quota',
+                _ => 'host.shortcuts',
+              },
+            },
       options: {...LayoutWorkspace.defaultOptions(type), ...options},
       placements: {
-        LayoutOrientation.wide: wide.scaled(4),
-        LayoutOrientation.portrait: portrait.scaled(4),
+        LayoutOrientation.wide: wide,
+        LayoutOrientation.portrait: portrait,
       },
     );
     return LayoutDocument(
@@ -325,25 +333,30 @@ class LayoutDocument {
               'main-sessions',
               'sessions',
               '近期会话',
-              const GridPlacement(x: 0, y: 0, w: 8, h: 12),
-              const GridPlacement(x: 0, y: 5, w: 4, h: 13),
-              options: {'density': 'compact', 'itemHeight': 96.0},
+              const GridPlacement(x: 0, y: 5, w: 34, h: 34),
+              const GridPlacement(x: 0, y: 27, w: 16, h: 47),
+              options: const {'columns': 2},
             ),
             widget(
               'main-usage',
               'usage',
               'Codex 额度',
-              const GridPlacement(x: 8, y: 0, w: 4, h: 6),
-              const GridPlacement(x: 0, y: 0, w: 4, h: 5),
-              options: {'showTitle': false},
+              const GridPlacement(x: 34, y: 5, w: 14, h: 33),
+              const GridPlacement(x: 0, y: 10, w: 16, h: 17),
             ),
             widget(
               'main-shortcuts',
               'shortcuts',
               '快捷入口',
-              const GridPlacement(x: 8, y: 6, w: 4, h: 6),
-              const GridPlacement(x: 0, y: 18, w: 4, h: 6),
-              options: {'showTitle': false},
+              const GridPlacement(x: 0, y: 39, w: 48, h: 9),
+              const GridPlacement(x: 0, y: 74, w: 16, h: 22),
+            ),
+            widget(
+              'main-status',
+              'statusBar',
+              '顶部状态栏',
+              const GridPlacement(x: 0, y: 0, w: 48, h: 5),
+              const GridPlacement(x: 0, y: 0, w: 16, h: 10),
             ),
           ],
         ),
@@ -355,8 +368,8 @@ class LayoutDocument {
               'tasks-sessions',
               'sessions',
               '近期会话',
-              const GridPlacement(x: 0, y: 0, w: 12, h: 12),
-              const GridPlacement(x: 0, y: 0, w: 4, h: 24),
+              const GridPlacement(x: 0, y: 0, w: 48, h: 48),
+              const GridPlacement(x: 0, y: 0, w: 16, h: 96),
             ),
           ],
         ),
@@ -368,8 +381,8 @@ class LayoutDocument {
               'apps-shortcuts',
               'shortcuts',
               '快捷入口',
-              const GridPlacement(x: 0, y: 0, w: 12, h: 12),
-              const GridPlacement(x: 0, y: 0, w: 4, h: 24),
+              const GridPlacement(x: 0, y: 0, w: 48, h: 48),
+              const GridPlacement(x: 0, y: 0, w: 16, h: 96),
             ),
           ],
         ),
@@ -377,6 +390,10 @@ class LayoutDocument {
     );
   }
 }
+
+/// Independent of legacy gapX/gapY, which remain readable but unused.
+double shortcutSpacing(Map<String, dynamic> options) =>
+    ((options['spacing'] as num?) ?? 8).toDouble().clamp(0, 16);
 
 /// The committed document and the entire multi-page edit draft are separate.
 /// Selection, focus and history deliberately never enter [LayoutDocument].
@@ -516,66 +533,23 @@ class LayoutWorkspace extends ChangeNotifier {
   String? addDashboardPage({String? hostId}) {
     if (!_requireEditing()) return null;
     final pageId = _newId('page');
-    LayoutWidget part(
-      String type,
-      String title,
-      GridPlacement wide,
-      GridPlacement portrait,
-      Map<String, dynamic> options,
-      String source,
-    ) => LayoutWidget(
-      id: _newId(type),
-      type: type,
-      title: title,
-      binding: type == 'statusBar' ? {} : {'hostId': ?hostId, 'source': source},
-      options: {...defaultOptions(type), ...options},
-      placements: {
-        LayoutOrientation.wide: wide,
-        LayoutOrientation.portrait: portrait,
-      },
-    );
     final page = LayoutPage(
       id: pageId,
       name: '横屏总览',
       widgets: [
-        part(
-          'statusBar',
-          '顶部状态栏',
-          const GridPlacement(x: 0, y: 0, w: 48, h: 5),
-          const GridPlacement(x: 0, y: 0, w: 16, h: 10),
-          {},
-          '',
-        ),
-        part(
-          'usage',
-          'Codex 额度',
-          const GridPlacement(x: 0, y: 5, w: 7, h: 36),
-          const GridPlacement(x: 0, y: 10, w: 16, h: 18),
-          {'density': 'sidebar'},
-          'codex.quota',
-        ),
-        part(
-          'sessions',
-          '近期会话',
-          const GridPlacement(x: 7, y: 5, w: 41, h: 36),
-          const GridPlacement(x: 0, y: 28, w: 16, h: 54),
-          {
-            'appearance': 'cards',
-            'columns': 2,
-            'itemHeight': 110.0,
-            'textScale': 1.35,
-            'density': 'compact',
-          },
-          'codex.sessions',
-        ),
-        part(
-          'shortcuts',
-          '快捷入口',
-          const GridPlacement(x: 0, y: 41, w: 48, h: 7),
-          const GridPlacement(x: 0, y: 82, w: 16, h: 14),
-          {'iconSize': 'max', 'labels': false, 'rows': 1, 'appearance': 'dock'},
-          'host.shortcuts',
-        ),
+        for (final template in LayoutDocument.initial().pages.first.widgets)
+          LayoutWidget(
+            id: _newId(template.type),
+            type: template.type,
+            title: template.title,
+            binding: {
+              ...template.binding,
+              if (hostId != null && template.type != 'statusBar')
+                'hostId': hostId,
+            },
+            options: template.options,
+            placements: template.placements,
+          ),
       ],
     );
     return _apply(
@@ -968,32 +942,9 @@ class LayoutWorkspace extends ChangeNotifier {
       'showThemeButton': true,
       'showSettingsButton': true,
     },
-    'sessions' => {
-      'maxSessions': defaultSessionDisplayLimit,
-      'showTitle': true,
-      'itemWidth': 280.0,
-      'itemHeight': 96.0,
-      'gap': 12.0,
-      'fitRows': true,
-      'density': 'normal',
-    },
-    'shortcuts' => {
-      'showTitle': true,
-      'appearance': 'plain',
-      'iconSize': 'max',
-      'gapX': 16.0,
-      'gapY': 16.0,
-      'labels': false,
-      'columns': 'auto',
-      'rows': 'auto',
-      'alignment': 'center',
-    },
-    'usage' => {
-      'showTitle': true,
-      'content': 'quota',
-      'density': 'fill',
-      'alignment': 'spaceEvenly',
-    },
+    'sessions' => {'maxSessions': 6, 'columns': 'auto'},
+    'shortcuts' => {'labels': false, 'alignment': 'center', 'spacing': 8},
+    'usage' => {'content': 'quota'},
     _ => {'showTitle': true},
   };
 
@@ -1320,6 +1271,16 @@ void _validateOptions(String type, Map<String, dynamic> options) {
         !value.isFinite ||
         (allowsZero ? value < 0 : value <= 0)) {
       throw const FormatException('组件尺寸和间距无效');
+    }
+  }
+  if (options.containsKey('spacing')) {
+    final value = options['spacing'];
+    if (type != 'shortcuts' ||
+        value is! num ||
+        !value.isFinite ||
+        value < 0 ||
+        value > 16) {
+      throw const FormatException('入口间隙需为 0 到 16');
     }
   }
   if (options.containsKey('iconSize')) {

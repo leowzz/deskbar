@@ -250,6 +250,11 @@ impl Agent {
         self.changed.send_modify(|r| *r += 1);
         Ok(revision)
     }
+    pub fn rename_device(&self, id: &str, name: &str) -> Result<()> {
+        self.host.lock().unwrap().rename_device(id, name)?;
+        self.changed.send_modify(|r| *r += 1);
+        Ok(())
+    }
     pub fn set_permissions(&self, id: &str, permissions: Permissions) -> Result<()> {
         self.host.lock().unwrap().set_permissions(id, permissions)?;
         self.changed.send_modify(|r| *r += 1);
@@ -389,6 +394,7 @@ fn router(agent: Agent) -> Router {
     Router::new()
         .route("/v1/pairing/request", post(request_pairing))
         .route("/v1/pairing/status", post(claim_pairing))
+        .route("/v1/device/identity", post(register_device_identity))
         .route("/v1/snapshot", get(snapshot))
         .route("/v1/events", get(events))
         .route("/v1/commands", post(command))
@@ -403,6 +409,12 @@ struct PairInput {
     secret: String,
     claim: String,
     name: String,
+    #[serde(default)]
+    device_identity: Option<String>,
+}
+#[derive(Deserialize)]
+struct DeviceIdentityInput {
+    device_identity: String,
 }
 #[derive(Deserialize)]
 struct ClaimInput {
@@ -415,14 +427,30 @@ fn error(status: StatusCode, message: &str) -> Response {
 }
 
 async fn request_pairing(State(agent): State<Agent>, Json(input): Json<PairInput>) -> Response {
-    match agent.host.lock().unwrap().request_pairing(
+    match agent.host.lock().unwrap().request_pairing_with_identity(
         &input.session_id,
         &input.secret,
         &input.claim,
         &input.name,
+        input.device_identity.as_deref(),
         now(),
     ) {
         Ok(value) => Json(value).into_response(),
+        Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string()),
+    }
+}
+
+async fn register_device_identity(
+    State(agent): State<Agent>,
+    headers: HeaderMap,
+    Json(input): Json<DeviceIdentityInput>,
+) -> Response {
+    let mut host = agent.host.lock().unwrap();
+    let Some(token) = bearer(&headers).filter(|token| host.authenticate(token)) else {
+        return error(StatusCode::UNAUTHORIZED, "这台设备已取消连接，请重新配对");
+    };
+    match host.register_device_identity(token, &input.device_identity) {
+        Ok(()) => Json(serde_json::json!({})).into_response(),
         Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string()),
     }
 }
@@ -635,7 +663,7 @@ async fn discovery(socket: tokio::net::UdpSocket, agent: Agent) {
 mod tests {
     use super::*;
     #[tokio::test]
-    async fn real_tls_requires_approval_and_revocation_is_immediate() {
+    async fn real_tls_requires_approval_and_repair_rotates_credentials_without_losing_layout() {
         let dir = tempfile::tempdir().unwrap();
         let host = Host::load(dir.path().into(), "电脑".into()).unwrap();
         let identity = Identity::from_key(KeyPair::generate().unwrap().serialize_pem()).unwrap();
@@ -748,7 +776,59 @@ mod tests {
         })
         .await
         .unwrap();
-        agent.revoke(id).unwrap();
+        let device_identity = deskbar_host::secret();
+        let identity_url = format!("{base}/v1/device/identity");
+        let body = serde_json::json!({"device_identity": device_identity});
+        assert_eq!(
+            client
+                .post(&identity_url)
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert!(client
+            .post(&identity_url)
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        let invite = agent.host.lock().unwrap().invite(now());
+        let new_claim = deskbar_host::secret();
+        let repair: serde_json::Value = client
+            .post(format!("{base}/v1/pairing/request"))
+            .json(&serde_json::json!({
+                "session_id":invite.session_id, "secret":invite.secret,
+                "claim":new_claim, "name":"重新连接", "device_identity":device_identity,
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(repair["existing_device_name"], "屏幕");
+        let repair_id = repair["id"].as_str().unwrap();
+        agent.approve(repair_id).unwrap();
+        let response: serde_json::Value = client
+            .post(format!("{base}/v1/pairing/status"))
+            .json(&serde_json::json!({"request_id":repair_id, "claim":new_claim}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let new_token = response["token"].as_str().unwrap();
+        assert_eq!(agent.status().devices.len(), 1);
+        assert_eq!(agent.status().devices[0].id, id);
+        assert_eq!(agent.status().devices[0].layout_revision, 1);
+        // Rotation revokes the old WSS immediately, just like removing a device.
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 let message = socket.next().await.unwrap().unwrap();
@@ -763,6 +843,25 @@ mod tests {
             client
                 .get(format!("{base}/v1/snapshot"))
                 .bearer_auth(token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert!(client
+            .get(format!("{base}/v1/snapshot"))
+            .bearer_auth(new_token)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        agent.revoke(id).unwrap();
+        assert_eq!(
+            client
+                .get(format!("{base}/v1/snapshot"))
+                .bearer_auth(new_token)
                 .send()
                 .await
                 .unwrap()

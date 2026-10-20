@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Shortcuts } from "./Shortcuts";
 import {
   call,
@@ -13,38 +13,142 @@ type Actions = {
 };
 
 export function Sharing({ device, busy, run }: Actions & { device: Device }) {
+  const allEnabled = Object.values(device.permissions).every(Boolean);
+  const allDisabled = Object.values(device.permissions).every(
+    (value) => !value,
+  );
+  function setAll(enabled: boolean) {
+    void run(async () => {
+      await call("set_permissions", {
+        id: device.id,
+        permissions: {
+          sessions: enabled,
+          quota: enabled,
+          api_usage: enabled,
+          shortcuts: enabled,
+          open: enabled,
+        },
+      });
+    });
+  }
   return (
-    <fieldset className="sharing" disabled={busy}>
-      <legend>向这台设备共享</legend>
-      {(
-        [
-          ["sessions", "近期会话"],
-          ["quota", "Codex 额度"],
-          ["api_usage", "API 用量"],
-          ["shortcuts", "快捷入口"],
-          ["open", "允许在电脑上打开"],
-        ] as [keyof Permissions, string][]
-      ).map(([key, label]) => (
-        <label key={key}>
-          <input
-            type="checkbox"
-            checked={device.permissions[key]}
-            onChange={(e) =>
-              void run(async () => {
-                await call("set_permissions", {
-                  id: device.id,
-                  permissions: {
-                    ...device.permissions,
-                    [key]: e.target.checked,
-                  },
-                });
-              })
-            }
-          />
-          <span>{label}</span>
-        </label>
-      ))}
+    <fieldset className="sharing" disabled={busy} aria-label="向这台设备共享">
+      <div className="sharing-toolbar">
+        <span>共享权限</span>
+        <div className="sharing-actions">
+          <button
+            className="text-button"
+            disabled={allEnabled}
+            onClick={() => setAll(true)}
+          >
+            全部开启
+          </button>
+          <button
+            className="text-button"
+            disabled={allDisabled}
+            onClick={() => setAll(false)}
+          >
+            全部关闭
+          </button>
+        </div>
+      </div>
+      <div className="sharing-options">
+        {(
+          [
+            ["sessions", "近期会话"],
+            ["quota", "Codex 额度"],
+            ["api_usage", "API 用量"],
+            ["shortcuts", "快捷入口"],
+            ["open", "允许在电脑上打开"],
+          ] as [keyof Permissions, string][]
+        ).map(([key, label]) => (
+          <label key={key}>
+            <input
+              type="checkbox"
+              checked={device.permissions[key]}
+              onChange={(e) =>
+                void run(async () => {
+                  await call("set_permissions", {
+                    id: device.id,
+                    permissions: {
+                      ...device.permissions,
+                      [key]: e.target.checked,
+                    },
+                  });
+                })
+              }
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
     </fieldset>
+  );
+}
+
+export function DeviceName({
+  device,
+  busy,
+  run,
+}: Actions & { device: Device }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(device.name);
+  const saving = useRef(false);
+  const cancelled = useRef(false);
+  async function save() {
+    if (busy || saving.current || cancelled.current) return;
+    const next = name.trim();
+    if (!next || next === device.name) {
+      setEditing(false);
+      return;
+    }
+    saving.current = true;
+    try {
+      await run(async () => {
+        await call("rename_device", { id: device.id, name: next });
+        setEditing(false);
+      });
+    } finally {
+      saving.current = false;
+    }
+  }
+  return editing ? (
+    <input
+      className="device-name-input"
+      aria-label="设备名称"
+      autoFocus
+      maxLength={64}
+      readOnly={busy}
+      value={name}
+      onChange={(event) => setName(event.target.value)}
+      onBlur={() => void save()}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void save();
+        } else if (event.key === "Escape" && !busy) {
+          event.preventDefault();
+          cancelled.current = true;
+          setEditing(false);
+        }
+      }}
+    />
+  ) : (
+    <h3 className="device-name">
+      <button
+        className="device-name-trigger"
+        disabled={busy}
+        aria-label={`更改 ${device.name} 的设备名`}
+        onClick={() => {
+          cancelled.current = false;
+          setName(device.name);
+          setEditing(true);
+        }}
+      >
+        {device.name}
+      </button>
+    </h3>
   );
 }
 export function WorkbenchSettings({

@@ -24,7 +24,12 @@ export interface Status {
   workbench: WorkbenchData;
   shortcuts: ShortcutConfig[];
   devices: Device[];
-  pending: { id: string; name: string; expires_at: number } | null;
+  pending: {
+    id: string;
+    name: string;
+    expires_at: number;
+    existing_device_name?: string;
+  } | null;
   addresses: string[];
   discovery_warning: string | null;
   usage_config: UsageConfig | null;

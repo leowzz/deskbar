@@ -44,23 +44,20 @@
             "source": "codex.quota"
           },
           "options": {
-            "showTitle": true,
-            "content": "quota",
-            "density": "sidebar",
-            "alignment": "spaceEvenly"
+            "content": "quota"
           },
           "placements": {
             "wide": {
-              "x": 0,
+              "x": 34,
               "y": 5,
-              "w": 7,
-              "h": 36
+              "w": 14,
+              "h": 33
             },
             "portrait": {
               "x": 0,
               "y": 10,
               "w": 16,
-              "h": 18
+              "h": 17
             }
           }
         },
@@ -73,29 +70,21 @@
             "source": "codex.sessions"
           },
           "options": {
-            "maxSessions": 20,
-            "showTitle": true,
-            "itemWidth": 280.0,
-            "itemHeight": 110.0,
-            "gap": 12.0,
-            "fitRows": true,
-            "density": "compact",
-            "appearance": "cards",
-            "columns": 2,
-            "textScale": 1.35
+            "maxSessions": 6,
+            "columns": 2
           },
           "placements": {
             "wide": {
-              "x": 7,
+              "x": 0,
               "y": 5,
-              "w": 41,
-              "h": 36
+              "w": 34,
+              "h": 34
             },
             "portrait": {
               "x": 0,
-              "y": 28,
+              "y": 27,
               "w": 16,
-              "h": 54
+              "h": 47
             }
           }
         },
@@ -108,28 +97,22 @@
             "source": "host.shortcuts"
           },
           "options": {
-            "showTitle": true,
-            "iconSize": "max",
-            "gapX": 16.0,
-            "gapY": 16.0,
             "labels": false,
-            "columns": "auto",
-            "rows": 1,
             "alignment": "center",
-            "appearance": "dock"
+            "spacing": 8
           },
           "placements": {
             "wide": {
               "x": 0,
-              "y": 41,
+              "y": 39,
               "w": 48,
-              "h": 7
+              "h": 9
             },
             "portrait": {
               "x": 0,
-              "y": 82,
+              "y": 74,
               "w": 16,
-              "h": 14
+              "h": 22
             }
           }
         }

@@ -40,6 +40,10 @@
         "version": "example-resource-version",
         "title": "继续实现工作台",
         "project": "deskbar",
+        "repo": "deskbar",
+        "branch": "main",
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
         "status": "running",
         "updated_at": 1792123200
       }

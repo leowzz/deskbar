@@ -114,7 +114,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(workspace.pages.length, 4);
     expect(workspace.activePage.widgets.length, 4);
-    final status = workspace.activePage.widgets.first;
+    final status = workspace.activePage.widgets.singleWhere(
+      (w) => w.type == 'statusBar',
+    );
     await tester.tap(find.byKey(ValueKey('outline-${status.id}')));
     await tester.pumpAndSettle();
     final field = find.byKey(ValueKey('title-${status.id}-label'));
@@ -128,7 +130,12 @@ void main() {
     workspace.redo();
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
-    expect(repository.saved!.activePage.widgets.first.options['label'], '我的副屏');
+    expect(
+      repository.saved!.activePage.widgets
+          .singleWhere((w) => w.type == 'statusBar')
+          .options['label'],
+      '我的副屏',
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     connection.dispose();
@@ -144,28 +151,41 @@ void main() {
       final created = workspace.activePage;
       final reloaded = LayoutDocument.fromJson(workspace.document.toJson());
       expect(reloaded.activePage.widgets.map((w) => w.type), [
-        'statusBar',
-        'usage',
         'sessions',
+        'usage',
         'shortcuts',
+        'statusBar',
       ]);
-      expect(created.widgets.first.binding, isEmpty);
-      expect(
-        created.widgets.skip(1).every((w) => w.binding['hostId'] == 'host'),
-        isTrue,
-      );
-      expect(
-        created.widgets.map((w) => w.options),
-        dashboard().activePage.widgets.map((w) => w.options),
-      );
-      for (final orientation in LayoutOrientation.values) {
-        expect(
-          created.widgets.map((w) => w.placementFor(orientation)),
-          dashboard().activePage.widgets.map(
-            (w) => w.placementFor(orientation),
-          ),
+      final defaults = LayoutDocument.initial().activePage;
+      for (final widget in created.widgets) {
+        final template = defaults.widgets.singleWhere(
+          (w) => w.type == widget.type,
         );
+        final example = dashboard().activePage.widgets.singleWhere(
+          (w) => w.type == widget.type,
+        );
+        expect(widget.id, isNot(template.id));
+        expect(widget.binding, {
+          ...template.binding,
+          if (widget.type != 'statusBar') 'hostId': 'host',
+        });
+        expect(widget.options, template.options);
+        expect(widget.options, example.options);
+        for (final orientation in LayoutOrientation.values) {
+          expect(
+            widget.placementFor(orientation),
+            template.placementFor(orientation),
+          );
+          expect(
+            widget.placementFor(orientation),
+            example.placementFor(orientation),
+          );
+        }
       }
+      expect(
+        workspace.pages.take(3).map((p) => p.toJson()),
+        LayoutDocument.initial().pages.map((p) => p.toJson()),
+      );
       workspace.undo();
       expect(workspace.document.toJson(), before);
       workspace.redo();
@@ -215,6 +235,68 @@ void main() {
       connection.dispose();
     },
   );
+
+  for (final scenario in [
+    (const Size(164, 240), 1.0),
+    (const Size(200, 240), 1.0),
+    (const Size(264, 346), 1.0),
+    (const Size(164, 300), 1.8),
+  ]) {
+    testWidgets('narrow quota keeps three sections at $scenario', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scenario.$2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: rawBlockTheme(),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox.fromSize(
+                size: scenario.$1,
+                child: QuotaSidebar(
+                  quota: WorkQuota({
+                    'label': '周额度',
+                    'remaining_percent': 72,
+                    'resets_at': 1793090400,
+                  }),
+                  now: 1792500000,
+                  fresh: true,
+                  numberKey: const ValueKey('remaining'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byKey(const ValueKey('quota-reset-summary')), findsNothing);
+      final main = tester.getRect(find.byKey(const ValueKey('remaining')));
+      final reset = tester.getRect(find.byKey(const ValueKey('quota-reset')));
+      final countdown = tester.getRect(
+        find.byKey(const ValueKey('quota-countdown')),
+      );
+      expect(main.bottom, lessThan(reset.top));
+      expect(main.bottom, lessThan(countdown.top));
+      expect(reset.right, lessThan(countdown.left));
+      expect(find.text('重置时间'), findsOneWidget);
+      expect(find.text('剩余时间'), findsOneWidget);
+      final bounds = tester.getRect(find.byType(QuotaSidebar));
+      for (final rect in [main, reset, countdown]) {
+        expect(bounds.contains(rect.topLeft), isTrue);
+        expect(bounds.contains(rect.bottomRight), isTrue);
+      }
+      if (scenario.$1.width <= 200) {
+        expect(
+          tester
+              .widget<Text>(find.byKey(const ValueKey('quota-countdown')))
+              .style!
+              .fontSize,
+          lessThan(20),
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final scenario in [
     (const Size(1600, 720), 1.0, Brightness.light),

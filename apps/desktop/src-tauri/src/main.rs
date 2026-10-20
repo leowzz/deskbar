@@ -63,6 +63,13 @@ fn revoke_device(state: State<AgentState>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn rename_device(state: State<AgentState>, id: String, name: String) -> Result<(), String> {
+    state
+        .agent()?
+        .rename_device(&id, &name)
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
 fn set_permissions(
     state: State<AgentState>,
     id: String,
@@ -321,6 +328,7 @@ fn main() {
             cancel_pairing,
             approve_device,
             revoke_device,
+            rename_device,
             set_permissions,
             save_shortcut,
             remove_shortcut,

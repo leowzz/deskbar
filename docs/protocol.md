@@ -57,6 +57,12 @@ mDNS 留作后续 Adapter。二维码与手工地址始终可用。客户端隔�
 
 配对成功签发独立的 256 位随机设备令牌。Android 用系统安全存储保护令牌，Host 保存摘要与设备许可。撤销设备立即关闭相关连接；下一次请求重新检查许可。
 
+新设备的配对名称默认取 Android 厂商与型号（最多 64 字符），型号不可用时回退为「Android 工作台」；不读取序列号等唯一硬件标识。电脑可修改已配对设备的本地显示名，重连不覆盖该名称，身份、令牌与权限不变。设备卡片的全部开启 / 关闭一次保存该设备五项权限，共用单项许可更新与快照裁剪流程。
+
+Android 为每个 Host 生成独立的 256 位随机 `device_identity`，与连接记录分开使用 Keystore 加密保存，忘记连接或收到撤权只移除连接记录。配对请求可携带该凭据；Host 只保存其 SHA-256 摘要，不在设备列表或快照中返回。匹配已有记录时仍需电脑审批，批准后复用设备 ID、名称、配对日期、权限和布局，仅换发连接令牌；原令牌及原 WSS 立即失效。每次审批请求使用独立 request ID，不等同于复用的设备 ID。不按名称、型号或 IP 合并。
+
+已配对的旧客户端升级后，在核验 Host 快照后以 Bearer 令牌调用 `POST /v1/device/identity` 补登记身份；只允许从未绑定身份的记录登记，重复登记相同身份幂等，不能覆盖现有身份或占用其他设备的身份。缺少身份的旧请求仍按新设备处理。电脑移除设备后同时移除身份关联并取消其待审批重连，之后连接从默认权限开始。App 清除数据 / 卸载或未迁移就已忘记的旧连接，不承诺识别原记录。
+
 HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android。同一密钥下续签证书不改变信任。不跟随跨主机重定向；凭据不放 URL 或日志。后续所有受保护请求均从设备凭据推导身份。
 
 参考：[SPAKE2+ RFC 9383](https://www.rfc-editor.org/rfc/rfc9383)。这是设计选型，连接原型完成前不宣称配对方案已验证。
@@ -139,7 +145,7 @@ HTTPS / WSS 固定主机 SPKI，计划支持 TLS 1.2 / 1.3 以兼容旧 Android�
 ## v1 工作台实现子集
 
 - 时间为 UTC Unix 秒。`sources` 的 `source_id` 为 `codex.sessions`、`codex.quota` 或 `sub2api.usage`，包含 `health`（ready / error）、安全提示 `message`、`observed_at` 和 `fresh_until`。会话每五秒采集、二十秒有效；额度每两分钟采集、一百八十秒有效；API 用量每分钟采集、一百八十秒有效，429 按 Retry-After 退避。失败保留最后值和原时间，显示失败而非伪造刷新。
-- `sessions`：`session_id`、`version`、`title`、`project`、`status`、`updated_at`。最多 40 个；`session_total` 是未归档主会话总数。`quotas`：`id`、`label`、`remaining_percent`、`resets_at`、`window_minutes`；缺失字段不补造额度。`shortcuts`：`shortcut_id`、`version`、`name`、`kind`、`icon_png`。原始 URL / 应用路径仅在电脑端设置界面与配置中存在。
+- `sessions`：`session_id`、`version`、`title`、`project`、`status`、`updated_at`，可选 `repo`、`branch`、`model`、`reasoning_effort`。旧来源缺失字段时省略或为空；`repo` 只包含仓库短名称，不发送完整路径、远程 URL 或凭据。最多 40 个；`session_total` 是未归档主会话总数。`quotas`：`id`、`label`、`remaining_percent`、`resets_at`、`window_minutes`；缺失字段不补造额度。`shortcuts`：`shortcut_id`、`version`、`name`、`kind`、`icon_png`。原始 URL / 应用路径仅在电脑端设置界面与配置中存在。
 - `icon_png` 为随授权入口快照传送的标准 Base64 PNG，缺失时按空字符串兼容。电脑端读取应用图标或用户选择的图片，统一转换为 64 px PNG，重新编码以清除元数据；配置仅接受不超过 256 px、解码后每张 32 KiB、总计 512 KiB 的 PNG。旧入口在启动后自动补图标，失败保留空值；Android 缓存与快照一并受 Keystore 保护，缺失或无效图片回退到通用图形。无需额外图标资源接口。图标变更不改变动作版本；名称、类型或打开目标变更仍使旧动作版本失效。
 - `api_usage` 是 API 聚合用量数组，包含 `id`、`label`、`actual_cost_micros`（货币单位的百万分之一）、`currency`、`token_count`、`tpm`、`window_start`、`window_end`。目前来源为 Sub2API 今日统计，窗口按电脑配置的 IANA 时区计算，需与上游统计时区一致；跨日旧值不能视为新一天数据。登录邮箱、站点配置、密码和令牌不在设备快照中。未配置或未授权时数组为空；旧客户端可忽略新增字段。
 - 设备许可为 `sessions`、`quota`、`api_usage`、`shortcuts` 和 `open`，默认 false；旧记录新增的 `api_usage` 默认关闭，保留其余原许可。读取快照时按许可清空集合；`open` 加对应读取许可才公布 `open_session` / `open_shortcut` 能力。撤销单项共享会推送完整裁剪快照，替换 Android 的加密缓存。

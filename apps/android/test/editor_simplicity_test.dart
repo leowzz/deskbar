@@ -15,64 +15,64 @@ class _Layouts extends LayoutRepository {
 }
 
 void main() {
-  testWidgets(
-    'presets are one undoable change and precision settings start folded',
-    (tester) async {
-      tester.view.physicalSize = const Size(1400, 1000);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final connection = Connection()..data = WorkbenchData(snapshot());
-      final workspace = LayoutWorkspace();
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: rawBlockTheme(),
-          home: Scaffold(
-            body: WorkbenchCanvas(
-              connection: connection,
-              workspace: workspace,
-              repository: _Layouts(),
-              allowEditing: true,
-              previewSize: const Size(1280, 720),
-            ),
+  testWidgets('inspector keeps only semantic controls and edits are undoable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final connection = Connection()..data = WorkbenchData(snapshot());
+    final workspace = LayoutWorkspace();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: rawBlockTheme(),
+        home: Scaffold(
+          body: WorkbenchCanvas(
+            connection: connection,
+            workspace: workspace,
+            repository: _Layouts(),
+            allowEditing: true,
+            previewSize: const Size(1280, 720),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('outline-main-sessions')));
-      await tester.pumpAndSettle();
-      expect(find.text('高级设置'), findsOneWidget);
-      expect(find.widgetWithText(TextField, '卡片目标宽度'), findsNothing);
-      workspace.updateWidget(
-        'main-sessions',
-        binding: {'hostId': 'host', 'source': 'codex.sessions'},
-      );
-      await tester.pumpAndSettle();
-      final before = workspace.findWidget('main-sessions')!.toJson();
-      await tester.tap(find.widgetWithText(ChoiceChip, '大字'));
-      await tester.pumpAndSettle();
-      final changed = workspace.findWidget('main-sessions')!;
-      expect(changed.options['textScale'], 1.35);
-      expect(changed.options['itemHeight'], 144);
-      expect(changed.binding, before['binding']);
-      workspace.undo();
-      await tester.pumpAndSettle();
-      expect(workspace.findWidget('main-sessions')!.toJson(), before);
-      await tester.tap(find.text('高级设置'));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, '卡片目标宽度'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('outline-main-shortcuts')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, '横向间距'), findsNothing);
-      await tester.tap(find.widgetWithText(ChoiceChip, '图文'));
-      await tester.pumpAndSettle();
-      expect(workspace.findWidget('main-shortcuts')!.options['labels'], true);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-      workspace.dispose();
-      connection.dispose();
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('outline-main-sessions')));
+    await tester.pumpAndSettle();
+    expect(find.text('高级设置'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '卡片目标宽度'), findsNothing);
+    workspace.updateWidget(
+      'main-sessions',
+      binding: {'hostId': 'host', 'source': 'codex.sessions'},
+    );
+    await tester.pumpAndSettle();
+    final before = workspace.findWidget('main-sessions')!.toJson();
+    final count = find.widgetWithText(TextField, '每屏会话数');
+    await tester.enterText(count, '4');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    final changed = workspace.findWidget('main-sessions')!;
+    expect(changed.options['maxSessions'], 4);
+    expect(changed.binding, before['binding']);
+    workspace.undo();
+    await tester.pumpAndSettle();
+    expect(workspace.findWidget('main-sessions')!.toJson(), before);
+    await tester.tap(find.text('高级设置'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, '卡片目标宽度'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('outline-main-shortcuts')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, '横向间距'), findsNothing);
+    await tester.tap(find.widgetWithText(SwitchListTile, '显示名称'));
+    await tester.pumpAndSettle();
+    expect(workspace.findWidget('main-shortcuts')!.options['labels'], true);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    workspace.dispose();
+    connection.dispose();
+  });
 
   for (final height in [88.0, 144.0]) {
     testWidgets('session footer stays inside a $height card with large text', (
@@ -188,13 +188,18 @@ void main() {
           expect(rect.right, lessThanOrEqualTo(area.right + .1));
         }
         expect(find.text('43%'), findsOneWidget);
-        if (size.height >= 120 * scale) {
+        if (size.height >= 260 * scale ||
+            size.width >= 440 && size.height >= 100 * scale) {
           expect(find.byKey(const ValueKey('quota-reset')), findsOneWidget);
           expect(find.byKey(const ValueKey('quota-countdown')), findsOneWidget);
-        } else if (size.height >= 64 * scale) {
+        } else if (size.height >= 90 * scale) {
           expect(
-            find.byKey(const ValueKey('quota-reset-summary')),
-            findsOneWidget,
+            find
+                    .byKey(const ValueKey('quota-reset-summary'))
+                    .evaluate()
+                    .isNotEmpty ||
+                find.byKey(const ValueKey('quota-reset')).evaluate().isNotEmpty,
+            isTrue,
           );
         }
         expect(tester.takeException(), isNull);

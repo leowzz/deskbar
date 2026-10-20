@@ -20,14 +20,6 @@ String widgetTypeName(String type) => switch (type) {
   _ => '未知组件',
 };
 
-String _shortcutRowsValue(dynamic value) {
-  if (value is num && value.isFinite && value == value.round()) {
-    final row = value.round();
-    if (row >= 1 && row <= 12) return '$row';
-  }
-  return 'auto';
-}
-
 List<Widget> _inspectorFields(List<Widget> fields, {double gap = 12}) => [
   for (var i = 0; i < fields.length; i++) ...[
     fields[i],
@@ -967,36 +959,45 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       if (!widget.allowEditing) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _reportDisplay());
       }
-      return Listener(
-        onPointerSignal: (event) {
-          if (event is PointerScrollEvent &&
-              !workspace.editing &&
-              event.scrollDelta.dx.abs() > event.scrollDelta.dy.abs() &&
-              event.scrollDelta.dx.abs() > 8 &&
-              DateTime.now().difference(_lastWheel).inMilliseconds > 550) {
-            _lastWheel = DateTime.now();
-            _step(event.scrollDelta.dx > 0 ? 1 : -1);
-          }
-        },
-        child: PageStorage(
-          bucket: storage,
-          child: PageView.builder(
-            controller: pages,
-            physics: workspace.editing
-                ? const NeverScrollableScrollPhysics()
-                : const PageScrollPhysics(),
-            onPageChanged: (index) {
-              if (!_syncing && index < workspace.pages.length) {
-                _navigate(workspace.pages[index].id);
-              }
-            },
-            itemCount: workspace.pages.length,
-            itemBuilder: (context, index) => _page(workspace.pages[index]),
+      return PageStorage(
+        bucket: storage,
+        child: PageView.builder(
+          controller: pages,
+          physics: workspace.editing
+              ? const NeverScrollableScrollPhysics()
+              : const PageScrollPhysics(),
+          onPageChanged: (index) {
+            if (!_syncing && index < workspace.pages.length) {
+              _navigate(workspace.pages[index].id);
+            }
+          },
+          itemCount: workspace.pages.length,
+          itemBuilder: (context, index) => Listener(
+            onPointerSignal: _pagePointerSignal,
+            child: _page(workspace.pages[index]),
           ),
         ),
       );
     },
   );
+
+  void _pagePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        workspace.editing ||
+        event.scrollDelta.dx.abs() <= event.scrollDelta.dy.abs()) {
+      return;
+    }
+    // Inner scrollables register first. Claim remaining horizontal signals even
+    // during inertia cooldown, before PageView can handle them independently.
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (event.scrollDelta.dx.abs() > 8 &&
+          DateTime.now().difference(_lastWheel).inMilliseconds > 550) {
+        _lastWheel = DateTime.now();
+        _step(event.scrollDelta.dx > 0 ? 1 : -1);
+      }
+    });
+  }
+
   Widget _page(LayoutPage page) {
     final visible = page.widgets.where((w) => w.visible).toList();
     return Padding(
@@ -1482,56 +1483,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     },
   );
 
-  Widget _presetChips(
-    LayoutWidget w,
-    Map<String, Map<String, dynamic>> presets,
-  ) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      for (final preset in presets.entries)
-        ChoiceChip(
-          label: Text(preset.key),
-          selected: preset.value.entries.every(
-            (entry) => w.options[entry.key] == entry.value,
-          ),
-          onSelected: (_) =>
-              workspace.updateWidget(w.id, options: preset.value),
-        ),
-    ],
-  );
-
   List<Widget> _basicWidgetControls(LayoutWidget w) => [
     if (w.type == 'sessions') ...[
-      _presetChips(w, const {
-        '紧凑': {
-          'appearance': 'cards',
-          'density': 'compact',
-          'itemWidth': 260.0,
-          'itemHeight': 88.0,
-          'gap': 8.0,
-          'textScale': 1.0,
-          'fitRows': true,
-        },
-        '标准': {
-          'appearance': 'cards',
-          'density': 'normal',
-          'itemWidth': 300.0,
-          'itemHeight': 112.0,
-          'gap': 12.0,
-          'textScale': 1.0,
-          'fitRows': true,
-        },
-        '大字': {
-          'appearance': 'cards',
-          'density': 'normal',
-          'itemWidth': 360.0,
-          'itemHeight': 144.0,
-          'gap': 12.0,
-          'textScale': 1.35,
-          'fitRows': true,
-        },
-      }),
       _choice(w, 'columns', '排列列数', const {
         'auto': '自动',
         '1': '1 列',
@@ -1544,7 +1497,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       KeyedSubtree(
         key: ValueKey('session-limit-${w.id}'),
         child: _slider(
-          '最多显示会话数',
+          '每屏会话数',
           sessionDisplayLimit(w.options).toDouble(),
           1,
           maximumSessionDisplayLimit.toDouble(),
@@ -1555,41 +1508,35 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       ),
     ],
     if (w.type == 'shortcuts') ...[
-      _presetChips(w, const {
-        '图标': {
-          'appearance': 'plain',
-          'iconSize': 'max',
-          'labels': false,
-          'rows': 'auto',
-          'gapX': 16.0,
-          'gapY': 16.0,
-          'alignment': 'center',
-        },
-        '图文': {
-          'appearance': 'plain',
-          'iconSize': 'max',
-          'labels': true,
-          'rows': 'auto',
-          'gapX': 16.0,
-          'gapY': 16.0,
-          'alignment': 'center',
-        },
-        '底部栏': {
-          'appearance': 'dock',
-          'iconSize': 'max',
-          'labels': false,
-          'rows': 1,
-          'gapX': 16.0,
-          'gapY': 16.0,
-          'alignment': 'center',
-        },
-      }),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('显示名称'),
+        value: w.options['labels'] == true,
+        onChanged: (v) => workspace.updateWidget(w.id, options: {'labels': v}),
+      ),
       _choice(w, 'alignment', '对齐方式', const {
         'left': '左对齐',
         'center': '居中对齐',
         'spaceEvenly': '均匀分布',
         'right': '右对齐',
-      }, 'center'),
+      }, 'spaceEvenly'),
+      if ((w.options['alignment'] ?? 'spaceEvenly') == 'center')
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('图标间隙 · ${shortcutSpacing(w.options).round()} px'),
+            Slider(
+              key: ValueKey('shortcut-spacing-${w.id}'),
+              value: shortcutSpacing(w.options),
+              min: 0,
+              max: 16,
+              divisions: 16,
+              label: '${shortcutSpacing(w.options).round()} px',
+              onChanged: (v) =>
+                  workspace.updateWidget(w.id, options: {'spacing': v.round()}),
+            ),
+          ],
+        ),
     ],
     if (w.type == 'usage') ...[
       _choice(w, 'content', '显示内容', const {
@@ -1597,20 +1544,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         'api': 'API 用量',
       }, 'quota'),
       _bindingControls(w, resourceOnly: true),
-      Wrap(
-        spacing: 8,
-        children: [
-          for (final entry in const {'fill': '完整信息', 'compact': '简洁显示'}.entries)
-            ChoiceChip(
-              label: Text(entry.value),
-              selected: entry.key == 'compact'
-                  ? w.options['density'] == 'compact'
-                  : w.options['density'] != 'compact',
-              onSelected: (_) =>
-                  workspace.updateWidget(w.id, options: {'density': entry.key}),
-            ),
-        ],
-      ),
     ],
     if (w.type == 'statusBar') ...[
       _WidgetNameField(
@@ -1624,6 +1557,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       for (final entry in const {
         'showClock': '显示日期与时间',
         'showConnection': '显示连接状态',
+        'showThemeButton': '显示主题切换',
+        'showSettingsButton': '显示设置入口',
       }.entries)
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -1660,277 +1595,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           ),
           if (w.type != 'statusBar')
             _bindingControls(w, sourceOnly: w.type != 'shortcuts'),
-        ]),
-      ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _inspectorFields([
-          if (w.type == 'statusBar') ...[
-            for (final entry in const {
-              'showSeconds': '显示秒数',
-              'showThemeButton': '显示主题切换',
-              'showSettingsButton': '显示设置入口',
-            }.entries)
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(entry.value),
-                value: w.options[entry.key] != false,
-                onChanged: (v) =>
-                    workspace.updateWidget(id, options: {entry.key: v}),
-              ),
-          ],
-          if (w.type == 'sessions') ...[
-            _choice(w, 'appearance', '卡片外观', const {
-              'plain': '简洁',
-              'cards': '边框卡片',
-            }, 'plain'),
-            if (w.options['appearance'] == 'cards')
-              _slider(
-                '文字大小',
-                ((w.options['textScale'] as num?)?.toDouble() ?? 1) * 100,
-                100,
-                200,
-                (v) => workspace.updateWidget(
-                  id,
-                  options: {'textScale': v.round() / 100},
-                ),
-                suffix: '%',
-              ),
-            _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
-            _optionSlider(
-              w,
-              'itemHeight',
-              '卡片目标高度',
-              w.options['density'] == 'compact'
-                  ? sessionCompactMinimumHeight
-                  : sessionStandardMinimumHeight,
-              400,
-              96,
-            ),
-            _optionSlider(w, 'gap', '卡片间距', 0, 40, 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              isThreeLine: true,
-              title: const Text('自动铺满完整行'),
-              subtitle: const Text('根据设备布局尺寸计算完整行数，文字缩放只影响卡片内容排版。'),
-              value: w.options['fitRows'] != false,
-              onChanged: (v) =>
-                  workspace.updateWidget(id, options: {'fitRows': v}),
-            ),
-            DropdownButtonFormField<String>(
-              key: ValueKey('density-$id-${w.options['density']}'),
-              initialValue: w.options['density'] == 'compact'
-                  ? 'compact'
-                  : 'normal',
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '会话信息'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'normal',
-                  child: Text(
-                    '标准',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'compact',
-                  child: Text(
-                    '精简',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                final minimum = v == 'compact'
-                    ? sessionCompactMinimumHeight
-                    : sessionStandardMinimumHeight;
-                final current = (w.options['itemHeight'] as num?)?.toDouble();
-                workspace.updateWidget(
-                  id,
-                  options: {
-                    'density': v,
-                    if (current != null && current < minimum)
-                      'itemHeight': minimum,
-                  },
-                );
-              },
-            ),
-          ],
-          if (w.type == 'shortcuts') ...[
-            _choice(w, 'appearance', '入口外观', const {
-              'plain': '简洁',
-              'dock': '底部栏',
-            }, 'plain'),
-            DropdownButtonFormField<String>(
-              key: ValueKey('icon-size-mode-$id-${w.options['iconSize']}'),
-              initialValue: w.options['iconSize'] == 'max' ? 'max' : 'fixed',
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '图标尺寸'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'fixed',
-                  child: Text(
-                    '固定尺寸',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'max',
-                  child: Text(
-                    '自适应最大',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) => workspace.updateWidget(
-                id,
-                options: {
-                  'iconSize': v == 'max'
-                      ? 'max'
-                      : (w.options['iconSize'] is num
-                            ? w.options['iconSize']
-                            : 56.0),
-                },
-              ),
-            ),
-            if (w.options['iconSize'] != 'max')
-              _optionSlider(w, 'iconSize', '固定图标大小', 24, 200, 56),
-            _optionSlider(w, 'gapX', '横向间距', 0, 64, 16),
-            _optionSlider(w, 'gapY', '纵向间距', 0, 64, 16),
-            DropdownButtonFormField<String>(
-              key: ValueKey('shortcut-rows-$id-${w.options['rows']}'),
-              initialValue: _shortcutRowsValue(w.options['rows']),
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '行数'),
-              items: [
-                const DropdownMenuItem(
-                  value: 'auto',
-                  child: Text(
-                    '自动',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                for (var row = 1; row <= 12; row++)
-                  DropdownMenuItem(
-                    value: '$row',
-                    child: Text(
-                      '$row 行',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: (v) => workspace.updateWidget(
-                id,
-                options: {'rows': v == 'auto' ? 'auto' : int.parse(v!)},
-              ),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('显示名称'),
-              value: w.options['labels'] != false,
-              onChanged: (v) =>
-                  workspace.updateWidget(id, options: {'labels': v}),
-            ),
-          ],
-          if (w.type == 'usage' && w.options['content'] == 'api') ...[
-            DropdownButtonFormField<String>(
-              key: ValueKey('usage-density-$id-${w.options['density']}'),
-              initialValue: switch (w.options['density']) {
-                'compact' => 'compact',
-                'standard' => 'standard',
-                'sidebar' when w.options['content'] != 'api' => 'sidebar',
-                _ => 'fill',
-              },
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '内容布局'),
-              items: [
-                if (w.options['content'] != 'api')
-                  const DropdownMenuItem(value: 'sidebar', child: Text('额度侧栏')),
-                DropdownMenuItem(
-                  value: 'fill',
-                  child: Text(
-                    '自适应填充',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'standard',
-                  child: Text(
-                    '标准',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'compact',
-                  child: Text(
-                    '紧凑',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) =>
-                  workspace.updateWidget(id, options: {'density': v ?? 'fill'}),
-            ),
-            DropdownButtonFormField<String>(
-              key: ValueKey('usage-alignment-$id-${w.options['alignment']}'),
-              initialValue: switch (w.options['alignment']) {
-                'top' => 'top',
-                'center' => 'center',
-                'bottom' => 'bottom',
-                _ => 'spaceEvenly',
-              },
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '内容对齐'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'top',
-                  child: Text(
-                    '顶部对齐',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'center',
-                  child: Text(
-                    '居中对齐',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'spaceEvenly',
-                  child: Text(
-                    '均匀分布',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'bottom',
-                  child: Text(
-                    '底部对齐',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) => workspace.updateWidget(
-                id,
-                options: {'alignment': v ?? 'spaceEvenly'},
-              ),
-            ),
-          ],
         ]),
       ),
       Column(
@@ -1992,8 +1656,10 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               ExpansionTile(
                 key: PageStorageKey('advanced-$id'),
                 tilePadding: EdgeInsets.zero,
+                // Floating input labels extend above their field bounds.
+                childrenPadding: const EdgeInsets.only(top: 16, bottom: 8),
                 title: const Text('高级设置'),
-                subtitle: const Text('位置、来源与精细参数'),
+                subtitle: const Text('名称、位置与来源'),
                 children: [
                   PageStorage(
                     bucket: precisionStorage,
@@ -2001,7 +1667,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                       spacing: 16,
                       runSpacing: 16,
                       children: [
-                        for (final group in groups.take(2))
+                        for (final group in groups.take(1))
                           SizedBox(width: columnWidth, child: group),
                       ],
                     ),
@@ -2151,7 +1817,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           KeyedSubtree(
             key: ValueKey('session-limit-${w.id}'),
             child: _slider(
-              '最多显示会话数',
+              '每屏会话数',
               sessionDisplayLimit(w.options).toDouble(),
               1,
               maximumSessionDisplayLimit.toDouble(),
@@ -2214,25 +1880,6 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
           ),
         ],
       ],
-    );
-  }
-
-  Widget _optionSlider(
-    LayoutWidget w,
-    String key,
-    String label,
-    double min,
-    double max,
-    double fallback,
-  ) {
-    final raw = (w.options[key] as num?)?.toDouble() ?? fallback;
-    final value = raw.isFinite ? raw.clamp(min, max).toDouble() : min;
-    return _slider(
-      label,
-      value,
-      min,
-      max,
-      (v) => workspace.updateWidget(w.id, options: {key: v.roundToDouble()}),
     );
   }
 

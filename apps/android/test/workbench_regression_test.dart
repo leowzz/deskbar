@@ -48,6 +48,7 @@ LayoutDocument _pages({bool hidden = false, String? hostId}) => LayoutDocument(
               ...LayoutWorkspace.defaultOptions(type),
               'itemWidth': 150.0,
               'itemHeight': 140.0,
+              'maxSessions': 20,
               'fitRows': false,
             },
             placements: {
@@ -155,7 +156,7 @@ void main() {
       final workspace = LayoutWorkspace(document: document);
       addTearDown(workspace.dispose);
       await mount(tester, document, workspace: workspace, manySessions: true);
-      final grid = find.byKey(const PageStorageKey('sessions-first-widget'));
+      final grid = find.byType(GridView);
       final scrollable = tester.state<ScrollableState>(
         find.descendant(of: grid, matching: find.byType(Scrollable)),
       );

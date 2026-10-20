@@ -6,12 +6,13 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import org.json.JSONObject
 import java.security.KeyStore
+import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** One paired computer, encrypted by a non-exportable Android Keystore key. */
+/** Connection and per-computer identities, encrypted by a non-exportable Keystore key. */
 class CredentialStore(context: Context) {
     private val prefs = context.getSharedPreferences("deskbar-connection", Context.MODE_PRIVATE)
     private fun key(): SecretKey {
@@ -22,19 +23,32 @@ class CredentialStore(context: Context) {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }
-    @Synchronized fun load(): JSONObject? {
-        val encoded = prefs.getString("host", null) ?: return null
+    private fun read(entry: String): JSONObject? {
+        val encoded = prefs.getString(entry, null) ?: return null
         val packed = JSONObject(encoded)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(packed.getString("iv"), Base64.NO_WRAP)))
         return JSONObject(String(cipher.doFinal(Base64.decode(packed.getString("data"), Base64.NO_WRAP)), Charsets.UTF_8))
     }
-    @Synchronized fun save(host: JSONObject) {
+    private fun write(entry: String, value: JSONObject) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val packed = JSONObject().put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .put("data", Base64.encodeToString(cipher.doFinal(host.toString().toByteArray(Charsets.UTF_8)), Base64.NO_WRAP))
-        check(prefs.edit().putString("host", packed.toString()).commit()) { "未能保存连接，请重试" }
+            .put("data", Base64.encodeToString(cipher.doFinal(value.toString().toByteArray(Charsets.UTF_8)), Base64.NO_WRAP))
+        check(prefs.edit().putString(entry, packed.toString()).commit()) { "未能保存连接，请重试" }
     }
-    @Synchronized fun clear() { check(prefs.edit().clear().commit()) { "未能移除连接，请重试" } }
+    @Synchronized fun load(): JSONObject? = read("host")
+    @Synchronized fun save(host: JSONObject) = write("host", host)
+    /** Pairing identity is private to each computer and survives forgetting its connection. */
+    @Synchronized fun identity(hostId: String): String {
+        val identities = read("identities") ?: JSONObject()
+        if (identities.has(hostId)) return identities.getString(hostId)
+        val identity = Base64.encodeToString(
+            ByteArray(32).also { SecureRandom().nextBytes(it) },
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+        )
+        write("identities", identities.put(hostId, identity))
+        return identity
+    }
+    @Synchronized fun clear() { check(prefs.edit().remove("host").commit()) { "未能移除连接，请重试" } }
 }

@@ -157,15 +157,29 @@ class Connection extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> pair(String invitation, String name) async {
+  Future<String> defaultDeviceName() async {
+    try {
+      final name = await _channel.invokeMethod<String>('deviceName');
+      if (name != null && name.trim().isNotEmpty) return name.trim();
+    } on PlatformException {
+      // Model information is optional; pairing remains available.
+    } on MissingPluginException {
+      // Previews and older native bridges may not provide model information.
+    }
+    return 'Android 工作台';
+  }
+
+  Future<void> pair(String invitation, [String? name]) async {
     final attempt = ++_attempt;
     busy = true;
     error = null;
     notifyListeners();
     try {
+      final deviceName = name ?? await defaultDeviceName();
+      if (attempt != _attempt || _disposed) return;
       await _channel.invokeMethod<void>('pair', {
         'invitation': invitation,
-        'name': name,
+        'name': deviceName,
       });
     } on PlatformException catch (e) {
       if (attempt != _attempt) return;

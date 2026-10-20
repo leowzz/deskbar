@@ -25,9 +25,14 @@ class WorkSession {
       version = v['version'] as String,
       title = v['title'] as String,
       project = v['project'] as String,
+      repo = v['repo'] as String? ?? '',
+      branch = v['branch'] as String? ?? '',
+      model = v['model'] as String? ?? '',
+      reasoningEffort = v['reasoning_effort'] as String? ?? '',
       status = v['status'] as String,
       updatedAt = v['updated_at'] as int;
   final String id, version, title, project, status;
+  final String repo, branch, model, reasoningEffort;
   final int updatedAt;
   String get statusLabel => switch (status) {
     'running' => '进行中',
@@ -150,4 +155,11 @@ class WorkbenchData {
     }
     return null;
   }
+}
+
+String workbenchTime(int seconds) {
+  if (seconds <= 0) return '未知';
+  final d = DateTime.fromMillisecondsSinceEpoch(seconds * 1000).toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.month}/${d.day} ${two(d.hour)}:${two(d.minute)}';
 }
