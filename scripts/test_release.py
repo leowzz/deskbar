@@ -5,12 +5,82 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import release
 import release_assets
+import restore_android_keystore
+
+
+class AndroidSigningTests(unittest.TestCase):
+    def test_accepts_wrapped_base64(self):
+        data = b"\xfe\xed\xfe\xed" + b"release-keystore-fixture"
+        encoded = base64.b64encode(data).decode()
+        wrapped = "\r\n".join(encoded[i:i + 8] for i in range(0, len(encoded), 8))
+        self.assertEqual(restore_android_keystore.decode_keystore(wrapped + "\n"), data)
+
+    def test_rejects_invalid_secret_without_echoing_it(self):
+        for value in ["", "/private/release.jks", "invalid!secret", base64.b64encode(b"not a JKS").decode()]:
+            with self.subTest(value=value), self.assertRaises(ValueError) as error:
+                restore_android_keystore.decode_keystore(value)
+            if value:
+                self.assertNotIn(value, str(error.exception))
+
+    def test_restore_writes_private_file_and_invalid_input_creates_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "release.jks"
+            with patch.dict(os.environ, {"DESKBAR_ANDROID_KEYSTORE_BASE64": "invalid!secret"}):
+                with self.assertRaises(ValueError):
+                    restore_android_keystore.restore_keystore(path)
+            self.assertFalse(path.exists())
+            data = b"\xfe\xed\xfe\xed" + b"release-keystore-fixture"
+            with patch.dict(os.environ, {"DESKBAR_ANDROID_KEYSTORE_BASE64": base64.b64encode(data).decode()}):
+                restore_android_keystore.restore_keystore(path)
+            self.assertEqual(path.read_bytes(), data)
+            if os.name != "nt":
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_preflight_rejects_invalid_keystore(self):
+        secrets = {name: "fixture" for name in [
+            "TAURI_SIGNING_PRIVATE_KEY", "DESKBAR_ANDROID_KEYSTORE_BASE64",
+            "DESKBAR_ANDROID_KEYSTORE_PASSWORD", "DESKBAR_ANDROID_KEY_ALIAS",
+            "DESKBAR_ANDROID_KEY_PASSWORD",
+        ]}
+        with patch.dict(os.environ, secrets), patch.object(sys, "argv", [
+            "release_assets.py", "preflight", "--tag", release.validate(),
+        ]), self.assertRaisesRegex(ValueError, "DESKBAR_ANDROID_KEYSTORE_BASE64"):
+            release_assets.main()
+
+
+@unittest.skipUnless(shutil.which("bash"), "Editor build requires Bash")
+class EditorBuildTests(unittest.TestCase):
+    def test_base_href_is_protected_from_git_bash_path_conversion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            script = root / "scripts/build_editor.sh"
+            script.write_text((release.ROOT / "scripts/build_editor.sh").read_text(), newline="\n")
+            web = root / "apps/android/build/web"
+            web.mkdir(parents=True)
+            (web / "index.html").write_text('<base href="/editor/">')
+            bin_path = root / "bin"
+            bin_path.mkdir()
+            flutter = bin_path / "flutter"
+            flutter.write_text(
+                '#!/usr/bin/env bash\nset -euo pipefail\n'
+                '[[ "${MSYS_NO_PATHCONV:-}" == 1 ]]\n'
+                'for argument in "$@"; do\n'
+                '  if [[ "$argument" == --base-href=/editor/ ]]; then exit 0; fi\n'
+                'done\nexit 1\n', newline="\n",
+            )
+            flutter.chmod(0o755)
+            env = dict(os.environ, PATH=str(bin_path) + os.pathsep + os.environ["PATH"])
+            subprocess.run(["bash", script.as_posix()], env=env, check=True, capture_output=True)
+            self.assertEqual((root / "apps/desktop/public/editor/index.html").read_text(),
+                             '<base href="/editor/">')
 
 
 class ReleaseTests(unittest.TestCase):

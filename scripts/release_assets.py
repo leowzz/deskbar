@@ -12,6 +12,7 @@ from urllib.error import HTTPError
 from urllib.request import urlopen
 
 from release import ROOT, VERSION, android_version, validate
+from restore_android_keystore import decode_keystore
 import re
 
 ENDPOINT = "https://github.com/leowzz/deskbar/releases/latest/download/latest.json"
@@ -150,6 +151,7 @@ def main():
         ]:
             if not os.environ.get(name):
                 raise ValueError(f"Missing repository secret: {name}")
+        decode_keystore(os.environ["DESKBAR_ANDROID_KEYSTORE_BASE64"])
         groups = [
             ["APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_SIGNING_IDENTITY"],
             ["APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID"],

@@ -153,10 +153,10 @@ jobs:
           cache: true
       - name: Restore signing key
         env:
-          KEYSTORE_BASE64: ${{ secrets.DESKBAR_ANDROID_KEYSTORE_BASE64 }}
+          DESKBAR_ANDROID_KEYSTORE_BASE64: ${{ secrets.DESKBAR_ANDROID_KEYSTORE_BASE64 }}
         run: |
           umask 077
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/deskbar-release.keystore"
+          python3 scripts/restore_android_keystore.py "$RUNNER_TEMP/deskbar-release.keystore"
           echo "DESKBAR_ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/deskbar-release.keystore" >> "$GITHUB_ENV"
       - name: Check and build Android
         working-directory: apps/android

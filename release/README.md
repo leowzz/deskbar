@@ -44,7 +44,7 @@ APPLE_SIGNING_IDENTITY=- make desktop-release
 
 每个平台上传 artifact；发布任务必须等待三平台成功，校验文件集合和 SHA-256，再生成 `latest.json` 与 `SHA256SUMS`。先上传到 draft，全部成功后才公开 Release。失败可重跑 draft；已经公开的同版本拒绝覆盖，应递增版本重新发布。发布阶段串行执行，并读取现有静态清单比较版本；只有更高版本才设为 Latest，防止旧版本迟到覆盖最新通道。
 
-Flutter 固定 3.44.8，Node 24、pnpm 11.9.0，Rust stable，Python 3.11+。桌面构建包含 Flutter Web 预览器，Windows 同样需要 Flutter；复制预览器用 Python，不依赖 rsync。
+Flutter 固定 3.44.8，Node 24、pnpm 11.9.0，Rust stable，Python 3.11+。桌面构建包含 Flutter Web 预览器，Windows 同样需要 Flutter；构建脚本关闭 Git Bash 的路径转换，保证 `/editor/` 原样传给 Flutter。复制预览器用 Python，不依赖 rsync。
 
 ## 签名配置
 
@@ -64,6 +64,8 @@ Repository Secrets：
 updater 公钥保存在 [Tauri 配置](../apps/desktop/src-tauri/tauri.conf.json)，私钥本机保存在 `~/.config/deskbar/signing/updater.key`，需要独立备份。不要更换已分发客户端信任的公钥，或在日志中打印私钥。
 
 Android 沿用现有签名；Gradle 优先读取 `DESKBAR_ANDROID_KEYSTORE_FILE` 及上述密码和别名变量，否则读取 `~/.config/deskbar/signing/deskbar-release.properties`。properties 字段为 `keystoreFile`、`keystorePassword`、`keyAlias`、`keyPassword`。密钥库和配置权限应为 `0600`。缺失签名时 release 构建失败。先前记录的 Android 证书 SHA-256 为 `12:61:8D:E7:86:32:31:6F:58:3D:BA:A7:E5:CF:63:EF:FE:44:68:F3:40:30:7C:D9:E6:E5:C8:ED:BB:5C:0C:06`，发布时仍应与实际 APK 核对。
+
+`DESKBAR_ANDROID_KEYSTORE_BASE64` 必须是原发布 JKS 文件内容的 Base64，允许换行；不能填文件路径。CI 在预检时验证编码和 JKS 文件头，还原失败时不输出密钥内容。更新此 Secret 可用 `base64 < /path/to/release.jks | gh secret set DESKBAR_ANDROID_KEYSTORE_BASE64 --repo leowzz/deskbar`；不要创建新密钥替换已分发应用的签名。
 
 未配置 Apple 证书时，macOS 采用 ad-hoc 签名，未公证，首次启动可能需要系统手动允许。Windows 当前不做 Authenticode，可能显示未知发布者。Tauri `.sig` 是更新包验签，不代表 Apple 公证或 Windows 发布者签名。
 
