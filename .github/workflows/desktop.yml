@@ -119,7 +119,8 @@ jobs:
       - name: Test desktop using release dependencies
         run: |
           cargo fmt --all -- --check
-          cargo test --locked --workspace --release --target "${{ matrix.target }}"
+          # Tauri CLI enables this feature for production builds; match it in tests.
+          cargo test --locked --workspace --release --target "${{ matrix.target }}" --features tauri/custom-protocol
       - name: Collect artifacts
         if: inputs.release
         run: python3 scripts/release_assets.py collect --tag "$TAG" --platform "${{ matrix.platform }}" --source "target/${{ matrix.target }}/release/bundle"
