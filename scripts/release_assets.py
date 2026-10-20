@@ -67,14 +67,14 @@ def collect(platform, source, destination, tag):
         shutil.copyfile(path, target)
         if key in ("macos-update", "windows"):
             signature = path.with_name(path.name + ".sig")
-            if not signature.is_file() or not signature.read_text().strip():
+            if not signature.is_file() or not signature.read_text(encoding="utf-8").strip():
                 raise ValueError(f"Missing updater signature: {path.name}")
             shutil.copyfile(signature, target.with_name(target.name + ".sig"))
     checksums = {
         p.name: digest(p) for p in destination.iterdir()
         if p.is_file() and p.name.startswith("deskbar-") and not p.name.endswith(".json")
     }
-    (destination / f"{platform}-checksums.json").write_text(json.dumps(checksums, indent=2) + "\n")
+    (destination / f"{platform}-checksums.json").write_text(json.dumps(checksums, indent=2) + "\n", encoding="utf-8")
 
 
 def manifest(directory, tag, code):
@@ -82,7 +82,7 @@ def manifest(directory, tag, code):
     files = set(expected.values()) | {expected[k] + ".sig" for k in ("macos-update", "windows")}
     hashes = {}
     for platform in ("macos", "windows", "android"):
-        entries = json.loads((directory / f"{platform}-checksums.json").read_text())
+        entries = json.loads((directory / f"{platform}-checksums.json").read_text(encoding="utf-8"))
         if hashes.keys() & entries.keys():
             raise ValueError("Duplicate release artifact")
         hashes.update(entries)
@@ -96,7 +96,7 @@ def manifest(directory, tag, code):
 
     def platform(key):
         name = expected[key]
-        signature = (directory / (name + ".sig")).read_text().strip()
+        signature = (directory / (name + ".sig")).read_text(encoding="utf-8").strip()
         # Tauri stores a base64-encoded minisign envelope, not a URL.
         decoded = base64.b64decode(signature, validate=True).decode()
         if not decoded.startswith("untrusted comment:") or len(decoded.splitlines()) < 4:
@@ -118,10 +118,10 @@ def manifest(directory, tag, code):
             "size": (directory / expected["android"]).stat().st_size,
         },
     }
-    (directory / "latest.json").write_text(json.dumps(result, indent=2) + "\n")
+    (directory / "latest.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     hashes["latest.json"] = digest(directory / "latest.json")
     (directory / "SHA256SUMS").write_text(
-        "".join(f"{hashes[name]}  {name}\n" for name in sorted(hashes))
+        "".join(f"{hashes[name]}  {name}\n" for name in sorted(hashes)), encoding="utf-8"
     )
     return result
 

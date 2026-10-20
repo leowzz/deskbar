@@ -28,7 +28,7 @@ def git(*args):
 
 def read_version(path):
     lines = [
-        line for line in path.read_text().splitlines()
+        line for line in path.read_text(encoding="utf-8").splitlines()
         if re.match(r"\s*(?:export\s+)?version\s*=", line)
     ]
     if len(lines) != 1 or not re.fullmatch("version=v" + VERSION, lines[0]):
@@ -37,7 +37,7 @@ def read_version(path):
 
 
 def android_version():
-    matches = re.findall(r"^version: (\S+)$", (ROOT / FILES[-1]).read_text(), re.M)
+    matches = re.findall(r"^version: (\S+)$", (ROOT / FILES[-1]).read_text(encoding="utf-8"), re.M)
     if len(matches) != 1 or not re.fullmatch(VERSION + r"\+[1-9][0-9]*", matches[0]):
         raise ValueError("pubspec.yaml: expected X.Y.Z+positiveBuildNumber")
     version, code = matches[0].split("+")
@@ -53,12 +53,12 @@ def validate(tag=None, env_file=None):
     expected = current[1:]
     versions = {
         ".env.example": read_version(ROOT / ".env.example")[1:],
-        "Cargo.toml": tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"],
+        "Cargo.toml": tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]["version"],
         "pubspec.yaml": android_version()[0],
     }
     for path in FILES[3:5]:
-        versions[path] = json.loads((ROOT / path).read_text())["version"]
-    packages = tomllib.loads((ROOT / "Cargo.lock").read_text())["package"]
+        versions[path] = json.loads((ROOT / path).read_text(encoding="utf-8"))["version"]
+    packages = tomllib.loads((ROOT / "Cargo.lock").read_text(encoding="utf-8"))["package"]
     own = [p for p in packages if p["name"] in CRATES and "source" not in p]
     if {p["name"] for p in own} != CRATES:
         raise ValueError("Cargo.lock must contain all workspace packages")
@@ -114,7 +114,7 @@ def release(env_file, requested=None):
     committed = False
     try:
         for path, text in updates.items():
-            path.write_text(text)
+            path.write_text(text, encoding="utf-8")
         validate(target, env_file)
         git("add", "--", *FILES)
         git("commit", "-m", f"chore: release {target}", "--", *FILES)

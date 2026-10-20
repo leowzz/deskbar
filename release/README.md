@@ -44,7 +44,7 @@ APPLE_SIGNING_IDENTITY=- make desktop-release
 
 每个平台上传 artifact；发布任务必须等待三平台成功，校验文件集合和 SHA-256，再生成 `latest.json` 与 `SHA256SUMS`。先上传到 draft，全部成功后才公开 Release。失败可重跑 draft；已经公开的同版本拒绝覆盖，应递增版本重新发布。发布阶段串行执行，并读取现有静态清单比较版本；只有更高版本才设为 Latest，防止旧版本迟到覆盖最新通道。
 
-Flutter 固定 3.44.8，Node 24、pnpm 11.9.0，Rust stable，Python 3.11+。桌面构建包含 Flutter Web 预览器，Windows 同样需要 Flutter；构建脚本关闭 Git Bash 的路径转换，保证 `/editor/` 原样传给 Flutter。复制预览器用 Python，不依赖 rsync。
+Flutter 固定 3.44.8，Node 24、pnpm 11.9.0，Rust stable，Python 3.11+。桌面构建包含 Flutter Web 预览器，Windows 同样需要 Flutter；构建脚本关闭 Git Bash 的路径转换，保证 `/editor/` 原样传给 Flutter。复制预览器用 Python，不依赖 rsync；发布脚本统一使用 UTF-8 读写配置和清单，避免 Windows 系统编码影响中文名称。
 
 Android 在发布 APK 构建后运行 `:app:testDebugUnitTest` 验证原生逻辑；当前工程只注册 debug 单元测试变体，没有 `testReleaseUnitTest`。发布 APK 另用 `apksigner` 验证签名。
 

@@ -120,6 +120,20 @@ class ReleaseTests(unittest.TestCase):
         release.release(self.root / ".env", "v9.0.0")
         self.assertEqual(release.validate(), "v9.0.0")
 
+    def test_release_handles_chinese_config_with_a_windows_default_encoding(self):
+        original_open = Path.open
+
+        def windows_open(path, mode="r", buffering=-1, encoding=None, errors=None, newline=None):
+            if "b" not in mode and encoding in (None, "locale"):
+                encoding = "cp1252"
+            return original_open(path, mode, buffering, encoding, errors, newline)
+
+        with patch.object(Path, "open", windows_open), patch.object(
+            io, "text_encoding", side_effect=lambda encoding, *args: encoding or "cp1252",
+        ):
+            release.release(self.root / ".env")
+            self.assertEqual(release.validate(), self.next)
+
     def test_rejects_dirty_tree_before_mutation(self):
         (self.root / "untracked").write_text("work in progress")
         original = (self.root / ".env").read_bytes()
