@@ -433,19 +433,7 @@ class _WorkbenchState extends State<Workbench> with WidgetsBindingObserver {
                               connection: connection,
                               displayPreferences: display,
                               onConnectionSettings: _connectionSettings,
-                            ),
-                          ),
-                          Positioned(
-                            top: 4,
-                            right: 4,
-                            child: Material(
-                              color: c.surface.withValues(alpha: .88),
-                              borderRadius: BorderRadius.circular(24),
-                              child: IconButton(
-                                tooltip: '设置',
-                                onPressed: _connectionSettings,
-                                icon: const Icon(Icons.settings_outlined),
-                              ),
+                              onTheme: widget.onTheme,
                             ),
                           ),
                         ],

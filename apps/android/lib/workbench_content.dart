@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'connection.dart';
+import 'dashboard_widgets.dart';
 import 'layout_workspace.dart';
 import 'rawblock.dart';
 import 'top_notice.dart';
@@ -177,6 +178,8 @@ class WorkbenchWidgetBody extends StatelessWidget {
     required this.binding,
     this.editing = false,
     this.onEditRequested,
+    this.onTheme,
+    this.onSettings,
     this.debugLayout = false,
     this.debugHovered = false,
     this.debugForceBorder = false,
@@ -187,7 +190,7 @@ class WorkbenchWidgetBody extends StatelessWidget {
   final Map<String, dynamic> options, binding;
   final bool editing, debugLayout;
   final bool debugHovered, debugForceBorder, debugForceLabel;
-  final VoidCallback? onEditRequested;
+  final VoidCallback? onEditRequested, onTheme, onSettings;
   double number(String key, double fallback) {
     final value = options[key];
     return value is num ? value.toDouble() : fallback;
@@ -225,6 +228,16 @@ class WorkbenchWidgetBody extends StatelessWidget {
   );
 
   Widget _body(BuildContext context) {
+    if (type == 'statusBar') {
+      return WorkbenchStatusBar(
+        connection: connection,
+        options: options,
+        onTheme: onTheme,
+        onSettings: onSettings,
+        editing: editing,
+      );
+    }
+
     if (!const {'sessions', 'usage', 'shortcuts'}.contains(type)) {
       return const _Message('此组件暂不受支持。原有配置已保留，可更新应用后查看。');
     }
@@ -253,7 +266,18 @@ class WorkbenchWidgetBody extends StatelessWidget {
     }
     return switch (type) {
       'sessions' => _sessions(context, data),
-      'shortcuts' => _shortcuts(context, data),
+      'shortcuts' =>
+        options['appearance'] == 'dock'
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  color: deskbarColors(context).surface,
+                  border: Border(
+                    top: BorderSide(color: deskbarColors(context).line),
+                  ),
+                ),
+                child: _shortcuts(context, data),
+              )
+            : _shortcuts(context, data),
       'usage' => _usage(context, data),
       _ => const _Message('此组件暂不受支持。原有配置已保留，可更新应用后查看。'),
     };
@@ -341,13 +365,27 @@ class WorkbenchWidgetBody extends StatelessWidget {
                   child: LayoutBuilder(
                     builder: (context, grid) {
                       final gap = number('gap', 8).clamp(0, 48).toDouble();
-                      final columns = math.max(
+                      final automaticColumns = math.max(
                         1,
                         ((grid.maxWidth + gap) /
                                 (number('itemWidth', 280).clamp(120, 1000) +
                                     gap))
                             .floor(),
                       );
+                      final minimumWidth = options['appearance'] == 'cards'
+                          ? 260
+                          : 120;
+                      final configuredColumns = options['columns'];
+                      final columns = configuredColumns is int
+                          ? math.min(
+                              configuredColumns.clamp(1, 6),
+                              math.max(
+                                1,
+                                ((grid.maxWidth + gap) / (minimumWidth + gap))
+                                    .floor(),
+                              ),
+                            )
+                          : automaticColumns;
                       final target = math.max(
                         minimum,
                         number('itemHeight', sessionStandardMinimumHeight),
@@ -388,6 +426,18 @@ class WorkbenchWidgetBody extends StatelessWidget {
                                     ].contains(session.status)
                                   ? c.warning
                                   : c.muted;
+                              if (options['appearance'] == 'cards') {
+                                return _sessionCard(
+                                  context,
+                                  session,
+                                  data.now,
+                                  height,
+                                  (grid.maxWidth - gap * (columns - 1)) /
+                                      columns,
+                                  statusColor,
+                                  canOpen,
+                                );
+                              }
                               final card = Semantics(
                                 button: !editing,
                                 label:
@@ -488,6 +538,132 @@ class WorkbenchWidgetBody extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _sessionCard(
+    BuildContext context,
+    WorkSession session,
+    int now,
+    double height,
+    double width,
+    Color statusColor,
+    bool canOpen,
+  ) {
+    final c = deskbarColors(context);
+    final running = session.status == 'running';
+    final narrow = width < 260;
+    final age = math.max(0, now - session.updatedAt);
+    final time = age < 60
+        ? '刚刚'
+        : age < 3600
+        ? '${age ~/ 60}分钟前'
+        : age < 86400
+        ? '${age ~/ 3600}小时前'
+        : workbenchTime(session.updatedAt);
+    final scale = number('textScale', 1).clamp(1, 2).toDouble();
+    return Semantics(
+      button: !editing,
+      label: '${session.title}，${session.statusLabel}',
+      child: Material(
+        key: ValueKey('session-card-$id-${session.id}'),
+        color: running ? c.successBg : c.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: running ? c.success.withValues(alpha: .45) : c.line,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: canOpen
+              ? () => open(context, 'open_session', session.id, session.version)
+              : null,
+          child: Container(
+            decoration: BoxDecoration(
+              border: running
+                  ? Border(left: BorderSide(color: c.success, width: 3))
+                  : null,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: math.max(0, height - 20),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Tooltip(
+                            message: session.title,
+                            child: Text(
+                              session.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 18 * scale,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (!narrow)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: running ? c.successBg : c.raised,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              session.statusLabel,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 13 * scale,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            session.project,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: c.muted,
+                              fontSize: 14 * scale,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (!narrow)
+                          Text(
+                            time,
+                            style: TextStyle(
+                              color: c.muted,
+                              fontSize: 14 * scale,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -749,6 +925,16 @@ class WorkbenchWidgetBody extends StatelessWidget {
               )
               .join('\n\n');
 
+    if (!api && options['density'] == 'sidebar') {
+      final q = quotas.first;
+      final fresh = online && (data.source(sourceId)?.fresh(data.now) ?? false);
+      return QuotaSidebar(
+        quota: q,
+        now: data.now,
+        fresh: fresh,
+        status: _status(context, data, sourceId),
+      );
+    }
     return LayoutBuilder(
       builder: (context, box) {
         const edge = 8.0;

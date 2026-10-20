@@ -103,7 +103,8 @@ class LayoutWidget {
   final Map<String, dynamic> options;
   final Map<LayoutOrientation, GridPlacement> placements;
   final Map<String, dynamic> extra;
-  bool get isKnown => const {'sessions', 'usage', 'shortcuts'}.contains(type);
+  bool get isKnown =>
+      const {'sessions', 'usage', 'shortcuts', 'statusBar'}.contains(type);
 
   GridPlacement placementFor(LayoutOrientation orientation) =>
       placements[orientation]!;
@@ -511,6 +512,79 @@ class LayoutWorkspace extends ChangeNotifier {
     return id;
   }
 
+  /// Append a complete, editable dashboard as one undoable change.
+  String? addDashboardPage({String? hostId}) {
+    if (!_requireEditing()) return null;
+    final pageId = _newId('page');
+    LayoutWidget part(
+      String type,
+      String title,
+      GridPlacement wide,
+      GridPlacement portrait,
+      Map<String, dynamic> options,
+      String source,
+    ) => LayoutWidget(
+      id: _newId(type),
+      type: type,
+      title: title,
+      binding: type == 'statusBar' ? {} : {'hostId': ?hostId, 'source': source},
+      options: {...defaultOptions(type), ...options},
+      placements: {
+        LayoutOrientation.wide: wide,
+        LayoutOrientation.portrait: portrait,
+      },
+    );
+    final page = LayoutPage(
+      id: pageId,
+      name: '横屏总览',
+      widgets: [
+        part(
+          'statusBar',
+          '顶部状态栏',
+          const GridPlacement(x: 0, y: 0, w: 48, h: 5),
+          const GridPlacement(x: 0, y: 0, w: 16, h: 10),
+          {},
+          '',
+        ),
+        part(
+          'usage',
+          'Codex 额度',
+          const GridPlacement(x: 0, y: 5, w: 7, h: 36),
+          const GridPlacement(x: 0, y: 10, w: 16, h: 18),
+          {'density': 'sidebar'},
+          'codex.quota',
+        ),
+        part(
+          'sessions',
+          '近期会话',
+          const GridPlacement(x: 7, y: 5, w: 41, h: 36),
+          const GridPlacement(x: 0, y: 28, w: 16, h: 54),
+          {
+            'appearance': 'cards',
+            'columns': 2,
+            'itemHeight': 110.0,
+            'textScale': 1.35,
+            'density': 'compact',
+          },
+          'codex.sessions',
+        ),
+        part(
+          'shortcuts',
+          '快捷入口',
+          const GridPlacement(x: 0, y: 41, w: 48, h: 7),
+          const GridPlacement(x: 0, y: 82, w: 16, h: 14),
+          {'iconSize': 'max', 'labels': false, 'rows': 1, 'appearance': 'dock'},
+          'host.shortcuts',
+        ),
+      ],
+    );
+    return _apply(
+          document.copyWith(activePageId: pageId, pages: [...pages, page]),
+        )
+        ? pageId
+        : null;
+  }
+
   bool renamePage(String id, String name) {
     if (!_requireEditing()) return false;
     if (name.trim().isEmpty) return _fail('请输入页面名称');
@@ -574,16 +648,6 @@ class LayoutWorkspace extends ChangeNotifier {
       return null;
     }
     final page = pages[index];
-    final placements = <LayoutOrientation, GridPlacement>{};
-    for (final orientation in LayoutOrientation.values) {
-      final size = defaultPlacement(type, orientation);
-      final rect = _findSpace(page.widgets, orientation, size.w, size.h);
-      if (rect == null) {
-        _fail('横屏或竖屏空间不足，请新建页面或先整理');
-        return null;
-      }
-      placements[orientation] = rect;
-    }
     final id = _newId('widget');
     final widget = LayoutWidget(
       id: id,
@@ -591,10 +655,18 @@ class LayoutWorkspace extends ChangeNotifier {
       title: title,
       binding: binding,
       options: {...defaultOptions(type), ...?options},
-      placements: placements,
+      placements: {
+        for (final orientation in LayoutOrientation.values)
+          orientation: defaultPlacement(type, orientation),
+      },
     );
+    final destination = _placeWidgetOnPage(page, widget);
+    if (destination == null) {
+      _fail('横屏或竖屏空间不足，请新建页面或先整理');
+      return null;
+    }
     final next = [...pages];
-    next[index] = page.copyWith(widgets: [...page.widgets, widget]);
+    next[index] = destination;
     _apply(document.copyWith(pages: next));
     selectedWidgetId = id;
     notifyListeners();
@@ -745,23 +817,20 @@ class LayoutWorkspace extends ChangeNotifier {
     final target = pages.indexWhere((page) => page.id == pageId);
     if (widget == null || target < 0) return _fail('找不到组件或目标页面');
     if (pages[target].widgets.any((item) => item.id == id)) return true;
-    final placements = <LayoutOrientation, GridPlacement>{};
-    for (final orientation in LayoutOrientation.values) {
-      final old = widget.placementFor(orientation);
-      final rect = _findSpace(pages[target].widgets, orientation, old.w, old.h);
-      if (rect == null) return _fail('目标页横屏或竖屏空间不足，组件仍保留在原页');
-      placements[orientation] = rect;
+    final destination = _placeWidgetOnPage(pages[target], widget);
+    if (destination == null) {
+      return _fail('目标页横屏或竖屏空间不足，组件仍保留在原页');
     }
     return _apply(
       document.copyWith(
         pages: [
           for (final page in pages)
-            page.copyWith(
-              widgets: [
-                ...page.widgets.where((item) => item.id != id),
-                if (page.id == pageId) widget.copyWith(placements: placements),
-              ],
-            ),
+            if (page.id == pageId)
+              destination
+            else
+              page.copyWith(
+                widgets: page.widgets.where((item) => item.id != id).toList(),
+              ),
         ],
         activePageId: pageId,
       ),
@@ -891,6 +960,14 @@ class LayoutWorkspace extends ChangeNotifier {
   }
 
   static Map<String, dynamic> defaultOptions(String type) => switch (type) {
+    'statusBar' => {
+      'label': 'DeskBar',
+      'showClock': true,
+      'showSeconds': true,
+      'showConnection': true,
+      'showThemeButton': true,
+      'showSettingsButton': true,
+    },
     'sessions' => {
       'maxSessions': defaultSessionDisplayLimit,
       'showTitle': true,
@@ -923,6 +1000,14 @@ class LayoutWorkspace extends ChangeNotifier {
     String type,
     LayoutOrientation orientation,
   ) {
+    if (type == 'statusBar') {
+      return GridPlacement(
+        x: 0,
+        y: 0,
+        w: orientation.columns,
+        h: orientation == LayoutOrientation.wide ? 5 : 10,
+      );
+    }
     if (orientation == LayoutOrientation.portrait) {
       return GridPlacement(x: 0, y: 0, w: 16, h: type == 'sessions' ? 48 : 24);
     }
@@ -1031,6 +1116,65 @@ Map<String, GridPlacement>? _displace(
   return resolve({id});
 }
 
+/// Full-width status bars reserve the top edge. Preserve horizontal placement
+/// and shared row boundaries below it; compress only when translation cannot fit.
+/// Both profiles are prepared locally so failure cannot partially move a page.
+LayoutPage? _placeWidgetOnPage(LayoutPage page, LayoutWidget widget) {
+  var widgets = page.widgets.toList();
+  final placements = {...widget.placements};
+  for (final orientation in LayoutOrientation.values) {
+    if (!widget.visible) continue;
+    final old = widget.placementFor(orientation);
+    if (widget.type != 'statusBar' || old.w != orientation.columns) {
+      final rect = _findSpace(widgets, orientation, old.w, old.h);
+      if (rect == null) return null;
+      placements[orientation] = rect;
+      continue;
+    }
+    final top = old.copyWith(x: 0, y: 0);
+    placements[orientation] = top;
+    final visible = widgets.where((item) => item.visible);
+    if (visible.every(
+      (item) => !top.overlaps(item.placementFor(orientation)),
+    )) {
+      continue;
+    }
+    final available = orientation.rows - top.h;
+    if (available <= 0) return null;
+    final bottom = visible.fold<int>(0, (end, item) {
+      final rect = item.placementFor(orientation);
+      return max(end, rect.y + rect.h);
+    });
+    final contentRows = max(available, bottom);
+    final next = <LayoutWidget>[];
+    for (final item in widgets) {
+      if (!item.visible) {
+        next.add(item);
+        continue;
+      }
+      final rect = item.placementFor(orientation);
+      final y = top.h + rect.y * available ~/ contentRows;
+      final end = top.h + (rect.y + rect.h) * available ~/ contentRows;
+      if (end <= y) return null;
+      next.add(
+        item.copyWith(
+          placements: {
+            ...item.placements,
+            orientation: rect.copyWith(y: y, h: end - y),
+          },
+        ),
+      );
+    }
+    widgets = next;
+  }
+  return page.copyWith(
+    widgets: [
+      ...widgets,
+      widget.copyWith(placements: placements),
+    ],
+  );
+}
+
 GridPlacement? _findSpace(
   List<LayoutWidget> widgets,
   LayoutOrientation orientation,
@@ -1112,7 +1256,34 @@ void _validateBinding(Map<String, dynamic> binding) {
 }
 
 void _validateOptions(String type, Map<String, dynamic> options) {
-  if (!const {'sessions', 'usage', 'shortcuts'}.contains(type)) return;
+  if (!const {'sessions', 'usage', 'shortcuts', 'statusBar'}.contains(type)) {
+    return;
+  }
+  if (type == 'statusBar' &&
+      options.containsKey('label') &&
+      (options['label'] is! String ||
+          (options['label'] as String).length > 80)) {
+    throw const FormatException('状态栏名称最多 80 字');
+  }
+  if (options.containsKey('appearance') &&
+      !(type == 'shortcuts'
+              ? const {'plain', 'dock'}
+              : const {'plain', 'cards'})
+          .contains(options['appearance'])) {
+    throw const FormatException('组件外观无效');
+  }
+  if (options.containsKey('textScale')) {
+    final scale = options['textScale'];
+    if (scale is! num || !scale.isFinite || scale < 1 || scale > 2) {
+      throw const FormatException('文字比例需为 1 到 2');
+    }
+  }
+  if (type == 'sessions' && options.containsKey('columns')) {
+    final columns = options['columns'];
+    if (columns != 'auto' && (columns is! int || columns < 1 || columns > 6)) {
+      throw const FormatException('会话列数需为自动或 1 到 6');
+    }
+  }
   if (options.containsKey('showDetails')) {
     throw const FormatException('详细数据改为悬浮提示');
   }
@@ -1126,7 +1297,16 @@ void _validateOptions(String type, Map<String, dynamic> options) {
       throw const FormatException('会话数量需为 1 到 40 的整数');
     }
   }
-  for (final key in ['showTitle', 'fitRows', 'labels']) {
+  for (final key in [
+    'showTitle',
+    'fitRows',
+    'labels',
+    'showClock',
+    'showSeconds',
+    'showConnection',
+    'showThemeButton',
+    'showSettingsButton',
+  ]) {
     if (options.containsKey(key) && options[key] is! bool) {
       throw const FormatException('组件开关参数无效');
     }
@@ -1169,7 +1349,12 @@ void _validateOptions(String type, Map<String, dynamic> options) {
   }
   if (type == 'usage' &&
       options.containsKey('density') &&
-      !const {'compact', 'standard', 'fill'}.contains(options['density'])) {
+      !const {
+        'compact',
+        'standard',
+        'fill',
+        'sidebar',
+      }.contains(options['density'])) {
     throw const FormatException('用量布局密度无效');
   }
 }

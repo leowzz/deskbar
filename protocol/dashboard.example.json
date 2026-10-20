@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 3,
+  "activePageId": "dashboard",
+  "pages": [
+    {
+      "id": "dashboard",
+      "name": "横屏总览",
+      "widgets": [
+        {
+          "id": "statusBar-dashboard",
+          "title": "顶部状态栏",
+          "type": "statusBar",
+          "visible": true,
+          "binding": {},
+          "options": {
+            "label": "DeskBar",
+            "showClock": true,
+            "showSeconds": true,
+            "showConnection": true,
+            "showThemeButton": true,
+            "showSettingsButton": true
+          },
+          "placements": {
+            "wide": {
+              "x": 0,
+              "y": 0,
+              "w": 48,
+              "h": 5
+            },
+            "portrait": {
+              "x": 0,
+              "y": 0,
+              "w": 16,
+              "h": 10
+            }
+          }
+        },
+        {
+          "id": "usage-dashboard",
+          "title": "Codex 额度",
+          "type": "usage",
+          "visible": true,
+          "binding": {
+            "source": "codex.quota"
+          },
+          "options": {
+            "showTitle": true,
+            "content": "quota",
+            "density": "sidebar",
+            "alignment": "spaceEvenly"
+          },
+          "placements": {
+            "wide": {
+              "x": 0,
+              "y": 5,
+              "w": 7,
+              "h": 36
+            },
+            "portrait": {
+              "x": 0,
+              "y": 10,
+              "w": 16,
+              "h": 18
+            }
+          }
+        },
+        {
+          "id": "sessions-dashboard",
+          "title": "近期会话",
+          "type": "sessions",
+          "visible": true,
+          "binding": {
+            "source": "codex.sessions"
+          },
+          "options": {
+            "maxSessions": 20,
+            "showTitle": true,
+            "itemWidth": 280.0,
+            "itemHeight": 110.0,
+            "gap": 12.0,
+            "fitRows": true,
+            "density": "compact",
+            "appearance": "cards",
+            "columns": 2,
+            "textScale": 1.35
+          },
+          "placements": {
+            "wide": {
+              "x": 7,
+              "y": 5,
+              "w": 41,
+              "h": 36
+            },
+            "portrait": {
+              "x": 0,
+              "y": 28,
+              "w": 16,
+              "h": 54
+            }
+          }
+        },
+        {
+          "id": "shortcuts-dashboard",
+          "title": "快捷入口",
+          "type": "shortcuts",
+          "visible": true,
+          "binding": {
+            "source": "host.shortcuts"
+          },
+          "options": {
+            "showTitle": true,
+            "iconSize": "max",
+            "gapX": 16.0,
+            "gapY": 16.0,
+            "labels": false,
+            "columns": "auto",
+            "rows": 1,
+            "alignment": "spaceEvenly",
+            "appearance": "dock"
+          },
+          "placements": {
+            "wide": {
+              "x": 0,
+              "y": 41,
+              "w": 48,
+              "h": 7
+            },
+            "portrait": {
+              "x": 0,
+              "y": 82,
+              "w": 16,
+              "h": 14
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,142 @@ void main() {
     expect(restored.toJson(), original.toJson());
   });
 
+  test(
+    'status bar moves above a full overview in both orientations atomically',
+    () {
+      final workspace = LayoutWorkspace()..beginEdit();
+      addTearDown(workspace.dispose);
+      final source = workspace.addPage()!;
+      final id = workspace.addWidget(
+        'statusBar',
+        title: '顶部',
+        options: {'label': '我的工作台', 'showSeconds': false},
+      )!;
+      final before = workspace.document.toJson();
+      final bar = workspace.findWidget(id)!;
+      final overview = workspace.pages.first;
+      expect(workspace.moveWidgetToPage(id, overview.id), isTrue);
+      expect(workspace.activePage.id, overview.id);
+      expect(
+        workspace.pages.firstWhere((p) => p.id == source).widgets,
+        isEmpty,
+      );
+      expect(workspace.findWidget(id)!.options, bar.options);
+      expect(workspace.findWidget(id)!.title, bar.title);
+      for (final orientation in LayoutOrientation.values) {
+        final top = workspace.findWidget(id)!.placementFor(orientation);
+        expect(top.y, 0);
+        expect(top.h, bar.placementFor(orientation).h);
+        for (final old in overview.widgets) {
+          final rect = workspace.findWidget(old.id)!.placementFor(orientation);
+          expect(rect.y, greaterThanOrEqualTo(top.h));
+          expect(rect.x, old.placementFor(orientation).x);
+          expect(rect.w, old.placementFor(orientation).w);
+          expect(workspace.findWidget(old.id)!.options, old.options);
+        }
+      }
+      workspace.document.validate();
+      final after = workspace.document.toJson();
+      workspace.undo();
+      expect(workspace.document.toJson(), before);
+      workspace.redo();
+      expect(workspace.document.toJson(), after);
+    },
+  );
+
+  test('status bar can be added directly to a full overview', () {
+    final workspace = LayoutWorkspace()..beginEdit();
+    addTearDown(workspace.dispose);
+    final before = workspace.document.toJson();
+    final id = workspace.addWidget('statusBar');
+    expect(id, isNotNull);
+    expect(workspace.activePage.widgets.length, 4);
+    workspace.document.validate();
+    workspace.undo();
+    expect(workspace.document.toJson(), before);
+  });
+
+  test('status bar only translates content when existing height can fit', () {
+    final workspace = emptyWorkspace();
+    addTearDown(workspace.dispose);
+    final content = workspace.addWidget('usage')!;
+    final before = workspace.findWidget(content)!;
+    final bar = workspace.addWidget('statusBar')!;
+    for (final orientation in LayoutOrientation.values) {
+      final old = before.placementFor(orientation);
+      final rect = workspace.findWidget(content)!.placementFor(orientation);
+      expect(rect.h, old.h);
+      expect(
+        rect.y,
+        old.y + workspace.findWidget(bar)!.placementFor(orientation).h,
+      );
+    }
+    workspace.document.validate();
+  });
+
+  test('status bar preserves content when the top edge is already empty', () {
+    final workspace = emptyWorkspace();
+    addTearDown(workspace.dispose);
+    final content = workspace.addWidget('usage')!;
+    for (final orientation in LayoutOrientation.values) {
+      final old = workspace.findWidget(content)!.placementFor(orientation);
+      workspace.setPlacement(content, orientation, old.copyWith(y: 12));
+    }
+    final before = workspace.findWidget(content)!.toJson();
+    expect(workspace.addWidget('statusBar'), isNotNull);
+    expect(workspace.findWidget(content)!.toJson(), before);
+    workspace.document.validate();
+  });
+
+  test(
+    'moving a hidden status bar leaves the destination layout unchanged',
+    () {
+      final workspace = LayoutWorkspace()..beginEdit();
+      addTearDown(workspace.dispose);
+      final before = workspace.activePage.widgets
+          .map((w) => w.toJson())
+          .toList();
+      workspace.addPage();
+      final id = workspace.addWidget('statusBar')!;
+      workspace.setWidgetVisible(id, false);
+      expect(workspace.moveWidgetToPage(id, 'page-main'), isTrue);
+      expect(
+        workspace.activePage.widgets
+            .where((w) => w.id != id)
+            .map((w) => w.toJson()),
+        before,
+      );
+      workspace.document.validate();
+    },
+  );
+
+  test(
+    'status bar move failure in portrait preserves both pages and history',
+    () {
+      final workspace = LayoutWorkspace()..beginEdit();
+      addTearDown(workspace.dispose);
+      final source = workspace.addPage()!;
+      final id = workspace.addWidget('statusBar')!;
+      expect(
+        workspace.setPlacement(
+          id,
+          LayoutOrientation.portrait,
+          const GridPlacement(x: 0, y: 0, w: 16, h: 96),
+        ),
+        isTrue,
+      );
+      final before = workspace.document.toJson();
+      expect(workspace.moveWidgetToPage(id, 'page-main'), isFalse);
+      expect(workspace.document.toJson(), before);
+      workspace.undo();
+      expect(
+        workspace.findWidget(id)!.placementFor(LayoutOrientation.portrait).h,
+        10,
+      );
+      expect(workspace.activePage.id, source);
+    },
+  );
+
   test('all page edits and order changes cancel together', () {
     final workspace = emptyWorkspace();
     final original = workspace.committed.toJson();

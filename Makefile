@@ -7,13 +7,14 @@ ANDROID_DEVICE ?=
 .PHONY: help setup dev prototype android android-build android-release desktop-build check docs-check test-android-connection
 
 help:
-	@printf '%s\n' 'DeskBar — 电脑旁的工作台' '  make setup          安装依赖' '  make dev            运行 DeskBar 连接助手' '  make android        运行 DeskBar 工作台（设置 ANDROID_DEVICE）' '  make check          文档与代码检查' '  make desktop-build  构建桌面开发版本' '  make android-build  构建 Android 开发 APK' '  make android-release 构建已签名 Android AAB' '  make prototype      预览 HTML 布局原型'
+	@printf '%s\n' 'DeskBar — 电脑旁的工作台' '  make setup          安装依赖' '  make dev            启动本机服务端与连接助手' '  make android        运行 DeskBar 工作台（设置 ANDROID_DEVICE）' '  make check          文档与代码检查' '  make desktop-build  构建桌面开发版本' '  make android-build  构建 Android 开发 APK' '  make android-release 构建已签名 Android AAB' '  make prototype      预览 HTML 布局原型'
 
 setup:
 	pnpm install --frozen-lockfile
 	cd apps/android && flutter pub get
 
 dev:
+	@printf '%s\n' '启动 DeskBar 本机服务端与连接助手'
 	pnpm --dir apps/desktop run tauri dev
 
 prototype:

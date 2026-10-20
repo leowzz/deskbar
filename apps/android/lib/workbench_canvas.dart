@@ -16,6 +16,7 @@ String widgetTypeName(String type) => switch (type) {
   'sessions' => '会话',
   'usage' => '用量',
   'shortcuts' => '快捷入口',
+  'statusBar' => '顶部状态栏',
   _ => '未知组件',
 };
 
@@ -48,6 +49,7 @@ class WorkbenchCanvas extends StatefulWidget {
     this.displayPreferences,
     this.onEditingChanged,
     this.onConnectionSettings,
+    this.onTheme,
     this.allowEditing = false,
     this.previewSize,
     this.previewFit = true,
@@ -63,7 +65,7 @@ class WorkbenchCanvas extends StatefulWidget {
   final LayoutRepository? repository;
   final DisplayPreferences? displayPreferences;
   final ValueChanged<bool>? onEditingChanged;
-  final VoidCallback? onConnectionSettings;
+  final VoidCallback? onConnectionSettings, onTheme;
   @override
   State<WorkbenchCanvas> createState() => _WorkbenchCanvasState();
 }
@@ -197,7 +199,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
         page.copyWith(
           widgets: [
             for (final w in page.widgets)
-              if (w.binding['hostId'] == null || w.binding['hostId'] == '')
+              if (w.type != 'statusBar' &&
+                  (w.binding['hostId'] == null || w.binding['hostId'] == ''))
                 (() {
                   changed = true;
                   final oldSource = w.binding['source'];
@@ -679,7 +682,12 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                     if (workspace.editing) unawaited(_createWidget(type));
                   },
                   itemBuilder: (_) => [
-                    for (final type in ['sessions', 'usage', 'shortcuts'])
+                    for (final type in [
+                      'sessions',
+                      'usage',
+                      'shortcuts',
+                      'statusBar',
+                    ])
                       PopupMenuItem(
                         value: type,
                         child: Text(widgetTypeName(type)),
@@ -1042,6 +1050,8 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                 onError: _toast,
                 onSettings: () => _inspect(w.id),
                 onEditRequested: _begin,
+                onTheme: widget.onTheme,
+                onConnectionSettings: widget.onConnectionSettings,
                 exactPreview: widget.previewSize != null,
                 editable: widget.allowEditing,
                 debugLayout: widget.debugLayout,
@@ -1051,6 +1061,26 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
                     setState(() => placementPreview = preview),
                 onInteraction: (id) =>
                     setState(() => layoutDebugInteractionId = id),
+              ),
+            if (!widget.allowEditing &&
+                widget.onConnectionSettings != null &&
+                !visible.any(
+                  (w) =>
+                      w.type == 'statusBar' &&
+                      w.options['showSettingsButton'] != false,
+                ))
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Material(
+                  color: deskbarColors(context).surface.withValues(alpha: .88),
+                  borderRadius: BorderRadius.circular(24),
+                  child: IconButton(
+                    tooltip: '设置',
+                    onPressed: widget.onConnectionSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ),
               ),
           ],
         ),
@@ -1073,7 +1103,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       'pages' => _pagesBody(),
       'add' => ListView(
         children: [
-          for (final t in ['sessions', 'usage', 'shortcuts'])
+          for (final t in ['sessions', 'usage', 'shortcuts', 'statusBar'])
             ListTile(
               title: Text(widgetTypeName(t)),
               onTap: () => _createWidget(t),
@@ -1172,10 +1202,24 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
       if (desktopEditor)
         _sectionHeading(
           '页面',
-          action: IconButton(
+          action: PopupMenuButton<String>(
             tooltip: '新建页面',
-            onPressed: _newPage,
             icon: const Icon(Icons.add, size: 18),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'blank', child: Text('新建空白页')),
+              PopupMenuItem(value: 'dashboard', child: Text('添加横屏总览')),
+            ],
+            onSelected: (value) {
+              if (value == 'blank') {
+                _newPage();
+                return;
+              }
+              _begin();
+              final id = workspace.addDashboardPage(
+                hostId: widget.connection.data?.hostId,
+              );
+              if (id == null) _toast(workspace.error ?? '无法添加页面');
+            },
           ),
         )
       else
@@ -1287,11 +1331,12 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     Map<String, dynamic> binding() => {
       if (widget.connection.data != null)
         'hostId': widget.connection.data!.hostId,
-      'source': type == 'sessions'
-          ? 'codex.sessions'
-          : type == 'usage'
-          ? 'codex.quota'
-          : 'host.shortcuts',
+      if (type != 'statusBar')
+        'source': type == 'sessions'
+            ? 'codex.sessions'
+            : type == 'usage'
+            ? 'codex.quota'
+            : 'host.shortcuts',
     };
     var id = workspace.addWidget(
       type,
@@ -1350,6 +1395,7 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               ? Icon(switch (w.type) {
                   'sessions' => Icons.view_agenda_outlined,
                   'usage' => Icons.donut_large_outlined,
+                  'statusBar' => Icons.web_asset_outlined,
                   _ => Icons.apps_outlined,
                 }, size: 18)
               : Checkbox(
@@ -1405,6 +1451,34 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
     if (desktopEditor) editorFocus.requestFocus();
   }
 
+  Widget _choice(
+    LayoutWidget w,
+    String key,
+    String label,
+    Map<String, String> choices,
+    String fallback,
+  ) => DropdownButtonFormField<String>(
+    key: ValueKey('$key-${w.id}-${w.options[key]}'),
+    initialValue: choices.containsKey('${w.options[key]}')
+        ? '${w.options[key]}'
+        : fallback,
+    isExpanded: true,
+    decoration: InputDecoration(labelText: label),
+    items: [
+      for (final entry in choices.entries)
+        DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+    ],
+    onChanged: (value) {
+      if (value == null) return;
+      workspace.updateWidget(
+        w.id,
+        options: {
+          key: key == 'columns' && value != 'auto' ? int.parse(value) : value,
+        },
+      );
+    },
+  );
+
   Widget _widgetInspector() {
     final id = inspectedId;
     final w = workspace.findWidget(id);
@@ -1428,13 +1502,63 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             value: w.visible,
             onChanged: (v) => _result(workspace.setWidgetVisible(id, v)),
           ),
-          _bindingControls(w),
+          if (w.type != 'statusBar') _bindingControls(w),
         ]),
       ),
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: _inspectorFields([
+          if (w.type == 'statusBar') ...[
+            _WidgetNameField(
+              key: ValueKey('status-label-$id'),
+              id: '$id-label',
+              value: w.options['label'] as String? ?? 'DeskBar',
+              label: '左侧名称',
+              maxLength: 80,
+              onChanged: (v) =>
+                  workspace.updateWidget(id, options: {'label': v}),
+            ),
+            for (final entry in const {
+              'showClock': '显示日期与时间',
+              'showSeconds': '显示秒数',
+              'showConnection': '显示连接状态',
+              'showThemeButton': '显示主题切换',
+              'showSettingsButton': '显示设置入口',
+            }.entries)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(entry.value),
+                value: w.options[entry.key] != false,
+                onChanged: (v) =>
+                    workspace.updateWidget(id, options: {entry.key: v}),
+              ),
+          ],
           if (w.type == 'sessions') ...[
+            _choice(w, 'appearance', '卡片外观', const {
+              'plain': '简洁',
+              'cards': '边框卡片',
+            }, 'plain'),
+            _choice(w, 'columns', '列数', const {
+              'auto': '自动',
+              '1': '1 列',
+              '2': '2 列',
+              '3': '3 列',
+              '4': '4 列',
+              '5': '5 列',
+              '6': '6 列',
+            }, 'auto'),
+            if (w.options['appearance'] == 'cards')
+              _slider(
+                '文字大小',
+                ((w.options['textScale'] as num?)?.toDouble() ?? 1) * 100,
+                100,
+                200,
+                (v) => workspace.updateWidget(
+                  id,
+                  options: {'textScale': v.round() / 100},
+                ),
+                suffix: '%',
+              ),
             _optionSlider(w, 'itemWidth', '卡片目标宽度', 120, 600, 280),
             _optionSlider(
               w,
@@ -1499,6 +1623,10 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
             ),
           ],
           if (w.type == 'shortcuts') ...[
+            _choice(w, 'appearance', '入口外观', const {
+              'plain': '简洁',
+              'dock': '底部栏',
+            }, 'plain'),
             DropdownButtonFormField<String>(
               key: ValueKey('icon-size-mode-$id-${w.options['iconSize']}'),
               initialValue: w.options['iconSize'] == 'max' ? 'max' : 'fixed',
@@ -1657,11 +1785,14 @@ class _WorkbenchCanvasState extends State<WorkbenchCanvas> {
               initialValue: switch (w.options['density']) {
                 'compact' => 'compact',
                 'standard' => 'standard',
+                'sidebar' when w.options['content'] != 'api' => 'sidebar',
                 _ => 'fill',
               },
               isExpanded: true,
               decoration: const InputDecoration(labelText: '内容布局'),
-              items: const [
+              items: [
+                if (w.options['content'] != 'api')
+                  const DropdownMenuItem(value: 'sidebar', child: Text('额度侧栏')),
                 DropdownMenuItem(
                   value: 'fill',
                   child: Text(
@@ -2293,9 +2424,13 @@ class _WidgetNameField extends StatefulWidget {
     required this.id,
     required this.value,
     required this.onChanged,
+    this.label = '组件名称',
+    this.maxLength,
   });
   final String id, value;
   final ValueChanged<String> onChanged;
+  final String label;
+  final int? maxLength;
   @override
   State<_WidgetNameField> createState() => _WidgetNameFieldState();
 }
@@ -2330,7 +2465,8 @@ class _WidgetNameFieldState extends State<_WidgetNameField> {
   Widget build(BuildContext context) => TextFormField(
     key: ValueKey('title-${widget.id}'),
     controller: controller,
-    decoration: const InputDecoration(labelText: '组件名称'),
+    decoration: InputDecoration(labelText: widget.label),
+    maxLength: widget.maxLength,
     onChanged: widget.onChanged,
   );
 }
@@ -2349,6 +2485,8 @@ class _PlacedWidget extends StatefulWidget {
     required this.preview,
     required this.onPreview,
     required this.onInteraction,
+    this.onTheme,
+    this.onConnectionSettings,
     this.exactPreview = false,
     this.editable = false,
     this.debugLayout = false,
@@ -2361,6 +2499,7 @@ class _PlacedWidget extends StatefulWidget {
   final Connection connection;
   final ValueChanged<String> onError;
   final VoidCallback onSettings;
+  final VoidCallback? onTheme, onConnectionSettings;
   final VoidCallback onEditRequested;
   final bool exactPreview, debugLayout, editable;
   final String? debugInteractionId;
@@ -2547,6 +2686,8 @@ class _PlacedWidgetState extends State<_PlacedWidget> {
       debugForceBorder: showPeerDebug,
       debugForceLabel: showInteractionLabel,
       onEditRequested: widget.onEditRequested,
+      onTheme: widget.onTheme,
+      onSettings: widget.onConnectionSettings,
     );
     return AnimatedPositioned(
       duration: original != null

@@ -4,6 +4,8 @@ Tauri + React / TypeScript + Rust 的独立 macOS 连接应用。界面负责连
 
 从仓库根目录运行 `make setup`、`make dev`。`pnpm --dir apps/desktop run build` 检查并构建前端，`cargo check -p deskbar-desktop` 检查原生工程。完整开发构建可用 `pnpm --dir apps/desktop run tauri build --debug --no-bundle`；正式签名、公证和安装包在发布阶段实现。
 
+`make dev` 同时启动本机服务端与连接助手：先构建 Flutter 编辑器，再启动 `127.0.0.1:1432` 的 Vite 开发界面和嵌入 Agent 的 Tauri 进程。手机通过 LAN 服务发现并连接电脑，优先使用端口 `42831`，不连接 Vite。保持终端运行，Ctrl+C 停止开发进程。
+
 监听与配对由 [LAN](../../crates/lan/README.md) 承担，稳定身份和授权由 [HostRuntime](../../crates/host/README.md) 承担。React 不持有 TLS 私钥或设备令牌；邀请只在临时界面状态中展示。配置保存在独立应用目录，TLS 私钥与 API 密码单独保存在 `credentials/store.json`；macOS / Linux 凭据目录为 `0700`、文件为 `0600`，使用临时文件原子替换，不额外加密。已有安装首次导入钥匙串，保留原公钥和配对；成功后重启不再访问钥匙串。
 
 浏览器运行 `pnpm --dir apps/desktop run dev` 只能检查界面，不能启动 Agent；界面会明确提示使用桌面应用。没有浏览器伪装在线或内置示例数据。

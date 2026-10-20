@@ -69,7 +69,10 @@ impl LayoutDocument {
                     "组件名称或编号无效"
                 );
                 ensure!(
-                    matches!(widget.r#type.as_str(), "sessions" | "usage" | "shortcuts"),
+                    matches!(
+                        widget.r#type.as_str(),
+                        "sessions" | "usage" | "shortcuts" | "statusBar"
+                    ),
                     "组件类型无效"
                 );
                 ensure!(
@@ -89,10 +92,26 @@ impl LayoutDocument {
                 ensure!(widget.options.len() <= 16, "组件参数过多");
                 for (key, value) in &widget.options {
                     let valid = match key.as_str() {
-                        "showTitle" | "fitRows" | "labels" => value.is_boolean(),
+                        "showTitle" | "fitRows" | "labels" | "showClock" | "showSeconds"
+                        | "showConnection" | "showThemeButton" | "showSettingsButton" => {
+                            value.is_boolean()
+                        }
                         // Kept readable for layouts written by older editors;
                         // current clients omit it and show details in a tooltip.
                         "showDetails" => value.is_boolean(),
+                        "label" => {
+                            widget.r#type == "statusBar"
+                                && value.as_str().is_some_and(|v| v.chars().count() <= 80)
+                        }
+                        "appearance" => match widget.r#type.as_str() {
+                            "sessions" => matches!(value.as_str(), Some("plain" | "cards")),
+                            "shortcuts" => matches!(value.as_str(), Some("plain" | "dock")),
+                            _ => false,
+                        },
+                        "textScale" => {
+                            widget.r#type == "sessions"
+                                && value.as_f64().is_some_and(|n| (1.0..=2.0).contains(&n))
+                        }
                         "maxSessions" => value.as_u64().is_some_and(|n| (1..=40).contains(&n)),
                         "itemWidth" | "itemHeight" => {
                             value.as_f64().is_some_and(|n| n > 0.0 && n <= 2000.0)
@@ -106,12 +125,19 @@ impl LayoutDocument {
                         "density" => match widget.r#type.as_str() {
                             "sessions" => matches!(value.as_str(), Some("normal" | "compact")),
                             "usage" => {
-                                matches!(value.as_str(), Some("compact" | "standard" | "fill"))
+                                matches!(
+                                    value.as_str(),
+                                    Some("compact" | "standard" | "fill" | "sidebar")
+                                )
                             }
                             _ => false,
                         },
                         "content" => matches!(value.as_str(), Some("quota" | "api")),
-                        "columns" => value == "auto",
+                        "columns" => {
+                            value == "auto"
+                                || (widget.r#type == "sessions"
+                                    && value.as_u64().is_some_and(|n| (1..=6).contains(&n)))
+                        }
                         "rows" => {
                             value == "auto" || value.as_u64().is_some_and(|n| (1..=12).contains(&n))
                         }
@@ -240,6 +266,26 @@ mod tests {
     fn document() -> LayoutDocument {
         serde_json::from_str(include_str!("../../../protocol/layout.example.json")).unwrap()
     }
+    #[test]
+    fn dashboard_contract_accepts_options_and_rejects_invalid_values() {
+        let layout: LayoutDocument =
+            serde_json::from_str(include_str!("../../../protocol/dashboard.example.json")).unwrap();
+        layout.validate("host").unwrap();
+        for (index, key, value) in [
+            (0, "showClock", serde_json::json!("yes")),
+            (0, "label", serde_json::json!("a".repeat(81))),
+            (2, "columns", serde_json::json!(7)),
+            (2, "appearance", serde_json::json!("unknown")),
+            (2, "textScale", serde_json::json!(3)),
+        ] {
+            let mut invalid = layout.clone();
+            invalid.pages[0].widgets[index]
+                .options
+                .insert(key.into(), value);
+            assert!(invalid.validate("host").is_err(), "{key}");
+        }
+    }
+
     #[test]
     fn accepts_current_usage_options_and_legacy_detail_flag() {
         let mut layout = document();

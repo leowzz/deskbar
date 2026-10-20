@@ -11,6 +11,7 @@ DeskBar 把 Android 屏幕变成电脑旁的工作台。电脑安装 **DeskBar �
 - 一个桌面安装包，加一个 Android 安装包；无需部署 Core、MQTT Broker 或独立服务器。
 - 会话、额度、API 用量和快捷入口均作为可选组件，支持同类组件重复添加。
 - 页面自由组合组件，左右横滑切页；每个实例独立设置位置、区域尺寸和显示参数。
+- 顶部状态栏可配置名称、日期时间、连接状态、主题切换和设置入口；「添加横屏总览」可新建顶部状态栏、额度侧栏、两列会话和底部图标栏，之后各组件仍可单独调整。
 - Session 卡片可调整目标宽高与间距；快捷入口可选择固定或自适应最大图标尺寸，配置行数、左对齐 / 居中对齐 / 均匀分布 / 右对齐及横纵间距，也可铺满整页。
 - 配对绑定稳定主机身份与公钥，IP 变化后重新发现并核验原身份。
 
@@ -38,7 +39,7 @@ DeskBar 把 Android 屏幕变成电脑旁的工作台。电脑安装 **DeskBar �
 
 ```sh
 make setup           # 安装桌面与 Flutter 依赖
-make dev             # 打开 DeskBar 连接助手，关闭窗口后仍在菜单栏运行
+make dev             # 启动本机服务端与 DeskBar 连接助手
 make android         # 在指定 Android 设备运行，先设置 ANDROID_DEVICE
 make check           # 文档、格式、Rust 测试、桌面类型与 Flutter 检查
 make android-build   # 生成开发 APK，不是签名发布版本
@@ -47,6 +48,8 @@ make prototype       # 保留原 HTML 布局原型预览
 ```
 
 `make android ANDROID_DEVICE=<设备序列号>` 用于选择运行设备。Android 开发 APK 位于 `apps/android/build/app/outputs/flutter-apk/app-debug.apk`。
+
+`make dev` 会构建工作台编辑器、启动桌面开发界面与 Rust Agent。手机所需的发现、配对和 HTTPS / WSS 服务集成在连接助手中，无需另开服务；启动后保持终端运行，关闭助手窗口后仍在菜单栏提供连接，Ctrl+C 停止开发进程。开发界面使用本机端口 `1432`，手机连接的 LAN 服务优先使用 `42831`。
 
 两端连接同一 Wi-Fi，打开 Android 的「DeskBar 工作台」后会自动查找电脑；点击电脑名称，回到电脑允许一次即可完成配对。自动发现受网络限制时，再使用电脑上的备用二维码，或复制完整邀请到 Android 的「粘贴邀请」。自动发现邀请两分钟过期，只能配对一台设备。电脑可随时移除已配对设备。配对后，在电脑的设备卡片中勾选「近期会话」「Codex 额度」「API 用量」「快捷入口」；需要点击打开时，再勾选「允许在电脑上打开」。新增设备从未共享开始，升级后的 API 用量共享默认关闭。
 
